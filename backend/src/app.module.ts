@@ -1,0 +1,25 @@
+import { Module } from '@nestjs/common';
+import { ConfigModule } from '@nestjs/config';
+import { AppController } from './app.controller';
+import { AppService } from './app.service';
+import { PrismaModule } from './prisma/prisma.module';
+import { AuthModule } from './auth/auth.module';
+import { WorkspacesModule } from './workspaces/workspaces.module';
+import { ProjectsModule } from './projects/projects.module';
+import { TasksModule } from './tasks/tasks.module';
+
+@Module({
+  imports: [
+    ConfigModule.forRoot({
+      isGlobal: true, // Proje genelinde process.env ile her yerden okunmasını sağlar
+    }),
+    PrismaModule,
+    AuthModule,
+    WorkspacesModule,
+    ProjectsModule,
+    TasksModule,
+  ],
+  controllers: [AppController],
+  providers: [AppService],
+})
+export class AppModule {}
