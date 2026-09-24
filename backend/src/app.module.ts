@@ -10,6 +10,7 @@ import { WorkspacesModule } from './workspaces/workspaces.module';
 import { ProjectsModule } from './projects/projects.module';
 import { TasksModule } from './tasks/tasks.module';
 import { AuditModule } from './common/audit/audit.module';
+import { AiModule } from './ai/ai.module';
 
 @Module({
   imports: [
@@ -33,6 +34,7 @@ import { AuditModule } from './common/audit/audit.module';
     WorkspacesModule,
     ProjectsModule,
     TasksModule,
+    AiModule,
   ],
   controllers: [AppController],
   providers: [AppService],
