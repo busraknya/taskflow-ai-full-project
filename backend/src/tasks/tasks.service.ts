@@ -2,12 +2,19 @@ import { Injectable, NotFoundException, ConflictException, ForbiddenException } 
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateTaskDto } from './dto/create-task.dto';
 import { UpdateTaskDto } from './dto/update-task.dto';
+import { AuditService } from '../common/audit/audit.service'; 
+import { EventEmitter2 } from '@nestjs/event-emitter';
+
 
 @Injectable()
 export class TasksService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private auditService: AuditService,
+    private eventEmitter: EventEmitter2,
+  ) {}
 
-  async create(workspaceId: string, dto: CreateTaskDto) {
+  async create(workspaceId: string, userId: string, dto: CreateTaskDto) {
     const project = await this.prisma.project.findFirst({
       where: { id: dto.projectId, workspaceId },
     });
@@ -16,7 +23,6 @@ export class TasksService {
       throw new NotFoundException('Proje bulunamadı.');
     }
 
-   
     if (dto.assigneeId) {
       const membership = await this.prisma.workspaceMembership.findUnique({
         where: {
@@ -31,7 +37,7 @@ export class TasksService {
       }
     }
 
-    return this.prisma.task.create({
+    const task = await this.prisma.task.create({
       data: {
         workspaceId,
         projectId: dto.projectId,
@@ -43,6 +49,24 @@ export class TasksService {
         dueDate: dto.dueDate ? new Date(dto.dueDate) : undefined,
       },
     });
+
+    await this.auditService.log({
+      workspaceId,
+      actorId: userId,
+      entityType: 'TASK',
+      entityId: task.id,
+      action: 'TASK_CREATED',
+      metadata: { title: task.title, status: task.status },
+    });
+
+    if (task.assigneeId) {
+        this.eventEmitter.emit('task.assigned', {
+            taskId: task.id,
+            assigneeId: task.assigneeId,
+            workspaceId,
+        });
+    }
+    return task;
   }
 
   async findAllInWorkspace(workspaceId: string, projectId?: string) {
@@ -61,19 +85,19 @@ export class TasksService {
     });
   }
 
-  async update(workspaceId: string, taskId: string, dto: UpdateTaskDto) {
+  async update(workspaceId: string, taskId: string, userId: string, dto: UpdateTaskDto) {
     const task = await this.prisma.task.findFirst({
       where: { id: taskId, workspaceId, deletedAt: null },
     });
 
     if (!task) {
-      throw new NotFoundException('Görev bulunamadı.');
+      throw new NotFoundException('Task not found.');
     }
 
     if (task.version !== dto.version) {
       throw new ConflictException({
         code: 'STALE_VERSION',
-        message: 'Bu görev başka bir kullanıcı tarafından güncellendi. Lütfen sayfayı yenileyin.',
+        message: 'This task has been updated by another user. Please refresh the page.',
         currentVersion: task.version,
       });
     }
@@ -88,11 +112,11 @@ export class TasksService {
         },
       });
       if (!membership || membership.status !== 'ACTIVE') {
-        throw new ForbiddenException('Atanan kullanıcı bu workspace\'in üyesi değil.');
+        throw new ForbiddenException('The assigned user is not a member of this workspace.');
       }
     }
 
-    return this.prisma.task.update({
+    const updatedTask = await this.prisma.task.update({
       where: { id: taskId },
       data: {
         title: dto.title,
@@ -110,5 +134,24 @@ export class TasksService {
         },
       },
     });
+
+    await this.auditService.log({
+      workspaceId,
+      actorId: userId,
+      entityType: 'TASK',
+      entityId: updatedTask.id,
+      action: 'TASK_UPDATED',
+      metadata: { title: updatedTask.title, status: updatedTask.status, version: updatedTask.version },
+    });
+
+    if (updatedTask.assigneeId) {
+        this.eventEmitter.emit('task.assigned', {
+            taskId: updatedTask.id,
+            assigneeId: updatedTask.assigneeId,
+            workspaceId,
+        });
+    }
+
+    return updatedTask;
   }
 }

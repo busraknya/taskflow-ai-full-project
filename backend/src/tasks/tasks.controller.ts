@@ -6,16 +6,18 @@ import { AuthGuard } from '@nestjs/passport';
 import { WorkspaceMemberGuard } from '../workspaces/guards/workspace-member.guard';
 
 @Controller('workspaces/:workspaceId/tasks')
-@UseGuards(AuthGuard('jwt'), WorkspaceMemberGuard) 
+@UseGuards(AuthGuard('jwt'), WorkspaceMemberGuard)
 export class TasksController {
   constructor(private readonly tasksService: TasksService) {}
 
   @Post()
   async create(
     @Param('workspaceId') workspaceId: string,
+    @Req() req: any, 
     @Body() dto: CreateTaskDto,
   ) {
-    return this.tasksService.create(workspaceId, dto);
+    const userId = req.user.id;
+    return this.tasksService.create(workspaceId, userId, dto);
   }
 
   @Get()
@@ -30,8 +32,10 @@ export class TasksController {
   async update(
     @Param('workspaceId') workspaceId: string,
     @Param('taskId') taskId: string,
+    @Req() req: any, 
     @Body() dto: UpdateTaskDto,
   ) {
-    return this.tasksService.update(workspaceId, taskId, dto);
+    const userId = req.user.id;
+    return this.tasksService.update(workspaceId, taskId, userId, dto);
   }
 }
