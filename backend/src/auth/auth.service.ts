@@ -14,6 +14,14 @@ export class AuthService {
     private configService: ConfigService,
   ) {}
 
+  private getJwtSecret(): string {
+    const secret = this.configService.get<string>('JWT_SECRET');
+    if (!secret) {
+      throw new Error('FATAL: JWT_SECRET is missing in environment variables!');
+    }
+    return secret;
+  }
+
   async register(dto: RegisterDto) {
     const existingUser = await this.prisma.user.findUnique({
       where: { email: dto.email },
@@ -64,7 +72,7 @@ export class AuthService {
 
     return {
       accessToken: tokens.accessToken,
-      refreshToken: tokens.refreshToken, 
+      refreshToken: tokens.refreshToken,
       user: {
         id: user.id,
         email: user.email,
@@ -75,7 +83,7 @@ export class AuthService {
 
   async refreshTokens(refreshToken: string) {
     try {
-      const secret = this.configService.get<string>('JWT_SECRET'); if (!secret) throw new Error('JWT_SECRET is missing');
+      const secret = this.getJwtSecret();
       const payload = this.jwtService.verify(refreshToken, { secret });
 
       const storedTokens = await this.prisma.refreshToken.findMany({
@@ -125,7 +133,7 @@ export class AuthService {
   }
 
   private async generateTokens(userId: string, email: string) {
-    const secret = this.configService.get<string>('JWT_SECRET') || 'fallback-secret';
+    const secret = this.getJwtSecret(); // Artık merkezi ve hardcode'suz!
 
     const payload = { sub: userId, email };
 
@@ -141,7 +149,7 @@ export class AuthService {
 
     const tokenHash = await bcrypt.hash(refreshToken, 10);
     const expiresAt = new Date();
-    expiresAt.setDate(expiresAt.getDate() + 30); 
+    expiresAt.setDate(expiresAt.getDate() + 30);
 
     await this.prisma.refreshToken.create({
       data: {

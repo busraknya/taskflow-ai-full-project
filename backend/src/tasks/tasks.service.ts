@@ -4,6 +4,8 @@ import { CreateTaskDto } from './dto/create-task.dto';
 import { UpdateTaskDto } from './dto/update-task.dto';
 import { AuditService } from '../common/audit/audit.service'; 
 import { EventEmitter2 } from '@nestjs/event-emitter';
+import { AiService } from 'src/ai/ai.service';
+import { RiskFeatureService } from 'src/ai/risk-feature.service';
 
 
 @Injectable()
@@ -12,7 +14,36 @@ export class TasksService {
     private prisma: PrismaService,
     private auditService: AuditService,
     private eventEmitter: EventEmitter2,
+    private aiService: AiService,
+  private riskFeatureService: RiskFeatureService,
   ) {}
+
+  // Helper metod (Risk hesaplama tetikleyicisi):
+    private async assessAndSaveRisk(taskId: string, workspaceId: string, status: string) {
+        // Domain Rules §3: DONE durumundaki task'ın riski donar, yeniden hesaplanmaz.
+        if (status === 'DONE') return;
+
+        try {
+            const features = await this.riskFeatureService.extractFeaturesForTask(taskId);
+            if (!features) return;
+
+            const prediction = await this.aiService.assessTaskRisk(features);
+
+            // RiskAssessment tablosuna kaydet (Append-only / Database Spec)
+            await this.prisma.riskAssessment.create({
+            data: {
+                taskId,
+                riskLevel: prediction.risk_level as any,
+                riskScore: prediction.risk_score,
+                factors: prediction.factors,
+                modelVersion: prediction.model_version,
+            },
+            });
+        } catch (error) {
+            // Master Invariant #8: AI servisi çökse bile ana işlem (task update) asla rollback olmaz
+            console.error('[AI Risk] Failed to assess task risk:', error);
+        }
+    }
 
   async create(workspaceId: string, userId: string, dto: CreateTaskDto) {
     const project = await this.prisma.project.findFirst({
@@ -66,6 +97,8 @@ export class TasksService {
             workspaceId,
         });
     }
+
+    await this.assessAndSaveRisk(task.id, workspaceId, task.status);
     return task;
   }
 
@@ -152,6 +185,7 @@ export class TasksService {
         });
     }
 
+    await this.assessAndSaveRisk(updatedTask.id, workspaceId, updatedTask.status);
     return updatedTask;
   }
 }
