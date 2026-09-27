@@ -4,8 +4,8 @@ import { CreateTaskDto } from './dto/create-task.dto';
 import { UpdateTaskDto } from './dto/update-task.dto';
 import { AuditService } from '../common/audit/audit.service'; 
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { AiService } from 'src/ai/ai.service';
-import { RiskFeatureService } from 'src/ai/risk-feature.service';
+import { AiService } from '../ai/ai.service';
+import { RiskFeatureService } from '../ai/risk-feature.service';
 
 
 @Injectable()

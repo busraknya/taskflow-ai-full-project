@@ -3,7 +3,7 @@ import { TasksController } from './tasks.controller';
 import { TasksService } from './tasks.service';
 import { BullModule } from '@nestjs/bullmq';
 import { TaskAssignedListener } from './events/task-assigned.listener';
-import { AiModule } from 'src/ai/ai.module';
+import { AiModule } from '../ai/ai.module';
 
 @Module({
   imports: [
