@@ -67,4 +67,15 @@ export class WorkspacesService {
       where: { id: workspaceId },
     });
   }
+
+  async getWorkspaceMembers(workspaceId: string) {
+    return this.prisma.workspaceMembership.findMany({
+      where: { workspaceId, status: MembershipStatus.ACTIVE },
+      include: {
+        user: {
+          select: { id: true, fullName: true, email: true, avatarUrl: true },
+        },
+      },
+    });
+  }
 }

@@ -113,6 +113,10 @@ export class TasksService {
         assignee: {
           select: { id: true, fullName: true, avatarUrl: true },
         },
+        riskAssessments: {
+          orderBy: { computedAt: 'desc' },
+          take: 1, // En son hesaplanan AI risk skoru (AI Spec §6)
+        },
       },
       orderBy: { position: 'asc' },
     });

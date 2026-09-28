@@ -26,4 +26,10 @@ export class WorkspacesController {
   async findOne(@Param('workspaceId') workspaceId: string) {
     return this.workspacesService.findOne(workspaceId);
   }
+
+  @Get(':workspaceId/members')
+  @UseGuards(WorkspaceMemberGuard)
+  async getWorkspaceMembers(@Param('workspaceId') workspaceId: string) {
+    return this.workspacesService.getWorkspaceMembers(workspaceId);
+  }
 }
