@@ -6,10 +6,12 @@ import { api } from '@/lib/api';
 import { theme } from '@/lib/theme';
 import { getErrorMessage } from '@/lib/errors';
 import { Alert } from '@/components/ui/Alert';
+import { useAuthStore } from '@/store/useAuthStore'; // <-- 1. Import eklendi
 import Link from 'next/link';
 
 export default function LoginPage() {
   const router = useRouter();
+  const { setAuth } = useAuthStore(); // <-- 2. Store hook'u eklendi
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -22,7 +24,10 @@ export default function LoginPage() {
 
     try {
       const res = await api.post('/auth/login', { email, password });
-      // Token ve user auth store'a kaydedilebilir, şimdilik doğrudan workspace'e yönlendiriyoruz
+      
+      // 3. Belleğe (Memory) güvenli bir şekilde kaydet
+      setAuth(res.data.user, res.data.accessToken);
+
       router.push('/workspaces');
     } catch (err: any) {
       const errorCode = err.response?.data?.code || err.response?.data?.message;
