@@ -1,5 +1,6 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import * as bcrypt from 'bcrypt';
 
 @Injectable()
 export class UsersService {
@@ -27,4 +28,26 @@ export class UsersService {
       },
     });
   }
+
+  async changePassword(userId: string, dto: { currentPassword: string; newPassword: string }) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) throw new UnauthorizedException('Kullanıcı bulunamadı.');
+
+    const isMatch = await bcrypt.compare(dto.currentPassword, user.passwordHash);
+    if (!isMatch) {
+      throw new UnauthorizedException({
+        code: 'INVALID_CURRENT_PASSWORD',
+        message: 'Mevcut şifreniz hatalı.',
+      });
+    }
+
+    const newPasswordHash = await bcrypt.hash(dto.newPassword, 10);
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { passwordHash: newPasswordHash },
+    });
+
+    return { message: 'Şifreniz başarıyla değiştirildi.' };
+  }
+
 }

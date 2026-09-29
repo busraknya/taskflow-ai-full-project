@@ -9,6 +9,8 @@ import { Plus } from 'lucide-react';
 import { KanbanColumn } from '@/components/kanban/KanbanColumn';
 import { TaskModal } from '@/components/kanban/TaskModal';
 import { useRouter } from 'next/navigation';
+import { SettingsModal } from '@/components/settings/SettingsModal';
+import { Settings } from 'lucide-react'; 
 
 interface Project { id: string; name: string; }
 interface Member { user: { id: string; fullName: string; email: string; }; }
@@ -34,6 +36,7 @@ export default function WorkspaceDashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [showTaskModal, setShowTaskModal] = useState(false);
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
 
   useEffect(() => {
     const initWorkspace = async () => {
@@ -148,11 +151,18 @@ export default function WorkspaceDashboard() {
             </button>
 
             <button
-            onClick={() => router.push(`/w/${workspaceSlug}/members`)}
-            className="text-xs bg-zinc-800 hover:bg-zinc-700 text-zinc-300 px-3 py-1.5 rounded-md transition-colors"
+              onClick={() => router.push(`/w/${workspaceSlug}/members`)}
+              className="text-xs bg-zinc-800 hover:bg-zinc-700 text-zinc-300 px-3 py-1.5 rounded-md transition-colors"
             >
                 Members
             </button>
+            <button
+              onClick={() => setShowSettingsModal(true)}
+              className="p-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-md transition-colors"
+              title="Settings"
+            >
+              <Settings size={16} />
+          </button>
           </div>
         </div>
 
@@ -182,7 +192,10 @@ export default function WorkspaceDashboard() {
           onSubmit={handleCreateTask}
           members={members}
         />
-
+        <SettingsModal
+          isOpen={showSettingsModal}
+          onClose={() => setShowSettingsModal(false)}
+        />
       </div>
     </div>
   );

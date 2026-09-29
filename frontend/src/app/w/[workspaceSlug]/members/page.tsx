@@ -4,9 +4,9 @@ import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
 import { theme } from '@/lib/theme';
-import { InviteMemberForm } from '@/components/members/InviteMemberForm';
 import { MemberListTable } from '@/components/members/MemberListTable';
-import { Toast } from '@/components/ui/Toast'; // <-- Toast bileşeni eklendi
+import { Toast } from '@/components/ui/Toast';
+import { AddMemberForm } from '@/components/members/AddMemberForm';
 
 interface Member {
   id: string;
@@ -23,9 +23,9 @@ export default function MembersPage() {
   const [workspaceId, setWorkspaceId] = useState<string | null>(null);
   const [members, setMembers] = useState<Member[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-  const [successMsg, setSuccessMsg] = useState('');
-  const [inviting, setInviting] = useState(false);
+  const [toastMsg, setToastMsg] = useState('');
+  const [toastType, setToastType] = useState<'success' | 'error'>('success');
+  const [adding, setAdding] = useState(false);
 
   useEffect(() => {
     const init = async () => {
@@ -33,14 +33,16 @@ export default function MembersPage() {
         const res = await api.get('/workspaces');
         const currentWs = res.data.find((w: any) => w.slug === workspaceSlug);
         if (!currentWs) {
-          setError('Workspace not found.');
+          setToastMsg('Workspace not found.');
+          setToastType('error');
           setLoading(false);
           return;
         }
         setWorkspaceId(currentWs.id);
         fetchMembers(currentWs.id);
       } catch (err) {
-        setError('Failed to load workspace.');
+        setToastMsg('Failed to load workspace.');
+        setToastType('error');
         setLoading(false);
       }
     };
@@ -52,35 +54,32 @@ export default function MembersPage() {
       const res = await api.get(`/workspaces/${wsId}/members`);
       setMembers(res.data);
     } catch (err) {
-      setError('Failed to load members.');
+      setToastMsg('Failed to load members.');
+      setToastType('error');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleInvite = async (email: string, role: string) => {
+  const handleAddMember = async (email: string, role: string) => {
     if (!workspaceId) return;
-    setInviting(true);
-    setError('');
-    setSuccessMsg('');
+    setAdding(true);
+    setToastMsg('');
 
     try {
-      console.log('🚀 İstek atılıyor:', `/workspaces/${workspaceId}/members/invite`, { email, role });
-      const res = await api.post(`/workspaces/${workspaceId}/members/invite`, { email, role });
-      console.log('✅ Başarılı:', res.data);
+      // Backend'deki mevcut invite (direct add) ucuna istek atıyoruz
+      await api.post(`/workspaces/${workspaceId}/members/invite`, { email, role });
       
-      setSuccessMsg('Member successfully invited and added!');
+      setToastMsg('Member successfully added to workspace.');
+      setToastType('success');
       fetchMembers(workspaceId);
     } catch (err: any) {
-      console.error('❌ AXIOS HATASI YAKALANDI:', err);
-      console.error('❌ Hata Detayı (Response):', err.response?.data);
-      console.error('❌ Hata Status Kodu:', err.response?.status);
-
       const errorData = err.response?.data;
-      const errorMsg = errorData?.message || err.message || 'Failed to invite member.';
-      setError(typeof errorMsg === 'string' ? errorMsg : JSON.stringify(errorMsg));
+      const errorMsg = errorData?.message || 'Failed to add member.';
+      setToastMsg(typeof errorMsg === 'string' ? errorMsg : JSON.stringify(errorMsg));
+      setToastType('error');
     } finally {
-      setInviting(false);
+      setAdding(false);
     }
   };
 
@@ -96,11 +95,11 @@ export default function MembersPage() {
     <div className={`min-h-screen ${theme.colors.bg.primary} ${theme.colors.text.primary} p-8 font-sans`}>
       <div className="max-w-4xl mx-auto space-y-6">
         
-        {/* Sağ Üst Köşe Akıllı Toast Bildirimi */}
+        {/* Toast Bildirimi */}
         <Toast 
-          message={error || successMsg} 
-          type={error ? 'error' : 'success'} 
-          onClose={() => { setError(''); setSuccessMsg(''); }} 
+          message={toastMsg} 
+          type={toastType} 
+          onClose={() => setToastMsg('')} 
         />
 
         {/* Header */}
@@ -117,10 +116,10 @@ export default function MembersPage() {
           </button>
         </div>
 
-        {/* Form Bileşeni */}
-        <InviteMemberForm onInvite={handleInvite} inviting={inviting} />
+        {/* Üye Ekleme Formu */}
+        <AddMemberForm onAdd={handleAddMember} adding={adding} />
 
-        {/* Tablo Bileşeni */}
+        {/* Üye Listesi Tablosu */}
         <MemberListTable members={members} />
 
       </div>

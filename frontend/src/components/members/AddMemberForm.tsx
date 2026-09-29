@@ -3,31 +3,31 @@
 import { useState } from 'react';
 import { theme } from '@/lib/theme';
 
-interface InviteFormProps {
-  onInvite: (email: string, role: string) => void;
-  inviting: boolean;
+interface AddMemberFormProps {
+  onAdd: (email: string, role: string) => Promise<void>;
+  adding: boolean;
 }
 
-export function InviteMemberForm({ onInvite, inviting }: InviteFormProps) {
+export function AddMemberForm({ onAdd, adding }: AddMemberFormProps) {
   const [email, setEmail] = useState('');
   const [role, setRole] = useState('MEMBER');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const confirmed = window.confirm(`Are you sure you want to invite ${email} with role ${role}?`);
+    const confirmed = window.confirm(`Are you sure you want to add ${email} with role ${role}?`);
     if (!confirmed) return;
 
     try {
-        await onInvite(email, role); // <-- await EKLENDİ!
-        setEmail(''); // Sadece api başarılı olup buraya düşerse formu temizle
+      await onAdd(email, role); // <-- onAdd kullanılıyor
+      setEmail(''); 
     } catch (err) {
-        // Üst bileşenden gelen hatayı burada yakala, formu temizleme!
+      // Hata
     }
   };
 
   return (
     <div className={`${theme.colors.bg.secondary} border ${theme.colors.border.primary} rounded-lg p-5 space-y-4`}>
-      <h2 className="text-xs font-medium text-white uppercase tracking-wider">Invite New Member</h2>
+      <h2 className="text-xs font-medium text-white uppercase tracking-wider">Add Team Member</h2>
       <form onSubmit={handleSubmit} className="flex gap-3">
         <input
           type="email"
@@ -48,10 +48,10 @@ export function InviteMemberForm({ onInvite, inviting }: InviteFormProps) {
         </select>
         <button
           type="submit"
-          disabled={inviting}
+          disabled={adding}
           className={`${theme.colors.accent.DEFAULT} text-xs font-medium px-4 py-2 rounded-md transition-colors disabled:opacity-50`}
         >
-          {inviting ? 'Inviting...' : 'Invite'}
+          {adding ? 'Adding...' : 'Add Member'}
         </button>
       </form>
     </div>

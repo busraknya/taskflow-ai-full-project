@@ -19,4 +19,9 @@ export class UsersController {
   ) {
     return this.usersService.updatePreference(req.user.id, body.category, body.emailEnabled);
   }
+
+  @Patch('password')
+  async changePassword(@Req() req: any, @Body() body: { currentPassword: string; newPassword: string }) {
+    return this.usersService.changePassword(req.user.id, body);
+  }
 }
