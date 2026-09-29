@@ -8,6 +8,7 @@ import { Alert } from '@/components/ui/Alert';
 import { Plus } from 'lucide-react';
 import { KanbanColumn } from '@/components/kanban/KanbanColumn';
 import { TaskModal } from '@/components/kanban/TaskModal';
+import { useRouter } from 'next/navigation';
 
 interface Project { id: string; name: string; }
 interface Member { user: { id: string; fullName: string; email: string; }; }
@@ -21,6 +22,7 @@ const COLUMNS = [
 ];
 
 export default function WorkspaceDashboard() {
+  const router = useRouter();
   const params = useParams();
   const workspaceSlug = params.workspaceSlug as string;
 
@@ -143,6 +145,13 @@ export default function WorkspaceDashboard() {
             >
               <Plus size={14} />
               <span>New Task</span>
+            </button>
+
+            <button
+            onClick={() => router.push(`/w/${workspaceSlug}/members`)}
+            className="text-xs bg-zinc-800 hover:bg-zinc-700 text-zinc-300 px-3 py-1.5 rounded-md transition-colors"
+            >
+                Members
             </button>
           </div>
         </div>
