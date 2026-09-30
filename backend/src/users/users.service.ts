@@ -1,6 +1,7 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import * as bcrypt from 'bcrypt';
+import { ChangePasswordDto } from './dto/change-password.dto';
 
 @Injectable()
 export class UsersService {
@@ -29,7 +30,7 @@ export class UsersService {
     });
   }
 
-  async changePassword(userId: string, dto: { currentPassword: string; newPassword: string }) {
+  async changePassword(userId: string, dto: ChangePasswordDto) {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user) throw new UnauthorizedException('Kullanıcı bulunamadı.');
 
@@ -49,5 +50,4 @@ export class UsersService {
 
     return { message: 'Şifreniz başarıyla değiştirildi.' };
   }
-
 }

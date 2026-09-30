@@ -4,9 +4,9 @@ import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
 import { theme } from '@/lib/theme';
+import { AddMemberForm } from '@/components/members/AddMemberForm';
 import { MemberListTable } from '@/components/members/MemberListTable';
 import { Toast } from '@/components/ui/Toast';
-import { AddMemberForm } from '@/components/members/AddMemberForm';
 
 interface Member {
   id: string;
@@ -22,6 +22,9 @@ export default function MembersPage() {
 
   const [workspaceId, setWorkspaceId] = useState<string | null>(null);
   const [members, setMembers] = useState<Member[]>([]);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [currentUserRole, setCurrentUserRole] = useState<string | null>(null);
+  
   const [loading, setLoading] = useState(true);
   const [toastMsg, setToastMsg] = useState('');
   const [toastType, setToastType] = useState<'success' | 'error'>('success');
@@ -30,18 +33,24 @@ export default function MembersPage() {
   useEffect(() => {
     const init = async () => {
       try {
-        const res = await api.get('/workspaces');
-        const currentWs = res.data.find((w: any) => w.slug === workspaceSlug);
+        // Önce kullanıcı bilgilerini al (Kim giriş yapmış?)
+        // Veya token'dan / me endpoint'inden ID alabiliriz. Şimdilik workspaces'ten çözelim:
+        const wsRes = await api.get('/workspaces');
+        const currentWs = wsRes.data.find((w: any) => w.slug === workspaceSlug);
+        
         if (!currentWs) {
           setToastMsg('Workspace not found.');
           setToastType('error');
           setLoading(false);
           return;
         }
+        
         setWorkspaceId(currentWs.id);
+        setCurrentUserRole(currentWs.role); // Workspace listesinden kullanıcının rolünü alıyoruz
+
         fetchMembers(currentWs.id);
       } catch (err) {
-        setToastMsg('Failed to load workspace.');
+        setToastMsg('Failed to initialize workspace.');
         setToastType('error');
         setLoading(false);
       }
@@ -67,9 +76,7 @@ export default function MembersPage() {
     setToastMsg('');
 
     try {
-      // Backend'deki mevcut invite (direct add) ucuna istek atıyoruz
       await api.post(`/workspaces/${workspaceId}/members/invite`, { email, role });
-      
       setToastMsg('Member successfully added to workspace.');
       setToastType('success');
       fetchMembers(workspaceId);
@@ -83,6 +90,44 @@ export default function MembersPage() {
     }
   };
 
+  const handleRoleChange = async (membershipId: string, newRole: string) => {
+    if (!workspaceId) return;
+    const confirmed = window.confirm(`Are you sure you want to change this member's role to ${newRole}?`);
+    if (!confirmed) return;
+
+    setToastMsg('');
+    try {
+      await api.patch(`/workspaces/${workspaceId}/members/${membershipId}`, { role: newRole });
+      setToastMsg('Member role successfully updated.');
+      setToastType('success');
+      fetchMembers(workspaceId);
+    } catch (err: any) {
+      const errorMsg = err.response?.data?.message || 'Failed to update role.';
+      setToastMsg(typeof errorMsg === 'string' ? errorMsg : JSON.stringify(errorMsg));
+      setToastType('error');
+    }
+  };
+
+  const handleRemoveMember = async (membershipId: string) => {
+    if (!workspaceId) return;
+    const confirmed = window.confirm('Are you sure you want to remove this member from the workspace?');
+    if (!confirmed) return;
+
+    setToastMsg('');
+    try {
+      await api.delete(`/workspaces/${workspaceId}/members/${membershipId}`);
+      setToastMsg('Member successfully removed from workspace.');
+      setToastType('success');
+      fetchMembers(workspaceId);
+    } catch (err: any) {
+      const errorMsg = err.response?.data?.message || 'Failed to remove member.';
+      setToastMsg(typeof errorMsg === 'string' ? errorMsg : JSON.stringify(errorMsg));
+      setToastType('error');
+    }
+  };
+
+  const isOwnerOrAdmin = currentUserRole === 'OWNER' || currentUserRole === 'ADMIN';
+
   if (loading) {
     return (
       <div className={`min-h-screen ${theme.colors.bg.primary} flex items-center justify-center text-sm text-zinc-500`}>
@@ -95,7 +140,6 @@ export default function MembersPage() {
     <div className={`min-h-screen ${theme.colors.bg.primary} ${theme.colors.text.primary} p-8 font-sans`}>
       <div className="max-w-4xl mx-auto space-y-6">
         
-        {/* Toast Bildirimi */}
         <Toast 
           message={toastMsg} 
           type={toastType} 
@@ -116,11 +160,18 @@ export default function MembersPage() {
           </button>
         </div>
 
-        {/* Üye Ekleme Formu */}
-        <AddMemberForm onAdd={handleAddMember} adding={adding} />
+        {/* Sadece Owner veya Admin ise Üye Ekleme Formunu Göster */}
+        {isOwnerOrAdmin && (
+          <AddMemberForm onAdd={handleAddMember} adding={adding} />
+        )}
 
-        {/* Üye Listesi Tablosu */}
-        <MemberListTable members={members} />
+        {/* Üye Listesi Tablosu (Rol ve Silme yetkileri ile) */}
+        <MemberListTable 
+          members={members} 
+          onRoleChange={handleRoleChange} 
+          onRemove={handleRemoveMember} 
+          isOwnerOrAdmin={isOwnerOrAdmin} 
+        />
 
       </div>
     </div>

@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Param, UseGuards, Req, Patch } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, UseGuards, Req, Patch, Delete } from '@nestjs/common';
 import { WorkspacesService } from './workspaces.service';
 import { CreateWorkspaceDto } from './dto/create-workspace.dto';
 import { AuthGuard } from '@nestjs/passport';
@@ -53,5 +53,15 @@ export class WorkspacesController {
   @UseGuards(WorkspaceMemberGuard) 
   async findOne(@Param('workspaceId') workspaceId: string) {
     return this.workspacesService.findOne(workspaceId);
+  }
+
+  @Delete(':workspaceId/members/:membershipId')
+  @UseGuards(WorkspaceMemberGuard)
+  async removeMember(
+    @Param('workspaceId') workspaceId: string,
+    @Param('membershipId') membershipId: string,
+    @Req() req: any,
+  ) {
+    return this.workspacesService.removeMember(workspaceId, req.user.id, membershipId);
   }
 }

@@ -51,11 +51,11 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
 
   const handlePasswordChange = async (e: React.FormEvent) => {
     e.preventDefault();
-    
     const confirmed = window.confirm('Are you sure you want to change your password?');
     if (!confirmed) return;
 
     setLoadingPw(true);
+    setToastMsg('');
 
     try {
       await api.patch('/users/me/password', { currentPassword, newPassword });
@@ -64,10 +64,24 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
       setCurrentPassword('');
       setNewPassword('');
     } catch (err: any) {
-      // Başarısız olma durumunda kırmızı Toast bildirimi!
-      const errorMsg = err.response?.data?.message || 'Failed to update password.';
-      setToastMsg(errorMsg);
-      setToastType('error');
+        const errorData = err.response?.data;
+        let errorMsg = 'Failed to update password.';
+
+        // 1. Önce özel backend hata kodlarını kontrol et (örn: mevcut şifre yanlış)
+        if (errorData?.code === 'INVALID_CURRENT_PASSWORD') {
+          errorMsg = errorData.message || 'Current password is incorrect.';
+        } 
+        // 2. Eğer DTO validasyon hatası (fields) varsa onları göster
+        else if (errorData?.details?.fields && Array.isArray(errorData.details.fields)) {
+          errorMsg = errorData.details.fields.join(' ');
+        } 
+        // 3. Diğer durumlarda genel mesajı al
+        else if (errorData?.message) {
+          errorMsg = Array.isArray(errorData.message) ? errorData.message.join(' ') : errorData.message;
+        }
+
+        setToastMsg(errorMsg);
+        setToastType('error');
     } finally {
       setLoadingPw(false);
     }
