@@ -1,17 +1,16 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
 import { theme } from '@/lib/theme';
 import { Alert } from '@/components/ui/Alert';
-import { Plus } from 'lucide-react';
 import { KanbanColumn } from '@/components/kanban/KanbanColumn';
 import { TaskModal } from '@/components/kanban/TaskModal';
-import { useRouter } from 'next/navigation';
 import { SettingsModal } from '@/components/settings/SettingsModal';
-import { Settings } from 'lucide-react'; 
 import { TaskDetailModal } from '@/components/kanban/TaskDetailModal';
+import { Navbar } from '@/components/layout/Navbar';
+import { CreateProjectModal } from '@/components/projects/CreateProjectModal';
 
 interface Project { id: string; name: string; }
 interface Member { user: { id: string; fullName: string; email: string; }; }
@@ -36,8 +35,12 @@ export default function WorkspaceDashboard() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  
+  // Rol ve Modaller
+  const [currentUserRole, setCurrentUserRole] = useState<string>('MEMBER');
   const [showTaskModal, setShowTaskModal] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
+  const [showProjectModal, setShowProjectModal] = useState(false);
   const [activeTaskId, setActiveTaskId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -51,6 +54,7 @@ export default function WorkspaceDashboard() {
           return;
         }
         setWorkspaceId(currentWs.id);
+        setCurrentUserRole(currentWs.role); // <-- Kullanıcının bu workspace'teki rolü set ediliyor
         fetchProjects(currentWs.id);
         fetchMembers(currentWs.id);
       } catch (err: any) {
@@ -119,60 +123,58 @@ export default function WorkspaceDashboard() {
     } catch (err: any) { setError(err.response?.data?.message || 'Failed to create task.'); }
   };
 
+  const handleCreateProject = async (name: string, description: string) => {
+    if (!workspaceId) return;
+    try {
+      const res = await api.post(`/workspaces/${workspaceId}/projects`, { name, description });
+      fetchProjects(workspaceId);
+      setSelectedProject(res.data);
+      fetchTasks(workspaceId, res.data.id);
+    } catch (err: any) {
+      setError(err.response?.data?.message || 'Failed to create project.');
+    }
+  };
+
+  const isOwnerOrAdmin = currentUserRole === 'OWNER' || currentUserRole === 'ADMIN';
+
   if (loading) return <div className={`min-h-screen ${theme.colors.bg.primary} flex items-center justify-center text-sm text-zinc-500`}>Loading dashboard...</div>;
 
   return (
-    <div className={`min-h-screen ${theme.colors.bg.primary} ${theme.colors.text.primary} p-6 font-sans flex flex-col`}>
-      <div className="max-w-7xl mx-auto w-full space-y-6 flex-1 flex flex-col">
+    <div className={`min-h-screen ${theme.colors.bg.primary} ${theme.colors.text.primary} font-sans flex flex-col`}>
+      
+      {/* Kurumsal Ortak Navbar (Rol korumalı) */}
+      <Navbar
+        workspaceSlug={workspaceSlug}
+        projects={projects}
+        selectedProjectId={selectedProject?.id}
+        isOwnerOrAdmin={isOwnerOrAdmin}
+        onProjectChange={(projId) => {
+          const proj = projects.find(p => p.id === projId);
+          if (proj && workspaceId) {
+            setSelectedProject(proj);
+            fetchTasks(workspaceId, proj.id);
+          }
+        }}
+        onNewTaskClick={() => setShowTaskModal(true)}
+        onNewProjectClick={() => setShowProjectModal(true)}
+        onSettingsClick={() => setShowSettingsModal(true)}
+      />
+
+      <div className="max-w-7xl mx-auto w-full p-6 space-y-6 flex-1 flex flex-col">
         
-        <div className="flex justify-between items-center border-b border-zinc-800 pb-4">
-          <div className="flex items-center space-x-3">
-            <span className="text-xs uppercase font-mono bg-zinc-800 text-zinc-300 px-2.5 py-1 rounded">Workspace</span>
-            <h1 className="text-base font-medium text-white tracking-tight">{workspaceSlug}</h1>
-          </div>
-          
-          <div className="flex items-center space-x-2">
-            <select
-              className={`${theme.colors.bg.secondary} border ${theme.colors.border.primary} rounded-md px-3 py-1.5 text-xs text-white focus:outline-none`}
-              value={selectedProject?.id || ''}
-              onChange={(e) => {
-                const proj = projects.find(p => p.id === e.target.value);
-                if (proj && workspaceId) { setSelectedProject(proj); fetchTasks(workspaceId, proj.id); }
-              }}
-            >
-              {projects.map((p) => (<option key={p.id} value={p.id}>{p.name}</option>))}
-            </select>
-
-            <button
-              onClick={() => setShowTaskModal(true)}
-              disabled={!selectedProject}
-              className={`${theme.colors.accent.DEFAULT} text-xs font-medium px-3 py-1.5 rounded-md transition-colors flex items-center space-x-1`}
-            >
-              <Plus size={14} />
-              <span>New Task</span>
-            </button>
-
-            <button
-              onClick={() => router.push(`/w/${workspaceSlug}/members`)}
-              className="text-xs bg-zinc-800 hover:bg-zinc-700 text-zinc-300 px-3 py-1.5 rounded-md transition-colors"
-            >
-                Members
-            </button>
-            <button
-              onClick={() => setShowSettingsModal(true)}
-              className="p-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-md transition-colors"
-              title="Settings"
-            >
-              <Settings size={16} />
-          </button>
-          </div>
-        </div>
-
         <Alert message={error} type="error" />
 
         {!selectedProject ? (
-          <div className="text-center py-16 border border-dashed border-zinc-800 rounded-lg">
-            <p className={`text-xs ${theme.colors.text.secondary}`}>Please create a project first.</p>
+          <div className="text-center py-16 border border-dashed border-zinc-800 rounded-lg space-y-3">
+            <p className={`text-xs ${theme.colors.text.secondary}`}>No projects found in this workspace.</p>
+            {isOwnerOrAdmin && (
+              <button
+                onClick={() => setShowProjectModal(true)}
+                className={`${theme.colors.accent.DEFAULT} text-xs font-medium px-4 py-2 rounded-md`}
+              >
+                Create First Project
+              </button>
+            )}
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4 flex-1 items-start">
@@ -189,12 +191,25 @@ export default function WorkspaceDashboard() {
           </div>
         )}
 
+        {/* Modaller */}
         <TaskModal
           isOpen={showTaskModal}
           onClose={() => setShowTaskModal(false)}
           onSubmit={handleCreateTask}
           members={members}
         />
+
+        <CreateProjectModal
+          isOpen={showProjectModal}
+          onClose={() => setShowProjectModal(false)}
+          onSubmit={handleCreateProject}
+        />
+
+        <SettingsModal
+          isOpen={showSettingsModal}
+          onClose={() => setShowSettingsModal(false)}
+        />
+
         <TaskDetailModal
           taskId={activeTaskId}
           workspaceId={workspaceId || ''}
@@ -205,10 +220,7 @@ export default function WorkspaceDashboard() {
             }
           }}
         />
-        <SettingsModal
-          isOpen={showSettingsModal}
-          onClose={() => setShowSettingsModal(false)}
-        />
+
       </div>
     </div>
   );
