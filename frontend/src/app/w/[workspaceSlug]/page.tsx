@@ -11,6 +11,7 @@ import { TaskModal } from '@/components/kanban/TaskModal';
 import { useRouter } from 'next/navigation';
 import { SettingsModal } from '@/components/settings/SettingsModal';
 import { Settings } from 'lucide-react'; 
+import { TaskDetailModal } from '@/components/kanban/TaskDetailModal';
 
 interface Project { id: string; name: string; }
 interface Member { user: { id: string; fullName: string; email: string; }; }
@@ -37,6 +38,7 @@ export default function WorkspaceDashboard() {
   const [error, setError] = useState('');
   const [showTaskModal, setShowTaskModal] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
+  const [activeTaskId, setActiveTaskId] = useState<string | null>(null);
 
   useEffect(() => {
     const initWorkspace = async () => {
@@ -181,6 +183,7 @@ export default function WorkspaceDashboard() {
                 title={col.title}
                 tasks={tasks.filter((t) => t.status === col.id)}
                 onMoveForward={handleStatusChange}
+                onTaskClick={(taskId) => setActiveTaskId(taskId)}
               />
             ))}
           </div>
@@ -191,6 +194,16 @@ export default function WorkspaceDashboard() {
           onClose={() => setShowTaskModal(false)}
           onSubmit={handleCreateTask}
           members={members}
+        />
+        <TaskDetailModal
+          taskId={activeTaskId}
+          workspaceId={workspaceId || ''}
+          onClose={() => setActiveTaskId(null)}
+          onTaskUpdated={() => {
+            if (workspaceId && selectedProject) {
+              fetchTasks(workspaceId, selectedProject.id);
+            }
+          }}
         />
         <SettingsModal
           isOpen={showSettingsModal}

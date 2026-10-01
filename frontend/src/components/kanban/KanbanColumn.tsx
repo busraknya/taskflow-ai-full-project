@@ -16,9 +16,10 @@ interface KanbanColumnProps {
   title: string;
   tasks: Task[];
   onMoveForward: (taskId: string, version: number, nextStatus: string) => void;
+  onTaskClick: (taskId: string) => void; // <-- Yeni eklenen prop
 }
 
-export function KanbanColumn({ columnId, title, tasks, onMoveForward }: KanbanColumnProps) {
+export function KanbanColumn({ columnId, title, tasks, onMoveForward, onTaskClick }: KanbanColumnProps) {
   return (
     <div className={`${theme.colors.bg.secondary} border ${theme.colors.border.primary} rounded-lg p-3 space-y-3 flex flex-col max-h-[75vh]`}>
       <div className="flex justify-between items-center px-1">
@@ -32,7 +33,8 @@ export function KanbanColumn({ columnId, title, tasks, onMoveForward }: KanbanCo
           return (
             <div
               key={task.id}
-              className={`p-3 ${theme.colors.bg.primary} border ${theme.colors.border.primary} rounded-md space-y-2 hover:border-zinc-700 transition-all`}
+              onClick={() => onTaskClick(task.id)} // <-- Kartın kendisine tıklandığında detay açılır
+              className={`p-3 ${theme.colors.bg.primary} border ${theme.colors.border.primary} rounded-md space-y-2 hover:border-zinc-500 cursor-pointer transition-all`}
             >
               <div className="flex justify-between items-start">
                 <h3 className="text-xs font-medium text-white">{task.title}</h3>
@@ -52,7 +54,8 @@ export function KanbanColumn({ columnId, title, tasks, onMoveForward }: KanbanCo
               <div className="flex justify-between items-center pt-2 border-t border-zinc-900 text-[10px] text-zinc-500">
                 <span>P{task.priority} {task.assignee ? `• ${task.assignee.fullName}` : ''}</span>
                 
-                <div className="flex space-x-1">
+                <div className="flex space-x-1" onClick={(e) => e.stopPropagation()}> 
+                  {/* Not: onStopPropagation sayesinde sağa kaydırma butonuna basıldığında kartın detayı AÇILMAZ! */}
                   {columnId !== 'DONE' && (
                     <button
                       onClick={() => {

@@ -12,6 +12,7 @@ import { TasksModule } from './tasks/tasks.module';
 import { AuditModule } from './common/audit/audit.module';
 import { AiModule } from './ai/ai.module';
 import { UsersModule } from './users/users.module';
+import { CommentsModule } from './comments/comments.module';
 
 @Module({
   imports: [
@@ -47,6 +48,7 @@ import { UsersModule } from './users/users.module';
     TasksModule,
     AiModule,
     UsersModule,
+    CommentsModule,
   ],
   controllers: [AppController],
   providers: [AppService],
