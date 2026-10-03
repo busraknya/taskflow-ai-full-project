@@ -1,4 +1,4 @@
-package com.taskflowai.myapplication
+package com.taskflowai.taskflowai
 
 import org.junit.Test
 

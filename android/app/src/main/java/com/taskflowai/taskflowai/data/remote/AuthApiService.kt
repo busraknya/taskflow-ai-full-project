@@ -1,4 +1,4 @@
-package com.taskflowai.myapplication.ai.data.remote
+package com.taskflowai.taskflowai.data.remote
 
 import retrofit2.Response
 import retrofit2.http.Body

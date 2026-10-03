@@ -1,4 +1,4 @@
-package com.taskflowai.myapplication.ui.theme
+package com.taskflowai.taskflowai.presentation.ui.theme
 
 import androidx.compose.ui.graphics.Color
 

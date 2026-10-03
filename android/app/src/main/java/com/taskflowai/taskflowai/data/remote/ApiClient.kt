@@ -1,12 +1,10 @@
-package com.taskflowai.myapplication.ai.data.remote
+package com.taskflowai.taskflowai.data.remote
 
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 import java.util.concurrent.TimeUnit
-import kotlin.getValue
-import kotlin.jvm.java
 
 object ApiClient {
     // Android emülatöründen localhost'a bağlanmak için 10.0.2.2 kullanılır

@@ -1,12 +1,12 @@
-package com.taskflowai.myapplication.ui.login
+package com.taskflowai.taskflowai.presentation.ui.login
 
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.taskflowai.myapplication.ai.data.remote.ApiClient
-import com.taskflowai.myapplication.ai.data.remote.LoginRequest
+import com.taskflowai.taskflowai.data.remote.ApiClient
+import com.taskflowai.taskflowai.data.remote.LoginRequest
 import kotlinx.coroutines.launch
 
 sealed class LoginState {

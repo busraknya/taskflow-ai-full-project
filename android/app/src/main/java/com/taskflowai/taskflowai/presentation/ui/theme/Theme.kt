@@ -1,6 +1,5 @@
-package com.taskflowai.myapplication.ui.theme
+package com.taskflowai.taskflowai.presentation.ui.theme
 
-import android.app.Activity
 import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
