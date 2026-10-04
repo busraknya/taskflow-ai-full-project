@@ -55,6 +55,12 @@ export class WorkspacesController {
     return this.workspacesService.findOne(workspaceId);
   }
 
+  @Get(':workspaceId/audit')
+  @UseGuards(WorkspaceMemberGuard)
+  async getAuditLogs(@Param('workspaceId') workspaceId: string) {
+    return this.workspacesService.getAuditLogs(workspaceId);
+  }
+
   @Delete(':workspaceId/members/:membershipId')
   @UseGuards(WorkspaceMemberGuard)
   async removeMember(

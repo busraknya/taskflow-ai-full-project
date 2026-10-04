@@ -4,7 +4,7 @@ import { useRouter } from 'next/navigation';
 import { theme } from '@/lib/theme';
 import { api } from '@/lib/api';
 import { useAuthStore } from '@/store/useAuthStore';
-import { Settings, LogOut, Users, Plus, FolderKanban } from 'lucide-react';
+import { Settings, LogOut, Users, Plus, FolderKanban, Activity } from 'lucide-react';
 
 interface NavbarProps {
   workspaceSlug?: string;
@@ -102,7 +102,13 @@ export function Navbar({
               <Users size={14} />
               <span>Members</span>
             </button>
-
+            <button
+              onClick={() => router.push(`/w/${workspaceSlug}/activity`)}
+              className="text-xs bg-zinc-800 hover:bg-zinc-700 text-zinc-300 px-3 py-1.5 rounded-md transition-colors flex items-center space-x-1.5"
+            >
+              <Activity size={14} />
+              <span>Activity</span>
+            </button>
             <button
               onClick={onNewTaskClick}
               disabled={!selectedProjectId}

@@ -200,4 +200,12 @@ export class WorkspacesService {
       where: { id: targetMembershipId },
     });
   }
+
+  async getAuditLogs(workspaceId: string) {
+    return this.prisma.auditLogEntry.findMany({
+      where: { workspaceId },
+      orderBy: { createdAt: 'desc' },
+      take: 50,
+    });
+  }
 }
