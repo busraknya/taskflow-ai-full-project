@@ -7,10 +7,12 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.taskflowai.taskflowai.data.local.TokenManager
 
 @Composable
 fun LoginScreen(
@@ -21,6 +23,7 @@ fun LoginScreen(
     var password by remember { mutableStateOf("") }
 
     val state = viewModel.uiState
+    val context = LocalContext.current
 
     Box(
         modifier = Modifier
@@ -86,7 +89,13 @@ fun LoginScreen(
             Spacer(modifier = Modifier.height(24.dp))
 
             Button(
-                onClick = { viewModel.login(email, password) },
+                onClick = {
+                    viewModel.login(email, password) { token ->
+                        val tokenManager = TokenManager(context)
+                        tokenManager.saveToken(token)
+                        onLoginSuccess(token)
+                    }
+                },
                 modifier = Modifier.fillMaxWidth(),
                 colors = ButtonDefaults.buttonColors(containerColor = Color.White),
                 shape = MaterialTheme.shapes.small
