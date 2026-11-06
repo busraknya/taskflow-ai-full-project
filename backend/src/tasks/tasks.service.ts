@@ -7,7 +7,6 @@ import { EventEmitter2 } from '@nestjs/event-emitter';
 import { AiService } from '../ai/ai.service';
 import { RiskFeatureService } from '../ai/risk-feature.service';
 
-
 @Injectable()
 export class TasksService {
   constructor(
@@ -15,35 +14,31 @@ export class TasksService {
     private auditService: AuditService,
     private eventEmitter: EventEmitter2,
     private aiService: AiService,
-  private riskFeatureService: RiskFeatureService,
+    private riskFeatureService: RiskFeatureService,
   ) {}
 
-  // Helper metod (Risk hesaplama tetikleyicisi):
-    private async assessAndSaveRisk(taskId: string, workspaceId: string, status: string) {
-        // Domain Rules §3: DONE durumundaki task'ın riski donar, yeniden hesaplanmaz.
-        if (status === 'DONE') return;
+  private async assessAndSaveRisk(taskId: string, workspaceId: string, status: string) {
+    if (status === 'DONE') return;
 
-        try {
-            const features = await this.riskFeatureService.extractFeaturesForTask(taskId);
-            if (!features) return;
+    try {
+      const features = await this.riskFeatureService.extractFeaturesForTask(taskId);
+      if (!features) return;
 
-            const prediction = await this.aiService.assessTaskRisk(features);
+      const prediction = await this.aiService.assessTaskRisk(features);
 
-            // RiskAssessment tablosuna kaydet (Append-only / Database Spec)
-            await this.prisma.riskAssessment.create({
-            data: {
-                taskId,
-                riskLevel: prediction.risk_level as any,
-                riskScore: prediction.risk_score,
-                factors: prediction.factors,
-                modelVersion: prediction.model_version,
-            },
-            });
-        } catch (error) {
-            // Master Invariant #8: AI servisi çökse bile ana işlem (task update) asla rollback olmaz
-            console.error('[AI Risk] Failed to assess task risk:', error);
-        }
+      await this.prisma.riskAssessment.create({
+        data: {
+          taskId,
+          riskLevel: prediction.risk_level as any,
+          riskScore: prediction.risk_score,
+          factors: prediction.factors,
+          modelVersion: prediction.model_version,
+        },
+      });
+    } catch (error) {
+      console.error('[AI Risk] Failed to assess task risk:', error);
     }
+  }
 
   async create(workspaceId: string, userId: string, dto: CreateTaskDto) {
     const project = await this.prisma.project.findFirst({
@@ -91,14 +86,16 @@ export class TasksService {
     });
 
     if (task.assigneeId) {
-        this.eventEmitter.emit('task.assigned', {
-            taskId: task.id,
-            assigneeId: task.assigneeId,
-            workspaceId,
-        });
+      this.eventEmitter.emit('task.assigned', {
+        taskId: task.id,
+        assigneeId: task.assigneeId,
+        workspaceId,
+      });
     }
 
+    // AI Risk Değerlendirmesini Tetikle
     await this.assessAndSaveRisk(task.id, workspaceId, task.status);
+
     return task;
   }
 
@@ -115,7 +112,7 @@ export class TasksService {
         },
         riskAssessments: {
           orderBy: { computedAt: 'desc' },
-          take: 1, // En son hesaplanan AI risk skoru (AI Spec §6)
+          take: 1,
         },
       },
       orderBy: { position: 'asc' },
@@ -169,6 +166,10 @@ export class TasksService {
         assignee: {
           select: { id: true, fullName: true, avatarUrl: true },
         },
+        riskAssessments: {
+          orderBy: { computedAt: 'desc' },
+          take: 1,
+        },
       },
     });
 
@@ -182,14 +183,15 @@ export class TasksService {
     });
 
     if (updatedTask.assigneeId) {
-        this.eventEmitter.emit('task.assigned', {
-            taskId: updatedTask.id,
-            assigneeId: updatedTask.assigneeId,
-            workspaceId,
-        });
+      this.eventEmitter.emit('task.assigned', {
+        taskId: updatedTask.id,
+        assigneeId: updatedTask.assigneeId,
+        workspaceId,
+      });
     }
 
     await this.assessAndSaveRisk(updatedTask.id, workspaceId, updatedTask.status);
+
     return updatedTask;
   }
 }
