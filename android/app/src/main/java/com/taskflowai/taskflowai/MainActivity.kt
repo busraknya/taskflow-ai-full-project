@@ -7,17 +7,18 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Scaffold
 import androidx.compose.ui.Modifier
+import com.taskflowai.taskflowai.data.remote.ApiClient
 import com.taskflowai.taskflowai.presentation.navigation.AppNavGraph
 import com.taskflowai.taskflowai.presentation.ui.theme.TaskflowaiTheme
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        ApiClient.init(applicationContext)
         enableEdgeToEdge()
         setContent {
             TaskflowaiTheme {
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-                    // Android Spec §2: Merkezi Navigasyon Grafiği
                     AppNavGraph()
                 }
             }

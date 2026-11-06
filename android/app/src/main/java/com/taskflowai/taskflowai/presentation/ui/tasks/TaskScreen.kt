@@ -13,13 +13,17 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
 @Composable
-fun TaskScreen(viewModel: TaskViewModel = androidx.lifecycle.viewmodel.compose.viewModel()) {
+fun TaskScreen(
+    workspaceId: String,
+    viewModel: TaskViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
+) {
     val tasks = viewModel.tasks
 
     Column(
         modifier = Modifier
             .fillMaxSize()
             .background(Color(0xFF09090B))
+            .statusBarsPadding()
             .padding(16.dp)
     ) {
         Text(
