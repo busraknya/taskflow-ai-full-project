@@ -12,41 +12,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.taskflowai.taskflowai.data.remote.ApiClient
-import com.taskflowai.taskflowai.data.remote.WorkspaceDto
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-
-class WorkspaceViewModel : androidx.lifecycle.ViewModel() {
-    var workspaces by mutableStateOf<List<WorkspaceDto>>(emptyList())
-        private set
-    var isLoading by mutableStateOf(false)
-        private set
-
-    init {
-        fetchWorkspaces()
-    }
-
-    fun fetchWorkspaces() {
-        kotlinx.coroutines.CoroutineScope(Dispatchers.IO).launch {
-            isLoading = true
-            try {
-                val response = ApiClient.workspaceService.getWorkspaces()
-                if (response.isSuccessful && response.body() != null) {
-                    workspaces = response.body()!!
-                }
-            } catch (e: Exception) {
-                // Hata yönetimi
-            } finally {
-                isLoading = false
-            }
-        }
-    }
-}
 
 @Composable
 fun WorkspaceSelectionScreen(
-    viewModel: WorkspaceViewModel = androidx.lifecycle.viewmodel.compose.viewModel(),
+    viewModel: WorkspaceSelectionViewModel = androidx.lifecycle.viewmodel.compose.viewModel(),
     onWorkspaceSelected: (String, String) -> Unit // workspaceId, workspaceSlug
 ) {
     val workspaces = viewModel.workspaces

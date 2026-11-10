@@ -12,37 +12,32 @@ import com.taskflowai.taskflowai.data.remote.UpdateTaskRequest
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
-class TaskViewModel(application: Application) : AndroidViewModel(application) {
+class TaskViewModel(application: Application, private val workspaceId: String) : AndroidViewModel(application) {
     var tasks by mutableStateOf<List<TaskDto>>(emptyList())
         private set
 
     var isLoading by mutableStateOf(false)
         private set
 
-    var errorMessage by mutableStateOf<String?>(null)
-        private set
-
-    // Test için seed'den gelen gerçek Workspace ID ve Proje ID'sini buraya verebiliriz
-    // (Veya login sonrası dinamik alınır)
-    private val dummyWorkspaceId = "af39ea50-262b-441d-b97d-480e03c2e459"
-    private val dummyProjectId = "3224de89-146f-4f06-bc86-127cf7dec84c"
-
     init {
-        fetchTasks()
+        fetchTasksForWorkspace()
     }
 
-    fun fetchTasks() {
+    private fun fetchTasksForWorkspace() {
         viewModelScope.launch(Dispatchers.IO) {
             isLoading = true
             try {
-                val response = ApiClient.taskService.getTasks(dummyWorkspaceId, dummyProjectId)
-                if (response.isSuccessful && response.body() != null) {
-                    tasks = response.body()!!
-                } else {
-                    errorMessage = "Failed to load tasks from server."
+                val projectsResponse = ApiClient.workspaceService.getProjects(workspaceId)
+                if (projectsResponse.isSuccessful && !projectsResponse.body().isNullOrEmpty()) {
+                    val firstProjectId = projectsResponse.body()!![0].id
+
+                    val tasksResponse = ApiClient.taskService.getTasks(workspaceId, firstProjectId)
+                    if (tasksResponse.isSuccessful && tasksResponse.body() != null) {
+                        tasks = tasksResponse.body()!!
+                    }
                 }
             } catch (e: Exception) {
-                errorMessage = e.localizedMessage ?: "Network error."
+                // exception
             } finally {
                 isLoading = false
             }
@@ -53,15 +48,15 @@ class TaskViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 val response = ApiClient.taskService.updateTaskStatus(
-                    dummyWorkspaceId,
+                    workspaceId,
                     taskId,
                     UpdateTaskRequest(status = newStatus, version = currentVersion)
                 )
                 if (response.isSuccessful) {
-                    fetchTasks() // Listeyi tazele
+                    fetchTasksForWorkspace()
                 }
             } catch (e: Exception) {
-                errorMessage = "Failed to update task status."
+                // exception
             }
         }
     }

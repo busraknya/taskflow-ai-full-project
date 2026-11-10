@@ -21,7 +21,6 @@ fun AppNavGraph() {
         composable("login") {
             LoginScreen(
                 onLoginSuccess = { _ ->
-                    // Token kullanıldı, workspaces ekranına yönlendir ve login'i stack'ten temizle
                     navController.navigate("workspaces") {
                         popUpTo("login") { inclusive = true }
                     }
@@ -30,8 +29,7 @@ fun AppNavGraph() {
         }
         composable("workspaces") {
             WorkspaceSelectionScreen(
-                onWorkspaceSelected = { wsId, _ ->
-                    // Seçilen workspace ID'sini tasks ekranına argüman olarak geçir
+                onWorkspaceSelected = { wsId, wsSlug ->
                     navController.navigate("tasks/$wsId")
                 }
             )
