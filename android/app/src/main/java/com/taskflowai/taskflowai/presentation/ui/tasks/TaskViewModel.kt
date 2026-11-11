@@ -12,6 +12,18 @@ import com.taskflowai.taskflowai.data.remote.UpdateTaskRequest
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
+
+class TaskViewModelFactory(private val workspaceId: String) : ViewModelProvider.Factory {
+    override fun <T : ViewModel> create(modelClass: Class<T>): T {
+        if (modelClass.isAssignableFrom(TaskViewModel::class.java)) {
+            @Suppress("UNCHECKED_CAST")
+            return TaskViewModel(android.app.Application(), workspaceId) as T
+        }
+        throw IllegalArgumentException("Unknown ViewModel class")
+    }
+}
 class TaskViewModel(application: Application, private val workspaceId: String) : AndroidViewModel(application) {
     var tasks by mutableStateOf<List<TaskDto>>(emptyList())
         private set

@@ -15,7 +15,9 @@ import androidx.compose.ui.unit.sp
 @Composable
 fun TaskScreen(
     workspaceId: String,
-    viewModel: TaskViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
+    viewModel: TaskViewModel = androidx.lifecycle.viewmodel.compose.viewModel(
+        factory = TaskViewModelFactory(workspaceId)
+    )
 ) {
     val tasks = viewModel.tasks
 
