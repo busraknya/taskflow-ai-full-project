@@ -36,7 +36,19 @@ fun AppNavGraph() {
         }
         composable("tasks/{workspaceId}") { backStackEntry ->
             val workspaceId = backStackEntry.arguments?.getString("workspaceId") ?: ""
-            TaskScreen(workspaceId = workspaceId)
+            TaskScreen(
+                workspaceId = workspaceId,
+                onBackToWorkspaces = {
+                    navController.navigate("workspaces") {
+                        popUpTo("workspaces") { inclusive = true }
+                    }
+                },
+                onLogout = {
+                    navController.navigate("login") {
+                        popUpTo(0) { inclusive = true }
+                    }
+                }
+            )
         }
     }
 }
