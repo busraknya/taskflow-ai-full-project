@@ -1,18 +1,15 @@
 package com.taskflowai.taskflowai.presentation.ui.tasks
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.runtime.*
-
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -29,7 +26,7 @@ fun TaskScreen(
     val tasks = viewModel.tasks
     val isLoading = viewModel.isLoading
 
-    // Tabs for state: 0: To Do, 1: In Progress, 2: In Review, 3: Done
+    // Sekmeler (Tabs) için state: 0: To Do, 1: In Progress, 2: In Review, 3: Done
     var selectedTab by remember { mutableStateOf(0) }
     val tabs = listOf("To Do", "In Progress", "In Review", "Done")
     val statusMapping = listOf("TODO", "IN_PROGRESS", "IN_REVIEW", "DONE")
@@ -59,12 +56,11 @@ fun TaskScreen(
                 .padding(innerPadding)
                 .padding(16.dp)
         ) {
-            // 1. Proje Seçici (Project Selector Dropdown / Row)
+            // 1. Proje Seçici (Project Selector Row)
             if (projects.isNotEmpty()) {
                 Text(text = "PROJECT", color = Color(0xFFA1A1AA), fontSize = 10.sp)
                 Spacer(modifier = Modifier.height(4.dp))
 
-                // Basit bir Proje Seçim Alanı
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -130,11 +126,40 @@ fun TaskScreen(
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             Column(modifier = Modifier.padding(16.dp)) {
-                                Text(text = task.title, color = Color.White, fontSize = 14.sp)
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(text = task.title, color = Color.White, fontSize = 14.sp, modifier = Modifier.weight(1f))
+
+                                    // AI Risk Rozeti (AI Spec §6)
+                                    val riskLevel = task.riskAssessments?.firstOrNull()?.riskLevel
+                                    if (riskLevel != null) {
+                                        val badgeColor = when (riskLevel) {
+                                            "HIGH" -> Color(0xFFEF4444)   // Kırmızı
+                                            "MEDIUM" -> Color(0xFFF59E0B) // Amber/Turuncu
+                                            else -> Color(0xFFA1A1AA)     // Gri
+                                        }
+                                        Surface(
+                                            color = badgeColor.copy(alpha = 0.2f),
+                                            shape = MaterialTheme.shapes.extraSmall
+                                        ) {
+                                            Text(
+                                                text = riskLevel,
+                                                color = badgeColor,
+                                                fontSize = 9.sp,
+                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                            )
+                                        }
+                                    }
+                                }
+
                                 if (!task.description.isNullOrEmpty()) {
                                     Spacer(modifier = Modifier.height(4.dp))
                                     Text(text = task.description!!, color = Color(0xFFA1A1AA), fontSize = 11.sp)
                                 }
+
                                 Spacer(modifier = Modifier.height(8.dp))
 
                                 Row(
@@ -144,7 +169,6 @@ fun TaskScreen(
                                 ) {
                                     Text(text = "Priority: P${task.priority}", color = Color(0xFFA1A1AA), fontSize = 10.sp)
 
-                                    // İleri taşıma butonu
                                     if (currentStatus != "DONE") {
                                         Button(
                                             onClick = {

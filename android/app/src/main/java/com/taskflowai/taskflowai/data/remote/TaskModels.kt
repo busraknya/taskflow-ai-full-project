@@ -6,6 +6,17 @@ data class AssigneeDto(
     val avatarUrl: String?
 )
 
+data class RiskAssessmentDto(
+    val riskLevel: String,
+    val riskScore: Double?,
+    val factors: List<FactorDto>?
+)
+
+data class FactorDto(
+    val feature: String,
+    val explanation: String
+)
+
 data class TaskDto(
     val id: String,
     val workspaceId: String,
@@ -15,7 +26,8 @@ data class TaskDto(
     val status: String,
     val priority: Int,
     val version: Int,
-    val assignee: AssigneeDto?
+    val assignee: AssigneeDto?,
+    val riskAssessments: List<RiskAssessmentDto>?
 )
 
 data class UpdateTaskRequest(
