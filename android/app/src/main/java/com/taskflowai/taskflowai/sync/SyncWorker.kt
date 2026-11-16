@@ -47,8 +47,10 @@ class SyncWorker(
                 )
                 when {
                     response.isSuccessful -> dao.deleteOperation(operation.id)
-                    response.code() == 401 || response.code() == 403 ->
+                    response.code() == 401 ->
                         dao.updateOperationState(operation.id, "BLOCKED_AUTH")
+                    response.code() == 403 ->
+                        dao.updateOperationState(operation.id, "FAILED")
                     response.code() == 409 ->
                         dao.updateOperationState(operation.id, "CONFLICT")
                     response.code() == 408 || response.code() == 429 || response.code() >= 500 ->
