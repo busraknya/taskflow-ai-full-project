@@ -27,23 +27,24 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
 
 
 
-  const fetchPreferences = useCallback(async () => {
-    try {
-      const res = await api.get<Array<{ category: string; emailEnabled: boolean }>>('/users/me/notification-preferences');
-      const taskAssignedPref = res.data.find((p) => p.category === 'task.assigned');
-      if (taskAssignedPref) {
-        setEmailEnabled(taskAssignedPref.emailEnabled);
-      }
-    } catch (err) {
-      console.error('Failed to load preferences');
-    }
-  }, []);
-
   useEffect(() => {
-    if (isOpen) {
-      fetchPreferences();
-    }
-  }, [isOpen, fetchPreferences]);
+    if (!isOpen) return;
+
+    let cancelled = false;
+    api.get<Array<{ category: string; emailEnabled: boolean }>>('/users/me/notification-preferences')
+      .then((res) => {
+        if (cancelled) return;
+        const taskAssignedPref = res.data.find((preference) => preference.category === 'task.assigned');
+        if (taskAssignedPref) setEmailEnabled(taskAssignedPref.emailEnabled);
+      })
+      .catch(() => {
+        if (!cancelled) console.error('Failed to load preferences');
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen]);
 
   const handleClose = () => {
     setCurrentPassword('');
