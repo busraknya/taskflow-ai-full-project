@@ -11,6 +11,7 @@ import androidx.lifecycle.viewModelScope
 import com.google.gson.Gson
 import com.taskflowai.taskflowai.data.local.AppDatabase
 import com.taskflowai.taskflowai.data.local.PendingOperationEntity
+import com.taskflowai.taskflowai.data.local.TokenManager
 import com.taskflowai.taskflowai.data.remote.ApiClient
 import com.taskflowai.taskflowai.data.remote.ProjectDto
 import com.taskflowai.taskflowai.data.remote.TaskDto
@@ -101,9 +102,8 @@ class TaskViewModel(
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 val response = ApiClient.taskService.updateTaskStatus(
-                    workspaceId,
-                    taskId,
-                    UpdateTaskRequest(status = newStatus, version = currentVersion),
+                    workspaceId, taskId,
+                    UpdateTaskRequest(status = newStatus, version = currentVersion)
                 )
                 when {
                     response.isSuccessful -> selectedProject?.let { fetchTasksForProject(it.id) }
@@ -120,8 +120,15 @@ class TaskViewModel(
     }
 
     private suspend fun queueStatusChange(taskId: String, newStatus: String, currentVersion: Int) {
+        val userId = TokenManager(getApplication<Application>()).getUserId()
+        if (userId.isNullOrBlank()) {
+            errorMessage = "Your session is unavailable. Sign in again before saving offline changes."
+            return
+        }
+
         val operation = PendingOperationEntity(
             id = UUID.randomUUID().toString(),
+            ownerUserId = userId,
             workspaceId = workspaceId,
             entityType = "TASK",
             entityId = taskId,
