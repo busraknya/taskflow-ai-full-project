@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
 import { theme } from '@/lib/theme';
@@ -22,13 +22,24 @@ export default function MembersPage() {
 
   const [workspaceId, setWorkspaceId] = useState<string | null>(null);
   const [members, setMembers] = useState<Member[]>([]);
-  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [currentUserRole, setCurrentUserRole] = useState<string | null>(null);
   
   const [loading, setLoading] = useState(true);
   const [toastMsg, setToastMsg] = useState('');
   const [toastType, setToastType] = useState<'success' | 'error'>('success');
   const [adding, setAdding] = useState(false);
+
+  const fetchMembers = useCallback(async (wsId: string) => {
+    try {
+      const res = await api.get(`/workspaces/${wsId}/members`);
+      setMembers(res.data);
+    } catch (err) {
+      setToastMsg('Failed to load members.');
+      setToastType('error');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
     const init = async () => {
@@ -56,19 +67,9 @@ export default function MembersPage() {
       }
     };
     init();
-  }, [workspaceSlug]);
+  }, [workspaceSlug, fetchMembers]);
 
-  const fetchMembers = async (wsId: string) => {
-    try {
-      const res = await api.get(`/workspaces/${wsId}/members`);
-      setMembers(res.data);
-    } catch (err) {
-      setToastMsg('Failed to load members.');
-      setToastType('error');
-    } finally {
-      setLoading(false);
-    }
-  };
+
 
   const handleAddMember = async (email: string, role: string) => {
     if (!workspaceId) return;
