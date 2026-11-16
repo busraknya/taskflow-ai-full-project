@@ -35,7 +35,7 @@ jobs:
       - run: npm ci
       - run: npx prisma generate
       - name: Lint new authorization tests
-        run: npx eslint src/workspaces/workspaces.service.spec.ts --rule 'prettier/prettier: off'
+        run: "npx eslint src/workspaces/workspaces.service.spec.ts --rule 'prettier/prettier: off'"
       - name: Existing backend lint baseline (non-blocking)
         run: npx eslint "{src,apps,libs,test}/**/*.ts"
         continue-on-error: true
