@@ -3,6 +3,7 @@ WORKDIR /app
 RUN apk add --no-cache openssl libc6-compat
 
 FROM base AS build
+ENV DATABASE_URL=postgresql://build:build-only@127.0.0.1:5432/taskflow
 COPY package*.json ./
 RUN npm ci
 COPY . .
