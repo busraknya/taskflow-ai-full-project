@@ -5,6 +5,7 @@ plugins {
 }
 
 val releaseApiBaseUrl = providers.gradleProperty("TASKFLOW_API_BASE_URL").orNull
+val releaseApiUrlForBuild = releaseApiBaseUrl ?: "https://api.example.invalid/api/v1/"
 
 android {
     namespace = "com.taskflowai.taskflowai"
@@ -29,12 +30,7 @@ android {
             // Emulator-only development endpoint. Physical devices need a reachable host.
         }
         release {
-            if (releaseApiBaseUrl.isNullOrBlank() || !releaseApiBaseUrl.startsWith("https://")) {
-                throw GradleException(
-                    "Release builds require -PTASKFLOW_API_BASE_URL=https://your-api.example.com/api/v1/"
-                )
-            }
-            buildConfigField("String", "API_BASE_URL", "\"$releaseApiBaseUrl\"")
+            buildConfigField("String", "API_BASE_URL", "\"$releaseApiUrlForBuild\"")
             isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
@@ -82,4 +78,19 @@ dependencies {
     ksp("androidx.room:room-compiler:2.8.5")
     implementation("androidx.work:work-runtime-ktx:2.9.0")
     implementation("androidx.navigation:navigation-compose:2.7.7")
+}
+
+
+tasks.register("validateReleaseApiUrl") {
+    doLast {
+        if (releaseApiBaseUrl.isNullOrBlank() || !releaseApiBaseUrl.startsWith("https://")) {
+            throw GradleException(
+                "Release builds require -PTASKFLOW_API_BASE_URL=https://your-api.example.com/api/v1/"
+            )
+        }
+    }
+}
+
+tasks.matching { it.name == "preReleaseBuild" }.configureEach {
+    dependsOn("validateReleaseApiUrl")
 }
