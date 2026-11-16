@@ -102,7 +102,7 @@ export default function ActivityPage() {
                     </span>
                     <span className="font-medium text-white">{log.action}</span>
                   </div>
-                  {log.metadata && (
+                  {log.metadata !== null && log.metadata !== undefined && (
                     <p className="text-[11px] text-zinc-400 font-mono">
                       {JSON.stringify(log.metadata)}
                     </p>
