@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { api } from '@/lib/api';
 import { theme } from '@/lib/theme';
 import { X, Send, Trash2, Calendar, User, AlertCircle } from 'lucide-react';
@@ -26,14 +26,9 @@ export function TaskDetailModal({ taskId, workspaceId, onClose, onTaskUpdated }:
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
 
-  useEffect(() => {
-    if (taskId && workspaceId) {
-      fetchTaskDetails();
-      fetchComments();
-    }
-  }, [taskId, workspaceId]);
 
-  const fetchTaskDetails = async () => {
+
+  const fetchTaskDetails = useCallback(async () => {
     try {
       const res = await api.get(`/workspaces/${workspaceId}/tasks`);
       const currentTask = res.data.find((t: any) => t.id === taskId);
@@ -43,9 +38,9 @@ export function TaskDetailModal({ taskId, workspaceId, onClose, onTaskUpdated }:
     } finally {
       setLoading(false);
     }
-  };
+  }, [taskId, workspaceId]);
 
-  const fetchComments = async () => {
+  const fetchComments = useCallback(async () => {
     try {
       const res = await api.get(`/workspaces/${workspaceId}/tasks/${taskId}/comments`);
       setComments(res.data);
@@ -53,6 +48,13 @@ export function TaskDetailModal({ taskId, workspaceId, onClose, onTaskUpdated }:
       console.error('Failed to load comments');
     }
   };
+
+  useEffect(() => {
+    if (taskId && workspaceId) {
+      fetchTaskDetails();
+      fetchComments();
+    }
+  }, [taskId, workspaceId, fetchTaskDetails, fetchComments]);
 
   const handleAddComment = async (e: React.FormEvent) => {
     e.preventDefault();
