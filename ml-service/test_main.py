@@ -1,5 +1,6 @@
 from fastapi.testclient import TestClient
 
+import main
 from main import app
 
 client = TestClient(app)
@@ -40,3 +41,15 @@ def test_predict_rejects_missing_required_feature():
         },
     )
     assert response.status_code == 422
+
+
+
+def test_model_loader_fails_when_artifact_is_missing(monkeypatch, tmp_path):
+    missing_model = tmp_path / "missing-model.joblib"
+    monkeypatch.setattr(main, "MODEL_PATH", str(missing_model))
+
+    try:
+        main.load_model()
+        raise AssertionError("Expected missing model artifact to fail startup")
+    except RuntimeError as error:
+        assert "Train and validate a model explicitly" in str(error)
