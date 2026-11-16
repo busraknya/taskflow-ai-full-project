@@ -3,30 +3,64 @@ package com.taskflowai.taskflowai.sync
 import android.content.Context
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
+import com.google.gson.JsonParser
 import com.taskflowai.taskflowai.data.local.AppDatabase
+import com.taskflowai.taskflowai.data.remote.ApiClient
+import com.taskflowai.taskflowai.data.remote.UpdateTaskRequest
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
-class SyncWorker(appContext: Context, workerParams: WorkerParameters) : CoroutineWorker(appContext, workerParams) {
+class SyncWorker(
+    appContext: Context,
+    workerParams: WorkerParameters,
+) : CoroutineWorker(appContext, workerParams) {
 
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
-        val db = AppDatabase.getDatabase(applicationContext)
-        val dao = db.operationDao()
+        val dao = AppDatabase.getDatabase(applicationContext).operationDao()
+        val pendingOperations = dao.getPendingOperations()
 
-        val pendingOps = dao.getPendingOperations()
-        if (pendingOps.isEmpty()) return@withContext Result.success()
+        for (operation in pendingOperations) {
+            if (operation.entityType != "TASK" || operation.operationType != "UPDATE_STATUS") {
+                // Unknown operation types are retained for inspection instead of silently discarded.
+                dao.updateOperationState(operation.id, "FAILED")
+                continue
+            }
 
-        for (op in pendingOps) {
+            val payload = try {
+                JsonParser.parseString(operation.payloadJson).asJsonObject
+            } catch (_: Exception) {
+                dao.updateOperationState(operation.id, "FAILED")
+                continue
+            }
+
+            val status = payload.get("status")?.takeUnless { it.isJsonNull }?.asString
+            val version = payload.get("version")?.takeUnless { it.isJsonNull }?.asInt
+
+            if (status.isNullOrBlank() || version == null) {
+                dao.updateOperationState(operation.id, "FAILED")
+                continue
+            }
+
             try {
-                // Şimdilik sadece Task status güncelleme simülasyonu
-                // Gerçek projede operationType ve payloadJson parse edilerek Retrofit ile backend'e atılır.
-                if (op.operationType == "UPDATE_STATUS") {
-                    // val response = ApiClient.retrofitService.updateTaskStatus(...)
-                    // Başarılı olursa kuyruktan sil:
-                    dao.deleteOperation(op.id)
+                val response = ApiClient.taskService.updateTaskStatus(
+                    workspaceId = operation.workspaceId,
+                    taskId = operation.entityId,
+                    request = UpdateTaskRequest(status = status, version = version),
+                )
+
+                when {
+                    response.isSuccessful -> {
+                        // Delete only after the server confirms that the update was accepted.
+                        dao.deleteOperation(operation.id)
+                    }
+                    response.code() in 400..499 -> {
+                        // Keep the payload locally for user-visible conflict/auth resolution.
+                        dao.updateOperationState(operation.id, "FAILED")
+                    }
+                    else -> return@withContext Result.retry()
                 }
-            } catch (e: Exception) {
-                // Ağ hatası durumunda döngü durur, WorkManager exponential backoff ile tekrar dener
+            } catch (_: Exception) {
+                // Network/server failures preserve the pending operation for WorkManager retry.
                 return@withContext Result.retry()
             }
         }
