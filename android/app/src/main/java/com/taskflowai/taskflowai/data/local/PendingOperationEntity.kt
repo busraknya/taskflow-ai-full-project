@@ -5,13 +5,14 @@ import androidx.room.PrimaryKey
 
 @Entity(tableName = "pending_operations")
 data class PendingOperationEntity(
-    @PrimaryKey val id: String,             // Client-side üretilen UUID
+    @PrimaryKey val id: String,
     val workspaceId: String,
-    val entityType: String,                 // Örn: "TASK"
+    val entityType: String,
     val entityId: String,
-    val operationType: String,              // Örn: "UPDATE_STATUS"
-    val payloadJson: String,                // Güncellenen verinin JSON hali
+    val operationType: String,
+    val payloadJson: String,
     val createdAt: Long,
     val retryCount: Int = 0,
-    val state: String = "PENDING"           // "PENDING", "IN_FLIGHT", "FAILED_RETRYABLE"
+    // PENDING, BLOCKED_AUTH, CONFLICT or FAILED
+    val state: String = "PENDING"
 )
