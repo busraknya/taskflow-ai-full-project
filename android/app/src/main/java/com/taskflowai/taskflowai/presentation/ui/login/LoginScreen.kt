@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -26,6 +27,7 @@ fun LoginScreen(
 
     val state = viewModel.uiState
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
 
     Box(
         modifier = Modifier
@@ -95,8 +97,10 @@ fun LoginScreen(
                     viewModel.login(email, password) { token ->
                         val tokenManager = TokenManager(context)
                         tokenManager.saveToken(token)
-                        AppDatabase.getDatabase(context).operationDao().requeueBlockedOperations()
-                        SyncScheduler.enqueue(context)
+                        scope.launch {
+                            AppDatabase.getDatabase(context).operationDao().requeueBlockedOperations()
+                            SyncScheduler.enqueue(context)
+                        }
                         onLoginSuccess(token)
                     }
                 },
