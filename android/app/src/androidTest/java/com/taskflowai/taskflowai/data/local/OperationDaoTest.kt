@@ -6,6 +6,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -30,41 +31,64 @@ class OperationDaoTest {
     }
 
     @Test
-    fun replacingPendingStatusUpdateKeepsOnlyLatestForTask() = runBlocking {
+    fun replacingPendingStatusUpdateKeepsOnlyLatestForTaskAndAccount() = runBlocking {
         dao.insertOperation(operation(id = "first", status = "IN_PROGRESS"))
         dao.replacePendingTaskStatusOperation(operation(id = "second", status = "DONE"))
 
-        val pending = dao.getPendingOperations()
+        val pending = dao.getPendingOperations("user-1")
         assertEquals(1, pending.size)
         assertEquals("second", pending.single().id)
         assertEquals("{\"status\":\"DONE\",\"version\":1}", pending.single().payloadJson)
     }
 
     @Test
-    fun newStatusUpdateReplacesOperationBlockedByExpiredSession() = runBlocking {
+    fun sameTaskOperationsFromDifferentAccountsRemainIsolated() = runBlocking {
+        dao.insertOperation(operation(id = "user-1-op", status = "IN_PROGRESS", ownerUserId = "user-1"))
+        dao.insertOperation(operation(id = "user-2-op", status = "DONE", ownerUserId = "user-2"))
+
+        assertEquals(listOf("user-1-op"), dao.getPendingOperations("user-1").map { it.id })
+        assertEquals(listOf("user-2-op"), dao.getPendingOperations("user-2").map { it.id })
+
+        dao.replacePendingTaskStatusOperation(
+            operation(id = "user-1-latest", status = "DONE", ownerUserId = "user-1")
+        )
+
+        assertEquals(listOf("user-1-latest"), dao.getPendingOperations("user-1").map { it.id })
+        assertEquals(listOf("user-2-op"), dao.getPendingOperations("user-2").map { it.id })
+    }
+
+    @Test
+    fun newStatusUpdateReplacesOperationBlockedByExpiredSessionForSameAccount() = runBlocking {
         dao.insertOperation(operation(id = "blocked", status = "IN_PROGRESS"))
-        dao.updateOperationState("blocked", "BLOCKED_AUTH")
+        dao.updateOperationState("blocked", "user-1", "BLOCKED_AUTH")
         dao.replacePendingTaskStatusOperation(operation(id = "latest", status = "DONE"))
 
-        val pending = dao.getPendingOperations()
+        val pending = dao.getPendingOperations("user-1")
         assertEquals(1, pending.size)
         assertEquals("latest", pending.single().id)
     }
 
     @Test
-    fun blockedOperationCanBeRequeuedAfterAuthentication() = runBlocking {
-        dao.insertOperation(operation(id = "blocked", status = "DONE"))
-        dao.updateOperationState("blocked", "BLOCKED_AUTH")
+    fun blockedOperationCanBeRequeuedOnlyForItsAccount() = runBlocking {
+        dao.insertOperation(operation(id = "user-1-blocked", status = "DONE", ownerUserId = "user-1"))
+        dao.insertOperation(operation(id = "user-2-blocked", status = "DONE", ownerUserId = "user-2"))
+        dao.updateOperationState("user-1-blocked", "user-1", "BLOCKED_AUTH")
+        dao.updateOperationState("user-2-blocked", "user-2", "BLOCKED_AUTH")
 
-        assertEquals(0, dao.getPendingOperations().size)
+        assertTrue(dao.getPendingOperations("user-1").isEmpty())
+        dao.requeueBlockedOperations("user-1")
 
-        dao.requeueBlockedOperations()
-
-        assertEquals(1, dao.getPendingOperations().size)
+        assertEquals(listOf("user-1-blocked"), dao.getPendingOperations("user-1").map { it.id })
+        assertTrue(dao.getPendingOperations("user-2").isEmpty())
     }
 
-    private fun operation(id: String, status: String) = PendingOperationEntity(
+    private fun operation(
+        id: String,
+        status: String,
+        ownerUserId: String = "user-1"
+    ) = PendingOperationEntity(
         id = id,
+        ownerUserId = ownerUserId,
         workspaceId = "workspace-1",
         entityType = "TASK",
         entityId = "task-1",
