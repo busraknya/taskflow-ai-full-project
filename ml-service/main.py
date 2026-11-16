@@ -1,7 +1,6 @@
 import os
 import joblib
 import numpy as np
-from sklearn.ensemble import GradientBoostingClassifier
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
@@ -12,21 +11,17 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 MODEL_DIR = os.path.join(BASE_DIR, "models")
 MODEL_PATH = os.path.join(MODEL_DIR, "risk_model_v1.joblib")
 
-def load_or_train_model():
-    os.makedirs(MODEL_DIR, exist_ok=True)
-    if not os.path.exists(MODEL_PATH):
-        print("⚠️ Model not found. Training on the fly...")
-        X_train = np.array([[1, 5, 2, 3], [10, 1, 0, 0], [2, 4, 1, 2], [0, 6, 4, 3], [15, 0, 0, 0], [3, 3, 2, 2]])
-        y_train = np.array([2, 0, 1, 2, 0, 1])
-        m = GradientBoostingClassifier(n_estimators=50, random_state=42)
-        m.fit(X_train, y_train)
-        joblib.dump(m, MODEL_PATH)
-        print(f"✅ Model saved to {MODEL_PATH}")
-    
+def load_model():
+    if not os.path.isfile(MODEL_PATH):
+        raise RuntimeError(
+            f"Model artifact not found at {MODEL_PATH}. "
+            "Train and validate a model explicitly before starting the service."
+        )
+
     print(f"📂 Loading model from {MODEL_PATH}...")
     return joblib.load(MODEL_PATH)
 
-model = load_or_train_model()
+model = load_model()
 
 class TaskFeatures(BaseModel):
     days_until_due: float
