@@ -33,7 +33,7 @@ class SyncWorker(
             }
 
             val status = payload.get("status")?.takeUnless { it.isJsonNull() }?.getAsString()
-            val version = payload.get("version")?.takeUnless { it.isJsonNull }?.getAsInt()
+            val version = payload.get("version")?.takeUnless { it.isJsonNull() }?.getAsInt()
             if (status.isNullOrBlank() || version == null) {
                 dao.updateOperationState(operation.id, "FAILED")
                 continue
