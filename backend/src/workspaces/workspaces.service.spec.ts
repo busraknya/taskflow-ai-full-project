@@ -1,8 +1,14 @@
-import { EventEmitter2 } from '@nestjs/event-emitter';
+import type { EventEmitter2 } from '@nestjs/event-emitter';
 import { ForbiddenException } from '@nestjs/common';
 import { WorkspaceRole } from '@prisma/client';
 import { WorkspacesService } from './workspaces.service';
 import { PrismaService } from '../prisma/prisma.service';
+
+jest.mock('@nestjs/event-emitter', () => ({
+  EventEmitter2: class EventEmitter2 {
+    emit = jest.fn();
+  },
+}));
 
 describe('WorkspacesService invitation role policy', () => {
   const prisma = {
