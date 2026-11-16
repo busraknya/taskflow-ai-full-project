@@ -2,6 +2,7 @@ import { EventEmitter2 } from '@nestjs/event-emitter';
 import { ForbiddenException } from '@nestjs/common';
 import { WorkspaceRole } from '@prisma/client';
 import { WorkspacesService } from './workspaces.service';
+import { PrismaService } from '../prisma/prisma.service';
 
 describe('WorkspacesService invitation role policy', () => {
   const prisma = {
@@ -17,7 +18,7 @@ describe('WorkspacesService invitation role policy', () => {
     },
   };
   const events = { emit: jest.fn() };
-  const service = new WorkspacesService(prisma as any, events as unknown as EventEmitter2);
+  const service = new WorkspacesService(prisma as unknown as PrismaService, events as unknown as EventEmitter2);
 
   beforeEach(() => jest.clearAllMocks());
 
