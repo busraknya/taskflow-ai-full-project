@@ -462,3 +462,25 @@ Komutlar başarıyla çalışmadan “build başarılı”, “testler geçti”
 - CodeCanyon common rejection factors: https://help.author.envato.com/hc/en-us/articles/360000536823-Common-Rejection-Factors-for-Code-Items
 
 Pazaryeri kuralları değişebileceğinden gönderim gününde resmi seller/author dokümanlarını yeniden kontrol et.
+
+
+---
+
+## 16 Kasım 2026 — ikinci denetim turu (fix/go-live-blockers)
+
+Bu bölüm, yukarıdaki ilk denetim raporunu silmez; branch üzerinde sonradan yapılan düzeltmeleri ve doğrulama durumunu ayrı kaydeder.
+
+### Bu turda yapılan değişiklikler
+
+- **Backend task concurrency:** Görev güncellemesindeki read-then-write version kontrolü, `updateMany` üzerinde `id + workspaceId + deletedAt + version` koşullu atomik compare-and-swap işlemine çevrildi. Etkilenen satır sayısı 1 değilse güncel sürüm okunuyor ve `STALE_VERSION` 409 Conflict dönüyor.
+- **DTO validation:** `UpdateTaskDto.version` artık negatif olmayan tam sayı olarak doğrulanıyor (`IsInt`, `Min(0)`).
+- **Backend regression tests:** Başarılı CAS, yarışta stale-version conflict ve güncelleme sırasında kaybolan kayıt için testler eklendi.
+- **ML startup davranışı:** ML servisi model artifact'i yoksa sentetik veriden sessizce model üretmiyor; açık bir hata ile başlamayı reddediyor. Model eğitimi ayrı `train.py` adımında kalıyor.
+- **ML regression test:** Artifact eksik olduğunda loader'ın hata verdiği test eklendi.
+- **Model card:** `ml-service/MODEL_CARD.md` eklendi. v1'in altı sentetik örnekten oluştuğu, ölçülmüş doğruluk/kalibrasyon bulunmadığı ve API'deki 0.2/0.5/0.85 değerlerinin olasılık olmadığı açıkça belgelendi.
+
+### Doğrulama durumu
+
+- Önceki Android hesap izolasyonu commit'i `dcbb25428cb0682fbc4698668691a09c440e12ab` için CI run #95 (`43918642822`) beş işin tamamında başarılı oldu: Backend, Frontend, ML, Android ve Docker. [Run #95](https://github.com/busraknya/taskflow-ai-full-project/actions/runs/43918642822)
+- Bu bölümdeki yeni backend/ML değişikliklerinin CI doğrulaması henüz tamamlanmış sayılmıyor. Ara commit'lere ait Actions çalışmaları yeni push'larla iptal edildi; son branch commit'i: `ebfb5bf2d6555381a613e0a0dd36e6c23f16d8aa`. Bu commit için yeni CI sonucunu bekle.
+- **GO/NO-GO: NO-GO devam ediyor.** Backend CAS ve ML startup düzeltmeleri, gerçek deployment/E2E, ML model validasyonu, Android sync Worker HTTP senaryoları ve release/backup doğrulamasının yerine geçmez.
