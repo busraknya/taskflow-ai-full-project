@@ -75,7 +75,7 @@ fun LoginScreen(
                             SyncScheduler.enqueue(context)
                         }
                         onLoginSuccess(token)
-                    },
+                    }
                 },
                 modifier = Modifier.fillMaxWidth(),
                 colors = ButtonDefaults.buttonColors(containerColor = Color.White),
