@@ -15,6 +15,7 @@ FROM build AS migrate
 CMD ["npx", "prisma", "migrate", "deploy"]
 
 FROM base AS production-deps
+ENV DATABASE_URL=postgresql://build:build-only@127.0.0.1:5432/taskflow
 COPY package*.json ./
 COPY prisma ./prisma
 COPY prisma.config.ts ./
