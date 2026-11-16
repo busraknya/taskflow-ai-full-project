@@ -6,6 +6,7 @@ import androidx.room.PrimaryKey
 @Entity(tableName = "pending_operations")
 data class PendingOperationEntity(
     @PrimaryKey val id: String,
+    val ownerUserId: String,
     val workspaceId: String,
     val entityType: String,
     val entityId: String,
