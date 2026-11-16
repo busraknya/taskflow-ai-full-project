@@ -21,7 +21,6 @@ class SyncWorker(
 
         for (operation in pendingOperations) {
             if (operation.entityType != "TASK" || operation.operationType != "UPDATE_STATUS") {
-                // Unknown operation types are retained for inspection instead of silently discarded.
                 dao.updateOperationState(operation.id, "FAILED")
                 continue
             }
@@ -35,7 +34,6 @@ class SyncWorker(
 
             val status = payload.get("status")?.takeUnless { it.isJsonNull }?.asString
             val version = payload.get("version")?.takeUnless { it.isJsonNull }?.asInt
-
             if (status.isNullOrBlank() || version == null) {
                 dao.updateOperationState(operation.id, "FAILED")
                 continue
@@ -47,24 +45,20 @@ class SyncWorker(
                     taskId = operation.entityId,
                     request = UpdateTaskRequest(status = status, version = version),
                 )
-
                 when {
-                    response.isSuccessful -> {
-                        // Delete only after the server confirms that the update was accepted.
-                        dao.deleteOperation(operation.id)
-                    }
-                    response.code() in 400..499 -> {
-                        // Keep the payload locally for user-visible conflict/auth resolution.
-                        dao.updateOperationState(operation.id, "FAILED")
-                    }
-                    else -> return@withContext Result.retry()
+                    response.isSuccessful -> dao.deleteOperation(operation.id)
+                    response.code() == 401 || response.code() == 403 ->
+                        dao.updateOperationState(operation.id, "BLOCKED_AUTH")
+                    response.code() == 409 ->
+                        dao.updateOperationState(operation.id, "CONFLICT")
+                    response.code() == 408 || response.code() == 429 || response.code() >= 500 ->
+                        return@withContext Result.retry()
+                    else -> dao.updateOperationState(operation.id, "FAILED")
                 }
             } catch (_: Exception) {
-                // Network/server failures preserve the pending operation for WorkManager retry.
                 return@withContext Result.retry()
             }
         }
-
         Result.success()
     }
 }
