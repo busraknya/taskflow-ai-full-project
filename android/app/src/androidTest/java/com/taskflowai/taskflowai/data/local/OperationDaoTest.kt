@@ -37,7 +37,7 @@ class OperationDaoTest {
         val pending = dao.getPendingOperations()
         assertEquals(1, pending.size)
         assertEquals("second", pending.single().id)
-        assertEquals("DONE", pending.single().payloadJson)
+        assertEquals("{\"status\":\"DONE\",\"version\":1}", pending.single().payloadJson)
     }
 
     @Test
@@ -58,7 +58,7 @@ class OperationDaoTest {
         entityType = "TASK",
         entityId = "task-1",
         operationType = "UPDATE_STATUS",
-        payloadJson = status,
+        payloadJson = """{"status":"$status","version":1}""",
         createdAt = 1L,
     )
 }
