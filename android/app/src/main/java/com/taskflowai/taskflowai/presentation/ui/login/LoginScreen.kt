@@ -30,79 +30,52 @@ fun LoginScreen(
     val scope = rememberCoroutineScope()
 
     Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color(0xFF09090B)), // TaskFlow AI Dark Background
+        modifier = Modifier.fillMaxSize().background(Color(0xFF09090B)),
         contentAlignment = Alignment.Center
     ) {
         Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(24.dp),
+            modifier = Modifier.fillMaxWidth().padding(24.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Text(
-                text = "TaskFlow AI",
-                color = Color.White,
-                fontSize = 24.sp,
-                style = MaterialTheme.typography.headlineMedium
-            )
+            Text("TaskFlow AI", color = Color.White, fontSize = 24.sp,
+                style = MaterialTheme.typography.headlineMedium)
             Spacer(modifier = Modifier.height(8.dp))
-            Text(
-                text = "Sign in to your workspace.",
-                color = Color(0xFFA1A1AA),
-                fontSize = 14.sp
-            )
+            Text("Sign in to your workspace.", color = Color(0xFFA1A1AA), fontSize = 14.sp)
             Spacer(modifier = Modifier.height(32.dp))
 
             OutlinedTextField(
-                value = email,
-                onValueChange = { email = it },
-                label = { Text("Email address") },
-                modifier = Modifier.fillMaxWidth(),
+                value = email, onValueChange = { email = it },
+                label = { Text("Email address") }, modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
                 colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = Color.White,
-                    unfocusedBorderColor = Color(0xFF27272A),
-                    focusedLabelColor = Color.White,
-                    unfocusedLabelColor = Color(0xFFA1A1AA),
-                    focusedTextColor = Color.White,
-                    unfocusedTextColor = Color.White
+                    focusedBorderColor = Color.White, unfocusedBorderColor = Color(0xFF27272A),
+                    focusedLabelColor = Color.White, unfocusedLabelColor = Color(0xFFA1A1AA),
+                    focusedTextColor = Color.White, unfocusedTextColor = Color.White
                 )
             )
-
             Spacer(modifier = Modifier.height(16.dp))
-
             OutlinedTextField(
-                value = password,
-                onValueChange = { password = it },
-                label = { Text("Password") },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true,
-                visualTransformation = PasswordVisualTransformation(),
+                value = password, onValueChange = { password = it },
+                label = { Text("Password") }, modifier = Modifier.fillMaxWidth(),
+                singleLine = true, visualTransformation = PasswordVisualTransformation(),
                 colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = Color.White,
-                    unfocusedBorderColor = Color(0xFF27272A),
-                    focusedLabelColor = Color.White,
-                    unfocusedLabelColor = Color(0xFFA1A1AA),
-                    focusedTextColor = Color.White,
-                    unfocusedTextColor = Color.White
+                    focusedBorderColor = Color.White, unfocusedBorderColor = Color(0xFF27272A),
+                    focusedLabelColor = Color.White, unfocusedLabelColor = Color(0xFFA1A1AA),
+                    focusedTextColor = Color.White, unfocusedTextColor = Color.White
                 )
             )
-
             Spacer(modifier = Modifier.height(24.dp))
-
             Button(
                 onClick = {
-                    viewModel.login(email, password) { token ->
-                        val tokenManager = TokenManager(context)
-                        tokenManager.saveToken(token)
+                    viewModel.login(email, password) { token, userId ->
+                        TokenManager(context).saveSession(token, userId)
                         scope.launch {
-                            AppDatabase.getDatabase(context).operationDao().requeueBlockedOperations()
+                            AppDatabase.getDatabase(context).operationDao()
+                                .requeueBlockedOperations(userId)
                             SyncScheduler.enqueue(context)
                         }
                         onLoginSuccess(token)
-                    }
+                    },
                 },
                 modifier = Modifier.fillMaxWidth(),
                 colors = ButtonDefaults.buttonColors(containerColor = Color.White),
@@ -111,15 +84,13 @@ fun LoginScreen(
                 if (state is LoginState.Loading) {
                     CircularProgressIndicator(modifier = Modifier.size(20.dp), color = Color.Black)
                 } else {
-                    Text(text = "Sign in", color = Color.Black)
+                    Text("Sign in", color = Color.Black)
                 }
             }
-
             if (state is LoginState.Error) {
                 Spacer(modifier = Modifier.height(16.dp))
-                Text(text = state.message, color = Color(0xFFEF4444), fontSize = 12.sp)
+                Text(state.message, color = Color(0xFFEF4444), fontSize = 12.sp)
             }
-
         }
     }
 }
