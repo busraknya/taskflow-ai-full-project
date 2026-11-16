@@ -1,14 +1,14 @@
 > **Durum güncellemesi — 16 Kasım 2026:** İlk denetim bulguları aşağıda, denetlenen başlangıç commit'i main / 31e8554faef5b0fa6a2c3418966226ae94efc9a1 esas alınarak korunmuştur. Düzeltmeler fix/go-live-blockers dalında yapılmıştır; bu dal henüz main dalına birleştirilmemiştir.
 >
-> **CI doğrulaması — run #63, commit e04b5df7f08ef2532e2fc6c5c7ea3e3f6ae9b1f9:**
-> - Backend: npm ci, Prisma generate, TypeScript, Jest (4 suite / 7 test passed), build ve npm audit --omit=dev --audit-level=high başarılı. Üretim bağımlılıklarında high/critical bulgu yok. Tüm bağımlılık ağacında 28 düşük/orta bulgu görüldü (5 low, 23 moderate).
-> - Frontend: committed lockfile ile npm ci, lint, tsc --noEmit, production build ve production audit başarılı. Next.js ve eslint-config-next 16.4.6'ya yükseltildi; frontend lockfile güncellendi.
-> - ML: pytest -q (3 passed) ve pip-audit başarılı; bilinen Python bağımlılık zafiyeti yok.
-> - Docker: docker compose config --quiet ve tüm servis image build'leri başarılı. Frontend Dockerfile'daki mevcut olmayan public/ klasörünü kopyalama satırı kaldırıldı.
-> - Android: testDebugUnitTest ve assembleDebug başarılı. connectedDebugAndroidTest içindeki Room queue instrumented testleri bu güncelleme anında çalışıyor; sonucu henüz doğrulanmadı.
-> - Backend genel lint taraması 169 error / 21 warning verdi ve CI'da geçici olarak non-blocking tutuluyor. Yeni authorization testinin targeted lint adımı başarılı; genel lint borcu kapanmış değildir.
+> **CI doğrulaması — run #65, commit f6c51ece271034bceef9aa3ea230219843db1678:**
+> - Backend: npm ci, Prisma generate, targeted authorization lint, TypeScript, Jest, build ve production audit başarılı. Genel backend lint borcu (169 error / 21 warning) hâlâ geçici non-blocking.
+> - Frontend: npm ci, lint, typecheck, production build ve production audit başarılı.
+> - ML: pytest (3 passed) ve pip-audit başarılı.
+> - Docker: Compose config doğrulaması ve tüm servis image build'leri başarılı.
+> - Android: unit testler ve assembleDebug başarılı. Instrumented testlerin 3/4'ü geçti; tek başarısız test ExampleInstrumentedTest.kt:22 içindeki eski package assertion'ıydı (test hâlâ com.taskflowai.myapplication beklerken gerçek package com.taskflowai.taskflowai). Room queue testleri bu koşuda başarısız değildi. Test assertion'ı 16 Kasım'da düzeltildi; commit 219aa0559ec3d0f5457279974e4d40f9d50c7947 için CI run #67 başlatıldı ve sonucu bekleniyor.
+> - Bu nedenle CI genel sonucu run #65 için başarısızdır; Android test düzeltmesi henüz yeşil CI ile doğrulanmış sayılmaz.
 >
-> **İlk turda yapılan başlıca düzeltmeler:** ADMIN'in OWNER/ADMIN rolü ataması engellendi; invite/role DTO validation eklendi; VIEWER task write işlemlerinden engellendi; root .env repodan kaldırıldı ve ignore dosyaları eklendi; backend/frontend/ML Dockerfile ve Compose servisleri, healthcheck ve migration job eklendi; Redis password bağlantısı ve CORS allowlist yapılandırıldı; Android API URL/cleartext ayrımı ve offline worker hata durumları iyileştirildi; dependency lockfile'lar güncellendi.
+> **İlk turda yapılan başlıca düzeltmeler:**> **İlk turda yapılan başlıca düzeltmeler:** ADMIN'in OWNER/ADMIN rolü ataması engellendi; invite/role DTO validation eklendi; VIEWER task write işlemlerinden engellendi; root .env repodan kaldırıldı ve ignore dosyaları eklendi; backend/frontend/ML Dockerfile ve Compose servisleri, healthcheck ve migration job eklendi; Redis password bağlantısı ve CORS allowlist yapılandırıldı; Android API URL/cleartext ayrımı ve offline worker hata durumları iyileştirildi; dependency lockfile'lar güncellendi.
 >
 > **GO/NO-GO kararı hâlâ NO-GO.** Başarılı CI, tek başına satılabilir ürün veya production deployment kanıtı değildir. Android instrumented test sonucu, release APK build/signing, temiz makinede docker compose up sonrası gerçek DB migration ve login→task→ML→notification smoke testi, yedekleme/geri yükleme, dış erişim/HTTPS ve alıcı dokümantasyonu ayrıca doğrulanmalıdır. Offline queue'ya kayıt ekleme ve WorkManager enqueue akışı uçtan uca doğrulanmış değildir. ML modeli yalnızca az sayıda sentetik örnekle eğitilmiştir ve risk_score hâlâ sabit eşlemeyle üretilmektedir; satışta gerçek tahmin doğruluğu iddiası yapılmamalıdır.
 >
