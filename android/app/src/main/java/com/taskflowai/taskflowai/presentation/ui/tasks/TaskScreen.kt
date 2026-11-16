@@ -9,6 +9,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.platform.LocalContext
+import android.app.Application
 import androidx.compose.ui.unit.sp
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -16,11 +18,12 @@ import androidx.compose.ui.unit.sp
 fun TaskScreen(
     workspaceId: String,
     onBackToWorkspaces: () -> Unit,
-    onLogout: () -> Unit,
-    viewModel: TaskViewModel = androidx.lifecycle.viewmodel.compose.viewModel(
-        factory = TaskViewModelFactory(workspaceId)
-    )
+    onLogout: () -> Unit
 ) {
+    val application = LocalContext.current.applicationContext as Application
+    val viewModel: TaskViewModel = androidx.lifecycle.viewmodel.compose.viewModel(
+        factory = TaskViewModelFactory(application, workspaceId)
+    )
     val projects = viewModel.projects
     val selectedProject = viewModel.selectedProject
     val tasks = viewModel.tasks
@@ -106,6 +109,11 @@ fun TaskScreen(
             // 3. Seçilen Sekmedeki Görevler (Tasks List)
             val currentStatus = statusMapping[selectedTab]
             val filteredTasks = tasks.filter { it.status == currentStatus }
+
+            if (viewModel.errorMessage != null) {
+                Text(viewModel.errorMessage!!, color = Color(0xFFF59E0B), fontSize = 11.sp)
+                Spacer(modifier = Modifier.height(8.dp))
+            }
 
             if (isLoading) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
