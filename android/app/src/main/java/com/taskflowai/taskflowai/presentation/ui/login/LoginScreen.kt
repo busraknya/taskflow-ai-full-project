@@ -13,6 +13,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.taskflowai.taskflowai.data.local.TokenManager
+import com.taskflowai.taskflowai.data.local.AppDatabase
+import com.taskflowai.taskflowai.sync.SyncScheduler
 
 @Composable
 fun LoginScreen(
@@ -93,6 +95,8 @@ fun LoginScreen(
                     viewModel.login(email, password) { token ->
                         val tokenManager = TokenManager(context)
                         tokenManager.saveToken(token)
+                        AppDatabase.getDatabase(context).operationDao().requeueBlockedOperations()
+                        SyncScheduler.enqueue(context)
                         onLoginSuccess(token)
                     }
                 },
@@ -112,11 +116,6 @@ fun LoginScreen(
                 Text(text = state.message, color = Color(0xFFEF4444), fontSize = 12.sp)
             }
 
-            if (state is LoginState.Success) {
-                LaunchedEffect(state.token) {
-                    onLoginSuccess(state.token)
-                }
-            }
         }
     }
 }
