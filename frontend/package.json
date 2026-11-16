@@ -25,5 +25,6 @@
     "eslint-config-next": "16.4.6",
     "tailwindcss": "^4",
     "typescript": "^5"
-  }
+  },
+  "description": "TaskFlow AI multi-tenant project management platform with offline-first Android app and ML task risk scoring."
 }
