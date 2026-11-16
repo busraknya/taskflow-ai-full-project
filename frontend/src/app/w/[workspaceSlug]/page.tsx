@@ -43,27 +43,7 @@ export default function WorkspaceDashboard() {
   const [showProjectModal, setShowProjectModal] = useState(false);
   const [activeTaskId, setActiveTaskId] = useState<string | null>(null);
 
-  useEffect(() => {
-    const initWorkspace = async () => {
-      try {
-        const res = await api.get('/workspaces');
-        const currentWs = res.data.find((w: any) => w.slug === workspaceSlug);
-        if (!currentWs) {
-          setError('Workspace not found or unauthorized.');
-          setLoading(false);
-          return;
-        }
-        setWorkspaceId(currentWs.id);
-        setCurrentUserRole(currentWs.role); // <-- Kullanıcının bu workspace'teki rolü set ediliyor
-        fetchProjects(currentWs.id);
-        fetchMembers(currentWs.id);
-      } catch (err: any) {
-        setError('Failed to initialize workspace.');
-        setLoading(false);
-      }
-    };
-    initWorkspace();
-  }, [workspaceSlug]);
+
 
   const fetchProjects = async (wsId: string) => {
     try {
@@ -134,6 +114,28 @@ export default function WorkspaceDashboard() {
       setError(err.response?.data?.message || 'Failed to create project.');
     }
   };
+
+  useEffect(() => {
+    const initWorkspace = async () => {
+      try {
+        const res = await api.get('/workspaces');
+        const currentWs = res.data.find((w: any) => w.slug === workspaceSlug);
+        if (!currentWs) {
+          setError('Workspace not found or unauthorized.');
+          setLoading(false);
+          return;
+        }
+        setWorkspaceId(currentWs.id);
+        setCurrentUserRole(currentWs.role); // <-- Kullanıcının bu workspace'teki rolü set ediliyor
+        fetchProjects(currentWs.id);
+        fetchMembers(currentWs.id);
+      } catch (err: any) {
+        setError('Failed to initialize workspace.');
+        setLoading(false);
+      }
+    };
+    initWorkspace();
+  }, [workspaceSlug]);
 
   const isOwnerOrAdmin = currentUserRole === 'OWNER' || currentUserRole === 'ADMIN';
 
