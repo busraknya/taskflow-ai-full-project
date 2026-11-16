@@ -41,6 +41,17 @@ class OperationDaoTest {
     }
 
     @Test
+    fun newStatusUpdateReplacesOperationBlockedByExpiredSession() = runBlocking {
+        dao.insertOperation(operation(id = "blocked", status = "IN_PROGRESS"))
+        dao.updateOperationState("blocked", "BLOCKED_AUTH")
+        dao.replacePendingTaskStatusOperation(operation(id = "latest", status = "DONE"))
+
+        val pending = dao.getPendingOperations()
+        assertEquals(1, pending.size)
+        assertEquals("latest", pending.single().id)
+    }
+
+    @Test
     fun blockedOperationCanBeRequeuedAfterAuthentication() = runBlocking {
         dao.insertOperation(operation(id = "blocked", status = "DONE"))
         dao.updateOperationState("blocked", "BLOCKED_AUTH")
