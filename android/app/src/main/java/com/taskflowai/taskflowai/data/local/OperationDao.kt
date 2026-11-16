@@ -20,4 +20,7 @@ interface OperationDao {
 
     @Query("DELETE FROM pending_operations WHERE id = :id")
     suspend fun deleteOperation(id: String): Int
+
+    @Query("UPDATE pending_operations SET state = :state WHERE id = :id")
+    suspend fun updateOperationState(id: String, state: String): Int
 }
