@@ -33,12 +33,15 @@ object ApiClient {
         OkHttpClient.Builder()
             .addInterceptor { chain ->
                 val originalRequest = chain.request()
-                val token = if (::tokenManager.isInitialized) tokenManager.getToken() else null
-
-                val requestWithAuth = if (!token.isNullOrEmpty()) {
-                    originalRequest.newBuilder()
-                        .header("Authorization", "Bearer $token")
-                        .build()
+                val requestWithAuth = if (originalRequest.header("Authorization") == null) {
+                    val token = if (::tokenManager.isInitialized) tokenManager.getToken() else null
+                    if (!token.isNullOrEmpty()) {
+                        originalRequest.newBuilder()
+                            .header("Authorization", "Bearer $token")
+                            .build()
+                    } else {
+                        originalRequest
+                    }
                 } else {
                     originalRequest
                 }
