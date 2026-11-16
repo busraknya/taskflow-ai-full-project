@@ -150,8 +150,14 @@ export class TasksService {
       }
     }
 
-    const updatedTask = await this.prisma.task.update({
-      where: { id: taskId },
+    // Compare-and-swap: the version check and increment must be one atomic DB operation.
+    const updateResult = await this.prisma.task.updateMany({
+      where: {
+        id: taskId,
+        workspaceId,
+        deletedAt: null,
+        version: dto.version,
+      },
       data: {
         title: dto.title,
         description: dto.description,
@@ -160,8 +166,29 @@ export class TasksService {
         assigneeId: dto.assigneeId,
         dueDate: dto.dueDate !== undefined ? (dto.dueDate ? new Date(dto.dueDate) : null) : undefined,
         position: dto.position,
-        version: { increment: 1 }, 
+        version: { increment: 1 },
       },
+    });
+
+    if (updateResult.count !== 1) {
+      const currentTask = await this.prisma.task.findFirst({
+        where: { id: taskId, workspaceId, deletedAt: null },
+        select: { version: true },
+      });
+
+      if (!currentTask) {
+        throw new NotFoundException('Task not found.');
+      }
+
+      throw new ConflictException({
+        code: 'STALE_VERSION',
+        message: 'This task has been updated by another user. Please refresh the page.',
+        currentVersion: currentTask.version,
+      });
+    }
+
+    const updatedTask = await this.prisma.task.findFirst({
+      where: { id: taskId, workspaceId, deletedAt: null },
       include: {
         assignee: {
           select: { id: true, fullName: true, avatarUrl: true },
@@ -172,6 +199,10 @@ export class TasksService {
         },
       },
     });
+
+    if (!updatedTask) {
+      throw new NotFoundException('Task not found.');
+    }
 
     await this.auditService.log({
       workspaceId,
