@@ -1,3 +1,4 @@
+import pytest
 from fastapi.testclient import TestClient
 
 import main
@@ -48,8 +49,5 @@ def test_model_loader_fails_when_artifact_is_missing(monkeypatch, tmp_path):
     missing_model = tmp_path / "missing-model.joblib"
     monkeypatch.setattr(main, "MODEL_PATH", str(missing_model))
 
-    try:
+    with pytest.raises(RuntimeError, match="Train and validate a model explicitly"):
         main.load_model()
-        raise AssertionError("Expected missing model artifact to fail startup")
-    except RuntimeError as error:
-        assert "Train and validate a model explicitly" in str(error)
