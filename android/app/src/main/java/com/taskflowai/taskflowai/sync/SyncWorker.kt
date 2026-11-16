@@ -26,14 +26,14 @@ class SyncWorker(
             }
 
             val payload = try {
-                JsonParser.parseString(operation.payloadJson).asJsonObject
+                JsonParser().parse(operation.payloadJson).asJsonObject
             } catch (_: Exception) {
                 dao.updateOperationState(operation.id, "FAILED")
                 continue
             }
 
-            val status = payload.get("status")?.takeUnless { it.isJsonNull }?.asString
-            val version = payload.get("version")?.takeUnless { it.isJsonNull }?.asInt
+            val status = payload.get("status")?.takeUnless { it.isJsonNull() }?.getAsString()
+            val version = payload.get("version")?.takeUnless { it.isJsonNull }?.getAsInt()
             if (status.isNullOrBlank() || version == null) {
                 dao.updateOperationState(operation.id, "FAILED")
                 continue
