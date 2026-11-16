@@ -42,12 +42,12 @@ export function TaskDetailModal({ taskId, workspaceId, onClose, onTaskUpdated }:
 
   const fetchComments = useCallback(async () => {
     try {
-      const res = await api.get(`/workspaces/${workspaceId}/tasks/${taskId}/comments`);
+      const res = await api.get<Comment[]>(`/workspaces/${workspaceId}/tasks/${taskId}/comments`);
       setComments(res.data);
-    } catch (err) {
+    } catch {
       console.error('Failed to load comments');
     }
-  };
+  }, [taskId, workspaceId]);
 
   useEffect(() => {
     if (taskId && workspaceId) {
