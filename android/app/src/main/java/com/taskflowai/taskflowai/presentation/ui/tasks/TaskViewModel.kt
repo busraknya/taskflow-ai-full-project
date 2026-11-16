@@ -8,34 +8,45 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.google.gson.Gson
+import com.taskflowai.taskflowai.data.local.AppDatabase
+import com.taskflowai.taskflowai.data.local.PendingOperationEntity
 import com.taskflowai.taskflowai.data.remote.ApiClient
 import com.taskflowai.taskflowai.data.remote.ProjectDto
 import com.taskflowai.taskflowai.data.remote.TaskDto
 import com.taskflowai.taskflowai.data.remote.UpdateTaskRequest
+import com.taskflowai.taskflowai.sync.SyncScheduler
+import java.io.IOException
+import java.util.UUID
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
-class TaskViewModelFactory(private val workspaceId: String) : ViewModelProvider.Factory {
+class TaskViewModelFactory(
+    private val application: Application,
+    private val workspaceId: String,
+) : ViewModelProvider.Factory {
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         if (modelClass.isAssignableFrom(TaskViewModel::class.java)) {
             @Suppress("UNCHECKED_CAST")
-            return TaskViewModel(android.app.Application(), workspaceId) as T
+            return TaskViewModel(application, workspaceId) as T
         }
         throw IllegalArgumentException("Unknown ViewModel class")
     }
 }
 
-class TaskViewModel(application: Application, private val workspaceId: String) : AndroidViewModel(application) {
+class TaskViewModel(
+    application: Application,
+    private val workspaceId: String,
+) : AndroidViewModel(application) {
     var projects by mutableStateOf<List<ProjectDto>>(emptyList())
         private set
-
     var selectedProject by mutableStateOf<ProjectDto?>(null)
         private set
-
     var tasks by mutableStateOf<List<TaskDto>>(emptyList())
         private set
-
     var isLoading by mutableStateOf(false)
+        private set
+    var errorMessage by mutableStateOf<String?>(null)
         private set
 
     init {
@@ -51,8 +62,11 @@ class TaskViewModel(application: Application, private val workspaceId: String) :
                     projects = response.body()!!
                     selectedProject = projects[0]
                     fetchTasksForProject(projects[0].id)
+                } else if (!response.isSuccessful) {
+                    errorMessage = "Failed to load projects (HTTP ${response.code()})."
                 }
-            } catch (_: Exception) {
+            } catch (error: Exception) {
+                errorMessage = error.localizedMessage ?: "Unable to load projects."
             } finally {
                 isLoading = false
             }
@@ -71,8 +85,12 @@ class TaskViewModel(application: Application, private val workspaceId: String) :
                 val response = ApiClient.taskService.getTasks(workspaceId, projectId)
                 if (response.isSuccessful && response.body() != null) {
                     tasks = response.body()!!
+                    errorMessage = null
+                } else {
+                    errorMessage = "Failed to load tasks (HTTP ${response.code()})."
                 }
-            } catch (_: Exception) {
+            } catch (error: Exception) {
+                errorMessage = error.localizedMessage ?: "Unable to load tasks."
             } finally {
                 isLoading = false
             }
@@ -85,13 +103,40 @@ class TaskViewModel(application: Application, private val workspaceId: String) :
                 val response = ApiClient.taskService.updateTaskStatus(
                     workspaceId,
                     taskId,
-                    UpdateTaskRequest(status = newStatus, version = currentVersion)
+                    UpdateTaskRequest(status = newStatus, version = currentVersion),
                 )
-                if (response.isSuccessful && selectedProject != null) {
-                    fetchTasksForProject(selectedProject!!.id)
+                when {
+                    response.isSuccessful -> selectedProject?.let { fetchTasksForProject(it.id) }
+                    response.code() == 408 || response.code() == 429 || response.code() >= 500 ->
+                        queueStatusChange(taskId, newStatus, currentVersion)
+                    else -> errorMessage = "Task update failed (HTTP ${response.code()}). Refresh and try again."
                 }
-            } catch (_: Exception) {
+            } catch (_: IOException) {
+                queueStatusChange(taskId, newStatus, currentVersion)
+            } catch (error: Exception) {
+                errorMessage = error.localizedMessage ?: "Task update failed."
             }
         }
+    }
+
+    private suspend fun queueStatusChange(taskId: String, newStatus: String, currentVersion: Int) {
+        val operation = PendingOperationEntity(
+            id = UUID.randomUUID().toString(),
+            workspaceId = workspaceId,
+            entityType = "TASK",
+            entityId = taskId,
+            operationType = "UPDATE_STATUS",
+            payloadJson = Gson().toJson(mapOf("status" to newStatus, "version" to currentVersion)),
+            createdAt = System.currentTimeMillis(),
+        )
+        AppDatabase.getDatabase(getApplication<Application>())
+            .operationDao()
+            .replacePendingTaskStatusOperation(operation)
+
+        tasks = tasks.map { task ->
+            if (task.id == taskId) task.copy(status = newStatus) else task
+        }
+        errorMessage = "Offline: change saved on this device and will sync when connected."
+        SyncScheduler.enqueue(getApplication())
     }
 }
