@@ -60,6 +60,15 @@ export function TaskDetailModal({ taskId, workspaceId, onClose, onTaskUpdated }:
     };
   }, [taskId, workspaceId]);
 
+  const fetchComments = async () => {
+    try {
+      const res = await api.get<Comment[]>(`/workspaces/${workspaceId}/tasks/${taskId}/comments`);
+      setComments(res.data);
+    } catch {
+      console.error('Failed to load comments');
+    }
+  };
+
   const handleAddComment = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newComment.trim()) return;
