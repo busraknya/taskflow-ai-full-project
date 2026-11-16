@@ -21,7 +21,7 @@ import { NotificationsModule } from './notifications/notifications.module';
     EventEmitterModule.forRoot(),
     BullModule.forRootAsync({
       imports: [ConfigModule],
-      useFactory: async (configService: ConfigService) => {
+      useFactory: (configService: ConfigService) => {
         const host = configService.get<string>('REDIS_HOST');
         const port = configService.get<string>('REDIS_PORT');
 
