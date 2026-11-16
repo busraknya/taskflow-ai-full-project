@@ -28,33 +28,37 @@ export function TaskDetailModal({ taskId, workspaceId, onClose, onTaskUpdated }:
 
 
 
-  const fetchTaskDetails = useCallback(async () => {
-    try {
-      const res = await api.get(`/workspaces/${workspaceId}/tasks`);
-      const currentTask = res.data.find((t: any) => t.id === taskId);
-      setTask(currentTask);
-    } catch (err) {
-      console.error('Failed to load task details');
-    } finally {
-      setLoading(false);
-    }
-  }, [taskId, workspaceId]);
-
-  const fetchComments = useCallback(async () => {
-    try {
-      const res = await api.get<Comment[]>(`/workspaces/${workspaceId}/tasks/${taskId}/comments`);
-      setComments(res.data);
-    } catch {
-      console.error('Failed to load comments');
-    }
-  }, [taskId, workspaceId]);
-
   useEffect(() => {
-    if (taskId && workspaceId) {
-      fetchTaskDetails();
-      fetchComments();
-    }
-  }, [taskId, workspaceId, fetchTaskDetails, fetchComments]);
+    if (!taskId || !workspaceId) return;
+
+    let cancelled = false;
+
+    api.get<Array<{ id: string } & Record<string, unknown>>>(`/workspaces/${workspaceId}/tasks`)
+      .then((res) => {
+        if (!cancelled) {
+          const currentTask = res.data.find((item) => item.id === taskId);
+          setTask(currentTask ?? null);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) console.error('Failed to load task details');
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    api.get<Comment[]>(`/workspaces/${workspaceId}/tasks/${taskId}/comments`)
+      .then((res) => {
+        if (!cancelled) setComments(res.data);
+      })
+      .catch(() => {
+        if (!cancelled) console.error('Failed to load comments');
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [taskId, workspaceId]);
 
   const handleAddComment = async (e: React.FormEvent) => {
     e.preventDefault();
