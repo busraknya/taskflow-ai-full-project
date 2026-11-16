@@ -1,4 +1,4 @@
-import { IsString, IsUUID, IsOptional, IsInt, Min, Max, IsDateString, IsEnum, IsInt, Min } from 'class-validator';
+import { IsString, IsUUID, IsOptional, IsInt, Min, Max, IsDateString, IsEnum } from 'class-validator';
 import { TaskStatus } from '@prisma/client';
 
 export class UpdateTaskDto {
