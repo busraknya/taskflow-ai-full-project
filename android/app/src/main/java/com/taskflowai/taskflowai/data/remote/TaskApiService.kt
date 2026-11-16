@@ -19,6 +19,7 @@ interface TaskApiService {
     suspend fun updateTaskStatus(
         @Path("workspaceId") workspaceId: String,
         @Path("taskId") taskId: String,
-        @Body request: UpdateTaskRequest
+        @Body request: UpdateTaskRequest,
+        @Header("Authorization") authorization: String? = null
     ): Response<TaskDto>
 }
