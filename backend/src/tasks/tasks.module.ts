@@ -6,13 +6,8 @@ import { TaskAssignedListener } from './events/task-assigned.listener';
 import { AiModule } from '../ai/ai.module';
 
 @Module({
-  imports: [
-    BullModule.registerQueue({
-      name: 'email',
-    }),
-    AiModule,
-  ],
+  imports: [BullModule.registerQueue({ name: 'email' }), AiModule],
   controllers: [TasksController],
-  providers: [TasksService]
+  providers: [TasksService, TaskAssignedListener],
 })
 export class TasksModule {}
