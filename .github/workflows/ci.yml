@@ -93,6 +93,12 @@ jobs:
       - name: Assemble debug APK
         working-directory: android
         run: ./gradlew assembleDebug
+      - name: Run instrumented Room queue tests
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          script: cd android && ./gradlew connectedDebugAndroidTest
 
   compose:
     name: Docker Compose validation and image build
