@@ -1,3 +1,20 @@
+> **Güncel çalışma dalı notu — 16 Kasım 2026:** Bu raporun bulguları ilk denetimdeki `main` commit'ini esas alır. İlk düzeltme turunda `fix/go-live-blockers` dalına aşağıdaki değişiklikler işlendi; henüz `main` dalına birleştirilmedi ve yerel build/test çalıştırması yapılamadığı için doğrulanmış/production-ready kabul edilmemelidir.
+>
+> - ADMIN davetinde OWNER/ADMIN rolü yükseltmesi sınırlandı; davet ve rol güncelleme body'leri DTO validation'a alındı.
+> - VIEWER için task create/update engeli eklendi.
+> - Task assignment listener provider olarak kaydedildi; NotificationsModule ve Redis password bağlantısı AppModule'a eklendi.
+> - Root `.env` dosyası kaldırıldı; `.gitignore` ve `.dockerignore` eklendi; Android IDE ve Python cache dosyaları repodan çıkarıldı.
+> - Backend, frontend ve ML için Dockerfile; Compose uygulama servisleri; Prisma 7 config ve migration one-shot service eklendi.
+> - CORS allowlist env'den okunur hale getirildi.
+> - Android offline worker yalnızca API başarılı yanıtından sonra pending kaydı siliyor; 4xx/bozuk payload işlemlerini `FAILED` durumunda saklıyor. **Ancak operation queue'ya kayıt ekleyen repository/WorkManager enqueue akışı henüz bulunmadı; offline sync özelliği uçtan uca tamamlanmış değildir.**
+> - Android API URL'si BuildConfig'e taşındı; release için HTTPS URL parametresi doğrulaması eklendi; cleartext yalnız debug manifest'te açık; release log seviyesi kapalı ve auth header redact edildi. Background worker için Application seviyesinde ApiClient init eklendi.
+>
+> **Henüz doğrulanmayanlar:** `docker compose config`, tüm Docker image build'leri, Prisma migration çalışması, backend/frontend npm build ve testleri, Android Gradle build/testleri, ML image build/pytest, dependency audit. Özellikle Prisma 7 Docker migration, runtime Prisma Client kopyalama ve Next.js Docker build'i gerçek ortamda çalıştırılmalıdır. Bu yüzden karar hâlâ **NO-GO**.
+>
+> **Güvenlik notu:** `.env` main dalı ve Git geçmişinde bulunmuştu. Daldan kaldırmak geçmişi silmez. Bu dosyadaki değerlerden herhangi biri gerçek ortamda kullanıldıysa hemen rotate edilmeli; gerçek credential geçmişe girdiyse history rewrite ayrıca yapılmalıdır.
+>
+> ---
+>
 # TaskFlow — Yayına Çıkış ve Teslim Rehberi
 
 **Son Güncelleme:** 16 Kasım 2026  
