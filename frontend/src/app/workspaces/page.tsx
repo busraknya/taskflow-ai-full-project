@@ -34,7 +34,22 @@ export default function WorkspacesPage() {
   };
 
   useEffect(() => {
-    fetchWorkspaces();
+    let cancelled = false;
+
+    api.get<Workspace[]>('/workspaces')
+      .then((res) => {
+        if (!cancelled) setWorkspaces(res.data);
+      })
+      .catch(() => {
+        if (!cancelled) setError('Failed to load workspaces.');
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   if (loading) {
