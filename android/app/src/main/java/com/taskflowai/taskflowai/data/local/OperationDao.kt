@@ -14,33 +14,42 @@ interface OperationDao {
 
     @Query("""
         SELECT * FROM pending_operations
-        WHERE state = 'PENDING'
+        WHERE state = 'PENDING' AND ownerUserId = :ownerUserId
         ORDER BY createdAt ASC
     """)
-    suspend fun getPendingOperations(): List<PendingOperationEntity>
+    suspend fun getPendingOperations(ownerUserId: String): List<PendingOperationEntity>
 
     @Query("""
         DELETE FROM pending_operations
-        WHERE workspaceId = :workspaceId
+        WHERE ownerUserId = :ownerUserId
+          AND workspaceId = :workspaceId
           AND entityId = :taskId
           AND entityType = 'TASK'
           AND operationType = 'UPDATE_STATUS'
           AND state IN ('PENDING', 'BLOCKED_AUTH')
     """)
-    suspend fun deletePendingTaskStatusOperations(workspaceId: String, taskId: String): Int
+    suspend fun deletePendingTaskStatusOperations(
+        ownerUserId: String,
+        workspaceId: String,
+        taskId: String
+    ): Int
 
     @Transaction
     suspend fun replacePendingTaskStatusOperation(operation: PendingOperationEntity) {
-        deletePendingTaskStatusOperations(operation.workspaceId, operation.entityId)
+        deletePendingTaskStatusOperations(
+            operation.ownerUserId,
+            operation.workspaceId,
+            operation.entityId
+        )
         insertOperation(operation)
     }
 
-    @Query("UPDATE pending_operations SET state = :state WHERE id = :id")
-    suspend fun updateOperationState(id: String, state: String): Int
+    @Query("UPDATE pending_operations SET state = :state WHERE id = :id AND ownerUserId = :ownerUserId")
+    suspend fun updateOperationState(id: String, ownerUserId: String, state: String): Int
 
-    @Query("UPDATE pending_operations SET state = 'PENDING' WHERE state = 'BLOCKED_AUTH'")
-    suspend fun requeueBlockedOperations(): Int
+    @Query("UPDATE pending_operations SET state = 'PENDING' WHERE state = 'BLOCKED_AUTH' AND ownerUserId = :ownerUserId")
+    suspend fun requeueBlockedOperations(ownerUserId: String): Int
 
-    @Query("DELETE FROM pending_operations WHERE id = :id")
-    suspend fun deleteOperation(id: String): Int
+    @Query("DELETE FROM pending_operations WHERE id = :id AND ownerUserId = :ownerUserId")
+    suspend fun deleteOperation(id: String, ownerUserId: String): Int
 }
