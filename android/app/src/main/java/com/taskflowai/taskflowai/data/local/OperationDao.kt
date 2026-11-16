@@ -25,7 +25,7 @@ interface OperationDao {
           AND entityId = :taskId
           AND entityType = 'TASK'
           AND operationType = 'UPDATE_STATUS'
-          AND state = 'PENDING'
+          AND state IN ('PENDING', 'BLOCKED_AUTH')
     """)
     suspend fun deletePendingTaskStatusOperations(workspaceId: String, taskId: String): Int
 
