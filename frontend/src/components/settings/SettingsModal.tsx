@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { api } from '@/lib/api';
 import { theme } from '@/lib/theme';
 import { Toast } from '@/components/ui/Toast';
@@ -25,28 +25,32 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   const [toastMsg, setToastMsg] = useState('');
   const [toastType, setToastType] = useState<'success' | 'error'>('success');
 
-  useEffect(() => {
-    if (isOpen) {
-      fetchPreferences();
-    } else {
-      // UX Detayı: Modal kapandığında form alanlarını ve mesajları sıfırla!
-      setCurrentPassword('');
-      setNewPassword('');
-      setToastMsg('');
-      setActiveTab('password');
-    }
-  }, [isOpen]);
 
-  const fetchPreferences = async () => {
+
+  const fetchPreferences = useCallback(async () => {
     try {
-      const res = await api.get('/users/me/notification-preferences');
-      const taskAssignedPref = res.data.find((p: any) => p.category === 'task.assigned');
+      const res = await api.get<Array<{ category: string; emailEnabled: boolean }>>('/users/me/notification-preferences');
+      const taskAssignedPref = res.data.find((p) => p.category === 'task.assigned');
       if (taskAssignedPref) {
         setEmailEnabled(taskAssignedPref.emailEnabled);
       }
     } catch (err) {
       console.error('Failed to load preferences');
     }
+  }, []);
+
+  useEffect(() => {
+    if (isOpen) {
+      fetchPreferences();
+    }
+  }, [isOpen, fetchPreferences]);
+
+  const handleClose = () => {
+    setCurrentPassword('');
+    setNewPassword('');
+    setToastMsg('');
+    setActiveTab('password');
+    onClose();
   };
 
   const handlePasswordChange = async (e: React.FormEvent) => {
@@ -133,7 +137,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
           {/* Modal Header */}
           <div className="flex justify-between items-center border-b border-zinc-800 pb-4">
             <h2 className="text-sm font-medium text-white tracking-tight">Account Settings</h2>
-            <button onClick={onClose} className="text-zinc-400 hover:text-white text-xs">✕</button>
+            <button onClick={handleClose} className="text-zinc-400 hover:text-white text-xs">✕</button>
           </div>
 
           {/* Tabs */}
