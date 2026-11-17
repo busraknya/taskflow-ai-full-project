@@ -1,6 +1,7 @@
 import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { Job } from 'bullmq';
 import * as nodemailer from 'nodemailer';
+import { escapeHtml } from './email-template.util';
 
 @Processor('email')
 export class EmailProcessor extends WorkerHost {
@@ -26,7 +27,7 @@ export class EmailProcessor extends WorkerHost {
         to: recipient,
         subject: subject,
         text: `Hello ${templateData.fullName},\n\nYou have been assigned to task: ${templateData.taskTitle}`,
-        html: `<p>Hello <b>${templateData.fullName}</b>,</p><p>You have been assigned to task: <b>${templateData.taskTitle}</b></p>`,
+        html: `<p>Hello <b>${escapeHtml(templateData.fullName)}</b>,</p><p>You have been assigned to task: <b>${escapeHtml(templateData.taskTitle)}</b></p>`,
       });
 
       console.log(`[EmailWorker] Email successfully sent to ${recipient}`);
