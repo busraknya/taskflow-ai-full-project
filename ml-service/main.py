@@ -57,7 +57,7 @@ def predict_risk(data: TaskFeatures):
 
     return {
         "risk_level": risk_level,
-        "risk_score": 0.85 if risk_level == "HIGH" else (0.5 if risk_level == "MEDIUM" else 0.2),
+        "risk_score": None,  # Not a calibrated probability; intentionally unavailable.
         "model_version": "v1",
         "factors": factors
     }
