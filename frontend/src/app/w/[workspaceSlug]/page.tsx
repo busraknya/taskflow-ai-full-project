@@ -11,6 +11,7 @@ import { SettingsModal } from '@/components/settings/SettingsModal';
 import { TaskDetailModal } from '@/components/kanban/TaskDetailModal';
 import { Navbar } from '@/components/layout/Navbar';
 import { CreateProjectModal } from '@/components/projects/CreateProjectModal';
+import { useAuthStore } from '@/store/useAuthStore';
 
 interface Project { id: string; name: string; }
 interface Member { user: { id: string; fullName: string; email: string; }; }
@@ -25,6 +26,7 @@ const COLUMNS = [
 
 export default function WorkspaceDashboard() {
   const router = useRouter();
+  const currentUserId = useAuthStore((state) => state.user?.id ?? null);
   const params = useParams();
   const workspaceSlug = params.workspaceSlug as string;
 
@@ -216,6 +218,9 @@ export default function WorkspaceDashboard() {
         <TaskDetailModal
           taskId={activeTaskId}
           workspaceId={workspaceId || ''}
+          currentUserId={currentUserId}
+          canAddComment={currentUserRole !== 'VIEWER'}
+          canManageAllComments={isOwnerOrAdmin}
           onClose={() => setActiveTaskId(null)}
           onTaskUpdated={() => {
             if (workspaceId && selectedProject) {
