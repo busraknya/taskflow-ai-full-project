@@ -16,12 +16,15 @@ describe('RiskFeatureService (Unit Test)', () => {
             task: {
               findUnique: jest.fn().mockResolvedValue({
                 id: 'task-1',
+                workspaceId: 'workspace-1',
                 dueDate: new Date(Date.now() + 86400000 * 2), 
                 assigneeId: 'user-1',
                 priority: 2,
-                comments: [{ id: 'c1' }, { id: 'c2' }], 
               }),
-              count: jest.fn().mockResolvedValue(4), 
+              count: jest.fn().mockResolvedValue(4),
+            },
+            comment: {
+              count: jest.fn().mockResolvedValue(2),
             },
           },
         },
@@ -42,5 +45,16 @@ describe('RiskFeatureService (Unit Test)', () => {
     expect(features).toBeDefined();
     expect(features?.priority).toBe(2);
     expect(features?.comment_count).toBe(2);
+    expect((prismaService as any).task.count).toHaveBeenCalledWith({
+      where: {
+        assigneeId: 'user-1',
+        workspaceId: 'workspace-1',
+        status: { not: 'DONE' },
+        deletedAt: null,
+      },
+    });
+    expect((prismaService as any).comment.count).toHaveBeenCalledWith({
+      where: { taskId: 'task-1', deletedAt: null },
+    });
   });
 });
