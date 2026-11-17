@@ -190,6 +190,7 @@ export default function WorkspaceDashboard() {
                 title={col.title}
                 tasks={tasks.filter((t) => t.status === col.id)}
                 onMoveForward={handleStatusChange}
+                canEditTasks={currentUserRole !== 'VIEWER'}
                 onTaskClick={(taskId) => setActiveTaskId(taskId)}
               />
             ))}
