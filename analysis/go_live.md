@@ -518,3 +518,10 @@ Bu bölüm, yukarıdaki ilk denetim raporunu silmez; branch üzerinde sonradan y
 
 ### Devam eden branch
 fix/go-live-blockers — main üzerinde yalnız ürün gereksinim belgesi güncellendi. Kod değişiklikleri bu branch'te tutuluyor ve merge edilmedi.
+
+
+### ML skor sözleşmesi güncellemesi — 17 Kasım 2026
+- FastAPI artık sınıf etiketinden 0.20/0.50/0.85 sabit risk_score üretmiyor; risk_score null döndürüyor.
+- NestJS RiskPredictionResult alanı number | null olarak güncellendi; ML servisi erişilemediğinde de null dönüyor.
+- ML API testi risk_score değerinin null olmasını bekliyor; model card eski sabit eşlemelerin kaldırıldığını açıklıyor.
+- Bu değişiklik olasılık tahmini sağlamaz; yalnızca yanıltıcı skorun API ve DB'ye aktarılmasını önler. Gerçek olasılık modeli ve calibration hâlâ P0 kapsamındadır.
