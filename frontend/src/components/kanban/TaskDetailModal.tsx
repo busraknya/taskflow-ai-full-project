@@ -17,9 +17,12 @@ interface TaskDetailModalProps {
   workspaceId: string;
   onClose: () => void;
   onTaskUpdated: () => void;
+  currentUserId: string | null;
+  canAddComment: boolean;
+  canManageAllComments: boolean;
 }
 
-export function TaskDetailModal({ taskId, workspaceId, onClose, onTaskUpdated }: TaskDetailModalProps) {
+export function TaskDetailModal({ taskId, workspaceId, onClose, onTaskUpdated, currentUserId, canAddComment, canManageAllComments }: TaskDetailModalProps) {
   const [task, setTask] = useState<any>(null);
   const [comments, setComments] = useState<Comment[]>([]);
   const [newComment, setNewComment] = useState('');
@@ -33,12 +36,11 @@ export function TaskDetailModal({ taskId, workspaceId, onClose, onTaskUpdated }:
 
     let cancelled = false;
 
-    api.get<Array<{ id: string } & Record<string, unknown>>>(`/workspaces/${workspaceId}/tasks`)
+    setLoading(true);
+    setTask(null);
+    api.get<Record<string, unknown>>(`/workspaces/${workspaceId}/tasks/${taskId}`)
       .then((res) => {
-        if (!cancelled) {
-          const currentTask = res.data.find((item) => item.id === taskId);
-          setTask(currentTask ?? null);
-        }
+        if (!cancelled) setTask(res.data);
       })
       .catch(() => {
         if (!cancelled) console.error('Failed to load task details');
@@ -177,7 +179,9 @@ export function TaskDetailModal({ taskId, workspaceId, onClose, onTaskUpdated }:
                         <span className="text-xs font-medium text-zinc-200">{c.author.fullName}</span>
                         <div className="flex items-center space-x-2">
                           <span className="text-[10px] text-zinc-500">{new Date(c.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                          <button onClick={() => handleDeleteComment(c.id)} className="text-zinc-600 hover:text-red-400 transition-colors"><Trash2 size={12} /></button>
+                          {(canManageAllComments || c.author.id === currentUserId) && (
+                            <button onClick={() => handleDeleteComment(c.id)} className="text-zinc-600 hover:text-red-400 transition-colors" aria-label="Delete comment"><Trash2 size={12} /></button>
+                          )}
                         </div>
                       </div>
                       <p className="text-xs text-zinc-300 leading-relaxed">{c.body}</p>
@@ -187,7 +191,7 @@ export function TaskDetailModal({ taskId, workspaceId, onClose, onTaskUpdated }:
               </div>
 
               {/* New Comment Form */}
-              <form onSubmit={handleAddComment} className="flex gap-2 pt-2 border-t border-zinc-800">
+              {canAddComment && <form onSubmit={handleAddComment} className="flex gap-2 pt-2 border-t border-zinc-800">
                 <input
                   type="text"
                   value={newComment}
@@ -202,7 +206,7 @@ export function TaskDetailModal({ taskId, workspaceId, onClose, onTaskUpdated }:
                 >
                   <Send size={14} />
                 </button>
-              </form>
+              </form>}
             </div>
 
           </div>
