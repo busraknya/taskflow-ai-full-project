@@ -100,6 +100,27 @@ export class TasksService {
     return task;
   }
 
+  async findOneInWorkspace(workspaceId: string, taskId: string) {
+    const task = await this.prisma.task.findFirst({
+      where: { id: taskId, workspaceId, deletedAt: null },
+      include: {
+        assignee: {
+          select: { id: true, fullName: true, avatarUrl: true },
+        },
+        riskAssessments: {
+          orderBy: { computedAt: 'desc' },
+          take: 1,
+        },
+      },
+    });
+
+    if (!task) {
+      throw new NotFoundException('Task not found.');
+    }
+
+    return task;
+  }
+
   async findAllInWorkspace(workspaceId: string, projectId?: string) {
     return this.prisma.task.findMany({
       where: {
