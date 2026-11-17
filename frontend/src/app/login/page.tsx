@@ -86,7 +86,7 @@ export default function LoginPage() {
         </form>
 
         <div className={`text-center text-xs ${theme.colors.text.secondary}`}>
-          Don't have an account?{' '}
+          Don&apos;t have an account?{' '}
           <Link href="/register" className="text-white hover:underline">
             Sign up
           </Link>

@@ -8,7 +8,7 @@ import { EventEmitter2 } from '@nestjs/event-emitter';
 export class WorkspacesService {
   constructor(
     private prisma: PrismaService,
-    private eventEmitter: EventEmitter2
+    private eventEmitter: EventEmitter2,
   ) {}
 
   async create(userId: string, dto: CreateWorkspaceDto) {
@@ -23,53 +23,39 @@ export class WorkspacesService {
       });
     }
 
-    const workspace = await this.prisma.$transaction(async (tx) => {
-      const newWorkspace = await tx.workspace.create({
-        data: {
-          name: dto.name,
-          slug: dto.slug,
-        },
+    return this.prisma.$transaction(async (tx) => {
+      const workspace = await tx.workspace.create({
+        data: { name: dto.name, slug: dto.slug },
       });
 
-      
       await tx.workspaceMembership.create({
         data: {
-          workspaceId: newWorkspace.id,
-          userId: userId,
+          workspaceId: workspace.id,
+          userId,
           role: WorkspaceRole.OWNER,
           status: MembershipStatus.ACTIVE,
           joinedAt: new Date(),
         },
       });
 
-      return newWorkspace;
+      return workspace;
     });
-
-    return workspace;
   }
 
   async findAllForUser(userId: string) {
-    
     const memberships = await this.prisma.workspaceMembership.findMany({
-      where: {
-        userId,
-        status: MembershipStatus.ACTIVE,
-      },
-      include: {
-        workspace: true,
-      },
+      where: { userId, status: MembershipStatus.ACTIVE },
+      include: { workspace: true },
     });
 
-    return memberships.map((m) => ({
-      ...m.workspace,
-      role: m.role,
+    return memberships.map((membership) => ({
+      ...membership.workspace,
+      role: membership.role,
     }));
   }
 
   async findOne(workspaceId: string) {
-    return this.prisma.workspace.findUnique({
-      where: { id: workspaceId },
-    });
+    return this.prisma.workspace.findUnique({ where: { id: workspaceId } });
   }
 
   async getWorkspaceMembers(workspaceId: string) {
@@ -83,27 +69,54 @@ export class WorkspacesService {
     });
   }
 
-  async inviteMember(workspaceId: string, inviterUserId: string, email: string, role: WorkspaceRole) {
+  async inviteMember(
+    workspaceId: string,
+    inviterUserId: string,
+    email: string,
+    role: WorkspaceRole,
+  ) {
     const inviterMembership = await this.prisma.workspaceMembership.findUnique({
       where: { workspaceId_userId: { workspaceId, userId: inviterUserId } },
     });
 
-    if (!inviterMembership || (inviterMembership.role !== 'OWNER' && inviterMembership.role !== 'ADMIN')) {
+    if (
+      !inviterMembership ||
+      (inviterMembership.role !== WorkspaceRole.OWNER &&
+        inviterMembership.role !== WorkspaceRole.ADMIN)
+    ) {
       throw new ForbiddenException('Bu işlem için yetkiniz yok.');
     }
 
-    let targetUser = await this.prisma.user.findUnique({ where: { email } });
+    // OWNER assignment must only happen through an explicit ownership-transfer flow.
+    if (role === WorkspaceRole.OWNER) {
+      throw new ForbiddenException(
+        'OWNER rolü davet sırasında atanamaz. Sahiplik devri ayrı bir işlem olmalıdır.',
+      );
+    }
 
+    // ADMIN may invite regular members, but cannot grant administrative privileges.
+    if (
+      inviterMembership.role === WorkspaceRole.ADMIN &&
+      role === WorkspaceRole.ADMIN
+    ) {
+      throw new ForbiddenException('ADMIN rolünü yalnızca OWNER atayabilir.');
+    }
+
+    const targetUser = await this.prisma.user.findUnique({ where: { email } });
     if (!targetUser) {
-      throw new NotFoundException('Bu e-posta adresine sahip bir kullanıcı sistemde bulunamadı.');
+      throw new NotFoundException(
+        'Bu e-posta adresine sahip bir kullanıcı sistemde bulunamadı.',
+      );
     }
 
     const existingMembership = await this.prisma.workspaceMembership.findUnique({
-      where: { workspaceId_userId: { workspaceId, userId: targetUser.id } },
+      where: {
+        workspaceId_userId: { workspaceId, userId: targetUser.id },
+      },
     });
 
     if (existingMembership) {
-      throw new ConflictException('Bu kullanıcı zaten bu workspace\'in üyesi.');
+      throw new ConflictException("Bu kullanıcı zaten bu workspace'in üyesi.");
     }
 
     const membership = await this.prisma.workspaceMembership.create({
@@ -111,30 +124,41 @@ export class WorkspacesService {
         workspaceId,
         userId: targetUser.id,
         role,
-        status: MembershipStatus.ACTIVE, 
+        status: MembershipStatus.ACTIVE,
         invitedById: inviterUserId,
       },
-      include: { user: { select: { id: true, fullName: true, email: true } } },
+      include: {
+        user: { select: { id: true, fullName: true, email: true } },
+      },
     });
 
-    // E-posta kuyruğunu tetikle (Notification Spec)
-    const ws = await this.prisma.workspace.findUnique({ where: { id: workspaceId } });
+    const workspace = await this.prisma.workspace.findUnique({
+      where: { id: workspaceId },
+    });
+
     this.eventEmitter.emit('workspace.member_invited', {
       email: targetUser.email,
       fullName: targetUser.fullName,
-      workspaceName: ws?.name || 'Workspace',
+      workspaceName: workspace?.name || 'Workspace',
     });
 
     return membership;
   }
 
-  async updateMemberRole(workspaceId: string, actorUserId: string, targetMembershipId: string, newRole: WorkspaceRole) {
+  async updateMemberRole(
+    workspaceId: string,
+    actorUserId: string,
+    targetMembershipId: string,
+    newRole: WorkspaceRole,
+  ) {
     const actorMembership = await this.prisma.workspaceMembership.findUnique({
       where: { workspaceId_userId: { workspaceId, userId: actorUserId } },
     });
 
-    if (!actorMembership || actorMembership.role !== 'OWNER') {
-      throw new ForbiddenException('Sadece Workspace sahibi (OWNER) rolleri değiştirebilir.');
+    if (!actorMembership || actorMembership.role !== WorkspaceRole.OWNER) {
+      throw new ForbiddenException(
+        'Sadece Workspace sahibi (OWNER) rolleri değiştirebilir.',
+      );
     }
 
     const targetMembership = await this.prisma.workspaceMembership.findUnique({
@@ -145,14 +169,22 @@ export class WorkspacesService {
       throw new NotFoundException('Üyelik bulunamadı.');
     }
 
-    if (targetMembership.role === 'OWNER' && newRole !== 'OWNER') {
+    if (
+      targetMembership.role === WorkspaceRole.OWNER &&
+      newRole !== WorkspaceRole.OWNER
+    ) {
       const ownerCount = await this.prisma.workspaceMembership.count({
-        where: { workspaceId, role: 'OWNER', status: 'ACTIVE' },
+        where: {
+          workspaceId,
+          role: WorkspaceRole.OWNER,
+          status: MembershipStatus.ACTIVE,
+        },
       });
+
       if (ownerCount <= 1) {
         throw new ConflictException({
           code: 'LAST_OWNER_PROTECTION',
-          message: 'Workspace\'in son OWNER\'ının rolü düşürülemez.',
+          message: "Workspace'in son OWNER'ının rolü düşürülemez.",
         });
       }
     }
@@ -163,12 +195,20 @@ export class WorkspacesService {
     });
   }
 
-  async removeMember(workspaceId: string, actorUserId: string, targetMembershipId: string) {
+  async removeMember(
+    workspaceId: string,
+    actorUserId: string,
+    targetMembershipId: string,
+  ) {
     const actorMembership = await this.prisma.workspaceMembership.findUnique({
       where: { workspaceId_userId: { workspaceId, userId: actorUserId } },
     });
 
-    if (!actorMembership || (actorMembership.role !== 'OWNER' && actorMembership.role !== 'ADMIN')) {
+    if (
+      !actorMembership ||
+      (actorMembership.role !== WorkspaceRole.OWNER &&
+        actorMembership.role !== WorkspaceRole.ADMIN)
+    ) {
       throw new ForbiddenException('Bu işlem için yetkiniz yok.');
     }
 
@@ -180,20 +220,25 @@ export class WorkspacesService {
       throw new NotFoundException('Üyelik bulunamadı.');
     }
 
-    if (targetMembership.role === 'OWNER') {
+    if (targetMembership.role === WorkspaceRole.OWNER) {
+      if (actorMembership.role !== WorkspaceRole.OWNER) {
+        throw new ForbiddenException("ADMIN rolündeki biri bir OWNER'ı çıkaramaz.");
+      }
+
       const ownerCount = await this.prisma.workspaceMembership.count({
-        where: { workspaceId, role: 'OWNER', status: 'ACTIVE' },
+        where: {
+          workspaceId,
+          role: WorkspaceRole.OWNER,
+          status: MembershipStatus.ACTIVE,
+        },
       });
+
       if (ownerCount <= 1) {
         throw new ConflictException({
           code: 'LAST_OWNER_PROTECTION',
-          message: 'Workspace\'in son OWNER\'ı silinemez.',
+          message: "Workspace'in son OWNER'ı silinemez.",
         });
       }
-    }
-
-    if (actorMembership.role === 'ADMIN' && targetMembership.role === 'OWNER') {
-      throw new ForbiddenException('ADMIN rolündeki biri bir OWNER\'ı çıkaramaz.');
     }
 
     return this.prisma.workspaceMembership.delete({

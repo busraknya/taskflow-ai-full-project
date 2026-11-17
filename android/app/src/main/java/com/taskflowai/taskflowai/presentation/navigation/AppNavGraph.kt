@@ -1,9 +1,11 @@
 package com.taskflowai.taskflowai.presentation.navigation
 
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.platform.LocalContext
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import com.taskflowai.taskflowai.data.local.TokenManager
 import com.taskflowai.taskflowai.presentation.ui.login.LoginScreen
 import com.taskflowai.taskflowai.presentation.ui.tasks.TaskScreen
 import com.taskflowai.taskflowai.presentation.ui.workspaces.WorkspaceSelectionScreen
@@ -16,6 +18,7 @@ sealed class Screen(val route: String) {
 @Composable
 fun AppNavGraph() {
     val navController = rememberNavController()
+    val context = LocalContext.current.applicationContext
 
     NavHost(navController = navController, startDestination = "login") {
         composable("login") {
@@ -29,7 +32,7 @@ fun AppNavGraph() {
         }
         composable("workspaces") {
             WorkspaceSelectionScreen(
-                onWorkspaceSelected = { wsId, wsSlug ->
+                onWorkspaceSelected = { wsId, _ ->
                     navController.navigate("tasks/$wsId")
                 }
             )
@@ -44,6 +47,7 @@ fun AppNavGraph() {
                     }
                 },
                 onLogout = {
+                    TokenManager(context).clearToken()
                     navController.navigate("login") {
                         popUpTo(0) { inclusive = true }
                     }

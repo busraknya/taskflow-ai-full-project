@@ -6,18 +6,19 @@ import cookieParser from 'cookie-parser';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
-  
+
+  const allowedOrigins = (process.env.CORS_ORIGINS || 'http://localhost:3000')
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+
   app.enableCors({
-    origin: 'http://localhost:3000',
+    origin: allowedOrigins,
     credentials: true,
   });
 
-  // Global prefix /api/v1
   app.setGlobalPrefix('api/v1');
-
-  app.useGlobalFilters(new HttpExceptionFilter())
-
-  // Global Validation Pipe 
+  app.useGlobalFilters(new HttpExceptionFilter());
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,
@@ -25,9 +26,10 @@ async function bootstrap() {
       transform: true,
     }),
   );
-
   app.use(cookieParser());
 
-  await app.listen(4000);
+  const port = Number(process.env.PORT || 4000);
+  await app.listen(port, '0.0.0.0');
 }
+
 bootstrap();

@@ -1,25 +1,34 @@
-import { Controller, Get, Post, Body, Param, UseGuards, Req, Patch, Delete } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Param,
+  UseGuards,
+  Req,
+  Patch,
+  Delete,
+} from '@nestjs/common';
 import { WorkspacesService } from './workspaces.service';
 import { CreateWorkspaceDto } from './dto/create-workspace.dto';
+import { InviteMemberDto } from './dto/invite-member.dto';
+import { UpdateMemberRoleDto } from './dto/update-member-role.dto';
 import { AuthGuard } from '@nestjs/passport';
 import { WorkspaceMemberGuard } from './guards/workspace-member.guard';
-import { WorkspaceRole } from '@prisma/client';
 
 @Controller('workspaces')
-@UseGuards(AuthGuard('jwt')) 
+@UseGuards(AuthGuard('jwt'))
 export class WorkspacesController {
   constructor(private readonly workspacesService: WorkspacesService) {}
 
   @Post()
   async create(@Req() req: any, @Body() dto: CreateWorkspaceDto) {
-    const userId = req.user.id;
-    return this.workspacesService.create(userId, dto);
+    return this.workspacesService.create(req.user.id, dto);
   }
 
   @Get()
   async findAll(@Req() req: any) {
-    const userId = req.user.id;
-    return this.workspacesService.findAllForUser(userId);
+    return this.workspacesService.findAllForUser(req.user.id);
   }
 
   @Post(':workspaceId/members/invite')
@@ -27,9 +36,14 @@ export class WorkspacesController {
   async inviteMember(
     @Param('workspaceId') workspaceId: string,
     @Req() req: any,
-    @Body() body: { email: string; role: WorkspaceRole },
+    @Body() dto: InviteMemberDto,
   ) {
-    return this.workspacesService.inviteMember(workspaceId, req.user.id, body.email, body.role);
+    return this.workspacesService.inviteMember(
+      workspaceId,
+      req.user.id,
+      dto.email,
+      dto.role,
+    );
   }
 
   @Get(':workspaceId/members')
@@ -44,13 +58,18 @@ export class WorkspacesController {
     @Param('workspaceId') workspaceId: string,
     @Param('membershipId') membershipId: string,
     @Req() req: any,
-    @Body() body: { role: WorkspaceRole },
+    @Body() dto: UpdateMemberRoleDto,
   ) {
-    return this.workspacesService.updateMemberRole(workspaceId, req.user.id, membershipId, body.role);
+    return this.workspacesService.updateMemberRole(
+      workspaceId,
+      req.user.id,
+      membershipId,
+      dto.role,
+    );
   }
 
   @Get(':workspaceId')
-  @UseGuards(WorkspaceMemberGuard) 
+  @UseGuards(WorkspaceMemberGuard)
   async findOne(@Param('workspaceId') workspaceId: string) {
     return this.workspacesService.findOne(workspaceId);
   }
@@ -68,6 +87,10 @@ export class WorkspacesController {
     @Param('membershipId') membershipId: string,
     @Req() req: any,
   ) {
-    return this.workspacesService.removeMember(workspaceId, req.user.id, membershipId);
+    return this.workspacesService.removeMember(
+      workspaceId,
+      req.user.id,
+      membershipId,
+    );
   }
 }

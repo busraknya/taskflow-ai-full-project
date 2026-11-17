@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
 import { theme } from '@/lib/theme';
@@ -12,9 +12,11 @@ interface AuditLog {
   entityType: string;
   entityId: string;
   action: string;
-  metadata: any;
+  metadata: unknown;
   createdAt: string;
 }
+
+interface WorkspaceSummary { id: string; slug: string; }
 
 export default function ActivityPage() {
   const params = useParams();
@@ -25,35 +27,35 @@ export default function ActivityPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
+  const fetchAuditLogs = useCallback(async (wsId: string) => {
+    try {
+      const res = await api.get<AuditLog[]>(`/workspaces/${wsId}/audit`);
+      setLogs(res.data);
+    } catch {
+      setError('Failed to load activity logs.');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     const init = async () => {
       try {
-        const res = await api.get('/workspaces');
-        const currentWs = res.data.find((w: any) => w.slug === workspaceSlug);
+        const res = await api.get<WorkspaceSummary[]>('/workspaces');
+        const currentWs = res.data.find((workspace) => workspace.slug === workspaceSlug);
         if (!currentWs) {
           setError('Workspace not found.');
           setLoading(false);
           return;
         }
-        fetchAuditLogs(currentWs.id);
-      } catch (err) {
+        await fetchAuditLogs(currentWs.id);
+      } catch {
         setError('Failed to load workspace.');
         setLoading(false);
       }
     };
     init();
-  }, [workspaceSlug]);
-
-  const fetchAuditLogs = async (wsId: string) => {
-    try {
-      const res = await api.get(`/workspaces/${wsId}/audit`);
-      setLogs(res.data);
-    } catch (err) {
-      setError('Failed to load activity logs.');
-    } finally {
-      setLoading(false);
-    }
-  };
+  }, [workspaceSlug, fetchAuditLogs]);
 
   if (loading) return <div className={`min-h-screen ${theme.colors.bg.primary} flex items-center justify-center text-sm text-zinc-500`}>Loading activity...</div>;
 
@@ -100,7 +102,7 @@ export default function ActivityPage() {
                     </span>
                     <span className="font-medium text-white">{log.action}</span>
                   </div>
-                  {log.metadata && (
+                  {log.metadata !== null && log.metadata !== undefined && (
                     <p className="text-[11px] text-zinc-400 font-mono">
                       {JSON.stringify(log.metadata)}
                     </p>

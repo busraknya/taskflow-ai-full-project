@@ -1,3 +1,24 @@
+> **Durum güncellemesi — 16 Kasım 2026:** İlk denetim bulguları aşağıda, denetlenen başlangıç commit'i main / 31e8554faef5b0fa6a2c3418966226ae94efc9a1 esas alınarak korunmuştur. Düzeltmeler fix/go-live-blockers dalında yapılmıştır; bu dal henüz main dalına birleştirilmemiştir.
+>
+> **CI doğrulaması — run #69, commit ae95093bd70136c2f5f39fe81a096a8dc9ccad33:**
+> - Backend: npm ci, Prisma generate, targeted authorization lint, TypeScript, Jest, build ve production audit başarılı. Genel backend lint borcu (169 error / 21 warning) hâlâ geçici non-blocking; kapatılmış değildir.
+> - Frontend: npm ci, lint, typecheck, production build ve production audit başarılı.
+> - ML: pytest (3 passed) ve pip-audit başarılı.
+> - Docker: Compose config doğrulaması ve tüm servis image build'leri başarılı.
+> - Android: unit testler, assembleDebug ve connectedDebugAndroidTest başarılı. Instrumented testler 4/4 geçti; önceki başarısızlık ExampleInstrumentedTest.kt:22 içindeki eski package assertion'ıydı. Assertion, commit 219aa0559ec3d0f5457279974e4d40f9d50c7947 ile düzeltildi. Emulator loglarında ADB/izin uyarıları görüldü ancak test adımı başarılı tamamlandı.
+> - CI run #69 tüm 5 işi başarıyla tamamladı. Bu, branch üzerindeki build/test kapısının geçtiğini gösterir; production deployment, gerçek kullanıcı akışları, release signing ve operasyonel hazırlık doğrulaması değildir.
+>
+> **İlk turda yapılan başlıca düzeltmeler:**> **İlk turda yapılan başlıca düzeltmeler:**> **İlk turda yapılan başlıca düzeltmeler:** ADMIN'in OWNER/ADMIN rolü ataması engellendi; invite/role DTO validation eklendi; VIEWER task write işlemlerinden engellendi; root .env repodan kaldırıldı ve ignore dosyaları eklendi; backend/frontend/ML Dockerfile ve Compose servisleri, healthcheck ve migration job eklendi; Redis password bağlantısı ve CORS allowlist yapılandırıldı; Android API URL/cleartext ayrımı ve offline worker hata durumları iyileştirildi; dependency lockfile'lar güncellendi.
+>
+> **GO/NO-GO kararı hâlâ NO-GO.** Başarılı CI, tek başına satılabilir ürün veya production deployment kanıtı değildir. Android instrumented test sonucu, release APK build/signing, temiz makinede docker compose up sonrası gerçek DB migration ve login→task→ML→notification smoke testi, yedekleme/geri yükleme, dış erişim/HTTPS ve alıcı dokümantasyonu ayrıca doğrulanmalıdır. Offline queue'ya kayıt ekleme ve WorkManager enqueue akışı uçtan uca doğrulanmış değildir. ML modeli yalnızca az sayıda sentetik örnekle eğitilmiştir ve risk_score hâlâ sabit eşlemeyle üretilmektedir; satışta gerçek tahmin doğruluğu iddiası yapılmamalıdır.
+>
+> **Sırlar:** .env geçmişte public Git geçmişinde bulunmuştu. Değerlerin gerçek ortamda kullanılmış olma ihtimali varsa hemen rotate edilmeli; geçmişi temizlemek için ayrıca history rewrite ve tüm contributor klonlarının yenilenmesi gerekir.
+>
+> **Dal durumu:** Bu değişiklikler fix/go-live-blockers dalında. main'e merge edilmeden ve yukarıdaki kalan kontroller tamamlanmadan satış paketini yayımlama.
+>
+> ---
+>
+
 # TaskFlow — Yayına Çıkış ve Teslim Rehberi
 
 **Son Güncelleme:** 16 Kasım 2026  
@@ -441,3 +462,25 @@ Komutlar başarıyla çalışmadan “build başarılı”, “testler geçti”
 - CodeCanyon common rejection factors: https://help.author.envato.com/hc/en-us/articles/360000536823-Common-Rejection-Factors-for-Code-Items
 
 Pazaryeri kuralları değişebileceğinden gönderim gününde resmi seller/author dokümanlarını yeniden kontrol et.
+
+
+---
+
+## 16 Kasım 2026 — ikinci denetim turu (fix/go-live-blockers)
+
+Bu bölüm, yukarıdaki ilk denetim raporunu silmez; branch üzerinde sonradan yapılan düzeltmeleri ve doğrulama durumunu ayrı kaydeder.
+
+### Bu turda yapılan değişiklikler
+
+- **Backend task concurrency:** Görev güncellemesindeki read-then-write version kontrolü, `updateMany` üzerinde `id + workspaceId + deletedAt + version` koşullu atomik compare-and-swap işlemine çevrildi. Etkilenen satır sayısı 1 değilse güncel sürüm okunuyor ve `STALE_VERSION` 409 Conflict dönüyor.
+- **DTO validation:** `UpdateTaskDto.version` artık negatif olmayan tam sayı olarak doğrulanıyor (`IsInt`, `Min(0)`).
+- **Backend regression tests:** Başarılı CAS, yarışta stale-version conflict ve güncelleme sırasında kaybolan kayıt için testler eklendi.
+- **ML startup davranışı:** ML servisi model artifact'i yoksa sentetik veriden sessizce model üretmiyor; açık bir hata ile başlamayı reddediyor. Model eğitimi ayrı `train.py` adımında kalıyor.
+- **ML regression test:** Artifact eksik olduğunda loader'ın hata verdiği test eklendi.
+- **Model card:** `ml-service/MODEL_CARD.md` eklendi. v1'in altı sentetik örnekten oluştuğu, ölçülmüş doğruluk/kalibrasyon bulunmadığı ve API'deki 0.2/0.5/0.85 değerlerinin olasılık olmadığı açıkça belgelendi.
+
+### Doğrulama durumu
+
+- Önceki Android hesap izolasyonu commit'i `dcbb25428cb0682fbc4698668691a09c440e12ab` için CI run #95 (`43918642822`) beş işin tamamında başarılı oldu: Backend, Frontend, ML, Android ve Docker. [Run #95](https://github.com/busraknya/taskflow-ai-full-project/actions/runs/43918642822)
+- Bu bölümdeki yeni backend/ML değişikliklerinin CI doğrulaması henüz tamamlanmış sayılmıyor. Ara commit'lere ait Actions çalışmaları yeni push'larla iptal edildi; son branch commit'i: `ebfb5bf2d6555381a613e0a0dd36e6c23f16d8aa`. Bu commit için yeni CI sonucunu bekle.
+- **GO/NO-GO: NO-GO devam ediyor.** Backend CAS ve ML startup düzeltmeleri, gerçek deployment/E2E, ML model validasyonu, Android sync Worker HTTP senaryoları ve release/backup doğrulamasının yerine geçmez.

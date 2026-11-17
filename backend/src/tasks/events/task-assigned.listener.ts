@@ -12,7 +12,7 @@ export class TaskAssignedListener {
   ) {}
 
   @OnEvent('task.assigned')
-  async handleTaskAssignedEvent(payload: { taskId: string; assigneeId: string; workspaceId: string }) {
+  async handleTaskAssignedEvent(payload: { taskId: string; assigneeId: string; workspaceId: string; taskVersion: number }) {
     try {
       const user = await this.prisma.user.findUnique({
         where: { id: payload.assigneeId },
@@ -48,6 +48,8 @@ export class TaskAssignedListener {
           taskTitle: task.title,
           taskId: task.id,
         },
+      }, {
+        jobId: `task-assigned-${payload.taskId}-${payload.taskVersion}`,
       });
 
       console.log(`[Notification] Task assigned email enqueued for ${user.email}`);

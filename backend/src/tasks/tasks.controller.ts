@@ -1,4 +1,16 @@
-import { Controller, Get, Post, Patch, Body, Param, Query, UseGuards, Req } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Patch,
+  Body,
+  Param,
+  Query,
+  UseGuards,
+  Req,
+  ForbiddenException,
+} from '@nestjs/common';
+import { WorkspaceRole } from '@prisma/client';
 import { TasksService } from './tasks.service';
 import { CreateTaskDto } from './dto/create-task.dto';
 import { UpdateTaskDto } from './dto/update-task.dto';
@@ -10,14 +22,20 @@ import { WorkspaceMemberGuard } from '../workspaces/guards/workspace-member.guar
 export class TasksController {
   constructor(private readonly tasksService: TasksService) {}
 
+  private assertCanWrite(req: any) {
+    if (req.membership?.role === WorkspaceRole.VIEWER) {
+      throw new ForbiddenException('VIEWER rolü görev oluşturamaz veya değiştiremez.');
+    }
+  }
+
   @Post()
   async create(
     @Param('workspaceId') workspaceId: string,
-    @Req() req: any, 
+    @Req() req: any,
     @Body() dto: CreateTaskDto,
   ) {
-    const userId = req.user.id;
-    return this.tasksService.create(workspaceId, userId, dto);
+    this.assertCanWrite(req);
+    return this.tasksService.create(workspaceId, req.user.id, dto);
   }
 
   @Get()
@@ -28,14 +46,27 @@ export class TasksController {
     return this.tasksService.findAllInWorkspace(workspaceId, projectId);
   }
 
+  @Get(':taskId')
+  async findOne(
+    @Param('workspaceId') workspaceId: string,
+    @Param('taskId') taskId: string,
+  ) {
+    return this.tasksService.findOneInWorkspace(workspaceId, taskId);
+  }
+
   @Patch(':taskId')
   async update(
     @Param('workspaceId') workspaceId: string,
     @Param('taskId') taskId: string,
-    @Req() req: any, 
+    @Req() req: any,
     @Body() dto: UpdateTaskDto,
   ) {
-    const userId = req.user.id;
-    return this.tasksService.update(workspaceId, taskId, userId, dto);
+    this.assertCanWrite(req);
+    return this.tasksService.update(
+      workspaceId,
+      taskId,
+      req.user.id,
+      dto,
+    );
   }
 }

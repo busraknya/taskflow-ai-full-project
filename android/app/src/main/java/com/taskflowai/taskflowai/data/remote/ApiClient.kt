@@ -1,6 +1,7 @@
 package com.taskflowai.taskflowai.data.remote
 
 import android.content.Context
+import com.taskflowai.taskflowai.BuildConfig
 import com.taskflowai.taskflowai.data.local.TokenManager
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
@@ -9,29 +10,38 @@ import retrofit2.converter.gson.GsonConverterFactory
 import java.util.concurrent.TimeUnit
 
 object ApiClient {
-    private const val BASE_URL = "http://10.0.2.2:4000/api/v1/"
+    private val baseUrl = BuildConfig.API_BASE_URL.also {
+        require(it.endsWith("/")) { "API_BASE_URL must end with '/'" }
+    }
     private lateinit var tokenManager: TokenManager
 
     fun init(context: Context) {
-        tokenManager = TokenManager(context)
+        tokenManager = TokenManager(context.applicationContext)
     }
 
     private val loggingInterceptor = HttpLoggingInterceptor().apply {
-        level = HttpLoggingInterceptor.Level.HEADERS
+        redactHeader("Authorization")
+        redactHeader("Cookie")
+        level = if (BuildConfig.DEBUG) {
+            HttpLoggingInterceptor.Level.BASIC
+        } else {
+            HttpLoggingInterceptor.Level.NONE
+        }
     }
 
-    // OkHttp Client içine AuthInterceptor'ı doğrudan bağlıyoruz!
     private val client: OkHttpClient by lazy {
         OkHttpClient.Builder()
             .addInterceptor { chain ->
                 val originalRequest = chain.request()
-                // Eğer TokenManager başlatıldıysa token'ı al
-                val token = if (::tokenManager.isInitialized) tokenManager.getToken() else null
-
-                val requestWithAuth = if (!token.isNullOrEmpty()) {
-                    originalRequest.newBuilder()
-                        .header("Authorization", "Bearer $token")
-                        .build()
+                val requestWithAuth = if (originalRequest.header("Authorization") == null) {
+                    val token = if (::tokenManager.isInitialized) tokenManager.getToken() else null
+                    if (!token.isNullOrEmpty()) {
+                        originalRequest.newBuilder()
+                            .header("Authorization", "Bearer $token")
+                            .build()
+                    } else {
+                        originalRequest
+                    }
                 } else {
                     originalRequest
                 }
@@ -44,14 +54,20 @@ object ApiClient {
     }
 
     val retrofitService: AuthApiService by lazy {
-        Retrofit.Builder().baseUrl(BASE_URL).client(client).addConverterFactory(GsonConverterFactory.create()).build().create(AuthApiService::class.java)
+        Retrofit.Builder().baseUrl(baseUrl).client(client)
+            .addConverterFactory(GsonConverterFactory.create())
+            .build().create(AuthApiService::class.java)
     }
 
     val taskService: TaskApiService by lazy {
-        Retrofit.Builder().baseUrl(BASE_URL).client(client).addConverterFactory(GsonConverterFactory.create()).build().create(TaskApiService::class.java)
+        Retrofit.Builder().baseUrl(baseUrl).client(client)
+            .addConverterFactory(GsonConverterFactory.create())
+            .build().create(TaskApiService::class.java)
     }
 
     val workspaceService: WorkspaceApiService by lazy {
-        Retrofit.Builder().baseUrl(BASE_URL).client(client).addConverterFactory(GsonConverterFactory.create()).build().create(WorkspaceApiService::class.java)
+        Retrofit.Builder().baseUrl(baseUrl).client(client)
+            .addConverterFactory(GsonConverterFactory.create())
+            .build().create(WorkspaceApiService::class.java)
     }
 }

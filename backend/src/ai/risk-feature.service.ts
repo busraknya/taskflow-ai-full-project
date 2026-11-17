@@ -8,9 +8,6 @@ export class RiskFeatureService {
   async extractFeaturesForTask(taskId: string) {
     const task = await this.prisma.task.findUnique({
       where: { id: taskId },
-      include: {
-        comments: true,
-      },
     });
 
     if (!task) return null;
@@ -30,6 +27,7 @@ export class RiskFeatureService {
       activeTaskCount = await this.prisma.task.count({
         where: {
           assigneeId: task.assigneeId,
+          workspaceId: task.workspaceId,
           status: { not: 'DONE' },
           deletedAt: null,
         },
@@ -37,7 +35,9 @@ export class RiskFeatureService {
     }
 
     // 3. comment_count (Yorum sayısı)
-    const commentCount = task.comments.length;
+    const commentCount = await this.prisma.comment.count({
+      where: { taskId, deletedAt: null },
+    });
 
     // 4. priority (Öncelik 0-3)
     const priority = task.priority;

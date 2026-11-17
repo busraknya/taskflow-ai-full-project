@@ -1,5 +1,6 @@
-import { Controller, Get, Post, Delete, Body, Param, UseGuards, Req } from '@nestjs/common';
+import { Controller, Get, Post, Delete, Body, Param, UseGuards, Req, ForbiddenException } from '@nestjs/common';
 import { CommentsService } from './comments.service';
+import { WorkspaceRole } from '@prisma/client';
 import { CreateCommentDto } from './dto/create-comment.dto';
 import { AuthGuard } from '@nestjs/passport';
 import { WorkspaceMemberGuard } from '../workspaces/guards/workspace-member.guard';
@@ -16,6 +17,9 @@ export class CommentsController {
     @Req() req: any,
     @Body() dto: CreateCommentDto,
   ) {
+    if (req.membership?.role === WorkspaceRole.VIEWER) {
+      throw new ForbiddenException('VIEWER rolü yorum ekleyemez.');
+    }
     return this.commentsService.create(workspaceId, taskId, req.user.id, dto);
   }
 

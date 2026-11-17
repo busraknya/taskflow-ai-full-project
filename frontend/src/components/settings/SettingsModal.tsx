@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { api } from '@/lib/api';
 import { theme } from '@/lib/theme';
 import { Toast } from '@/components/ui/Toast';
@@ -25,28 +25,33 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   const [toastMsg, setToastMsg] = useState('');
   const [toastType, setToastType] = useState<'success' | 'error'>('success');
 
+
+
   useEffect(() => {
-    if (isOpen) {
-      fetchPreferences();
-    } else {
-      // UX Detayı: Modal kapandığında form alanlarını ve mesajları sıfırla!
-      setCurrentPassword('');
-      setNewPassword('');
-      setToastMsg('');
-      setActiveTab('password');
-    }
+    if (!isOpen) return;
+
+    let cancelled = false;
+    api.get<Array<{ category: string; emailEnabled: boolean }>>('/users/me/notification-preferences')
+      .then((res) => {
+        if (cancelled) return;
+        const taskAssignedPref = res.data.find((preference) => preference.category === 'task.assigned');
+        if (taskAssignedPref) setEmailEnabled(taskAssignedPref.emailEnabled);
+      })
+      .catch(() => {
+        if (!cancelled) console.error('Failed to load preferences');
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, [isOpen]);
 
-  const fetchPreferences = async () => {
-    try {
-      const res = await api.get('/users/me/notification-preferences');
-      const taskAssignedPref = res.data.find((p: any) => p.category === 'task.assigned');
-      if (taskAssignedPref) {
-        setEmailEnabled(taskAssignedPref.emailEnabled);
-      }
-    } catch (err) {
-      console.error('Failed to load preferences');
-    }
+  const handleClose = () => {
+    setCurrentPassword('');
+    setNewPassword('');
+    setToastMsg('');
+    setActiveTab('password');
+    onClose();
   };
 
   const handlePasswordChange = async (e: React.FormEvent) => {
@@ -133,7 +138,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
           {/* Modal Header */}
           <div className="flex justify-between items-center border-b border-zinc-800 pb-4">
             <h2 className="text-sm font-medium text-white tracking-tight">Account Settings</h2>
-            <button onClick={onClose} className="text-zinc-400 hover:text-white text-xs">✕</button>
+            <button onClick={handleClose} className="text-zinc-400 hover:text-white text-xs">✕</button>
           </div>
 
           {/* Tabs */}

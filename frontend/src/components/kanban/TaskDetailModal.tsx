@@ -17,39 +17,59 @@ interface TaskDetailModalProps {
   workspaceId: string;
   onClose: () => void;
   onTaskUpdated: () => void;
+  currentUserId: string | null;
+  canAddComment: boolean;
+  canManageAllComments: boolean;
 }
 
-export function TaskDetailModal({ taskId, workspaceId, onClose, onTaskUpdated }: TaskDetailModalProps) {
+export function TaskDetailModal({ taskId, workspaceId, onClose, onTaskUpdated, currentUserId, canAddComment, canManageAllComments }: TaskDetailModalProps) {
   const [task, setTask] = useState<any>(null);
   const [comments, setComments] = useState<Comment[]>([]);
   const [newComment, setNewComment] = useState('');
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
-  useEffect(() => {
-    if (taskId && workspaceId) {
-      fetchTaskDetails();
-      fetchComments();
-    }
-  }, [taskId, workspaceId]);
 
-  const fetchTaskDetails = async () => {
-    try {
-      const res = await api.get(`/workspaces/${workspaceId}/tasks`);
-      const currentTask = res.data.find((t: any) => t.id === taskId);
-      setTask(currentTask);
-    } catch (err) {
-      console.error('Failed to load task details');
-    } finally {
-      setLoading(false);
-    }
-  };
+
+  useEffect(() => {
+    if (!taskId || !workspaceId) return;
+
+    let cancelled = false;
+
+    setLoading(true);
+    setLoadError('');
+    setTask(null);
+    setComments([]);
+    api.get<Record<string, unknown>>(`/workspaces/${workspaceId}/tasks/${taskId}`)
+      .then((res) => {
+        if (!cancelled) setTask(res.data);
+      })
+      .catch(() => {
+        if (!cancelled) setLoadError('Task details could not be loaded. It may have been deleted or you may no longer have access.');
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    api.get<Comment[]>(`/workspaces/${workspaceId}/tasks/${taskId}/comments`)
+      .then((res) => {
+        if (!cancelled) setComments(res.data);
+      })
+      .catch(() => {
+        if (!cancelled) console.error('Failed to load comments');
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [taskId, workspaceId]);
 
   const fetchComments = async () => {
     try {
-      const res = await api.get(`/workspaces/${workspaceId}/tasks/${taskId}/comments`);
+      const res = await api.get<Comment[]>(`/workspaces/${workspaceId}/tasks/${taskId}/comments`);
       setComments(res.data);
-    } catch (err) {
+    } catch {
       console.error('Failed to load comments');
     }
   };
@@ -96,8 +116,10 @@ export function TaskDetailModal({ taskId, workspaceId, onClose, onTaskUpdated }:
           <button onClick={onClose} className="text-zinc-400 hover:text-white p-1 rounded-md hover:bg-zinc-800"><X size={18} /></button>
         </div>
 
-        {loading || !task ? (
+        {loading ? (
           <div className="flex-1 flex items-center justify-center text-xs text-zinc-500">Loading details...</div>
+        ) : loadError || !task ? (
+          <div className="flex-1 flex items-center justify-center text-xs text-zinc-500">{loadError || 'Task not found.'}</div>
         ) : (
           <div className="space-y-6 pt-6 flex-1 flex flex-col">
             
@@ -116,14 +138,14 @@ export function TaskDetailModal({ taskId, workspaceId, onClose, onTaskUpdated }:
               <div className="p-3 bg-zinc-900 border border-zinc-800 rounded-lg space-y-2">
                 <div className="flex justify-between items-center">
                   <span className="text-[10px] uppercase font-mono text-zinc-400 flex items-center gap-1">
-                    <AlertCircle size={12} /> AI Risk Assessment
+                    <AlertCircle size={12} /> Experimental Risk Classification
                   </span>
                   <span className={`text-[10px] uppercase px-2 py-0.5 rounded font-mono ${
                     task.riskAssessments[0].riskLevel === 'HIGH' ? 'bg-red-950 text-red-400 border border-red-900' :
                     task.riskAssessments[0].riskLevel === 'MEDIUM' ? 'bg-amber-950 text-amber-400 border border-amber-900' :
                     'bg-zinc-800 text-zinc-400'
                   }`}>
-                    {task.riskAssessments[0].riskLevel} ({Math.round(task.riskAssessments[0].riskScore * 100)}%)
+                    {task.riskAssessments[0].riskLevel === 'UNAVAILABLE' ? 'Prediction unavailable' : task.riskAssessments[0].riskLevel}
                   </span>
                 </div>
                 {task.riskAssessments[0].factors?.length > 0 && (
@@ -162,7 +184,9 @@ export function TaskDetailModal({ taskId, workspaceId, onClose, onTaskUpdated }:
                         <span className="text-xs font-medium text-zinc-200">{c.author.fullName}</span>
                         <div className="flex items-center space-x-2">
                           <span className="text-[10px] text-zinc-500">{new Date(c.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                          <button onClick={() => handleDeleteComment(c.id)} className="text-zinc-600 hover:text-red-400 transition-colors"><Trash2 size={12} /></button>
+                          {(canManageAllComments || c.author.id === currentUserId) && (
+                            <button onClick={() => handleDeleteComment(c.id)} className="text-zinc-600 hover:text-red-400 transition-colors" aria-label="Delete comment"><Trash2 size={12} /></button>
+                          )}
                         </div>
                       </div>
                       <p className="text-xs text-zinc-300 leading-relaxed">{c.body}</p>
@@ -172,7 +196,7 @@ export function TaskDetailModal({ taskId, workspaceId, onClose, onTaskUpdated }:
               </div>
 
               {/* New Comment Form */}
-              <form onSubmit={handleAddComment} className="flex gap-2 pt-2 border-t border-zinc-800">
+              {canAddComment && <form onSubmit={handleAddComment} className="flex gap-2 pt-2 border-t border-zinc-800">
                 <input
                   type="text"
                   value={newComment}
@@ -187,7 +211,7 @@ export function TaskDetailModal({ taskId, workspaceId, onClose, onTaskUpdated }:
                 >
                   <Send size={14} />
                 </button>
-              </form>
+              </form>}
             </div>
 
           </div>

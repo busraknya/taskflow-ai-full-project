@@ -1,6 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
-import { BullModule } from '@nestjs/bullmq'; 
+import { BullModule } from '@nestjs/bullmq';
 import { EventEmitterModule } from '@nestjs/event-emitter';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
@@ -13,16 +13,15 @@ import { AuditModule } from './common/audit/audit.module';
 import { AiModule } from './ai/ai.module';
 import { UsersModule } from './users/users.module';
 import { CommentsModule } from './comments/comments.module';
+import { NotificationsModule } from './notifications/notifications.module';
 
 @Module({
   imports: [
-    ConfigModule.forRoot({
-      isGlobal: true, 
-    }),
+    ConfigModule.forRoot({ isGlobal: true }),
     EventEmitterModule.forRoot(),
     BullModule.forRootAsync({
       imports: [ConfigModule],
-      useFactory: async (configService: ConfigService) => {
+      useFactory: (configService: ConfigService) => {
         const host = configService.get<string>('REDIS_HOST');
         const port = configService.get<string>('REDIS_PORT');
 
@@ -30,11 +29,13 @@ import { CommentsModule } from './comments/comments.module';
           throw new Error('FATAL: REDIS_HOST or REDIS_PORT is missing in environment variables!');
         }
 
+        const password = configService.get<string>('REDIS_PASSWORD');
         return {
           connection: {
-            host: host,
-            port: parseInt(port, 10),
-            protocol: 'resp2'
+            host,
+            port: Number(port),
+            ...(password ? { password } : {}),
+            protocol: 'resp2',
           },
         };
       },
@@ -49,6 +50,7 @@ import { CommentsModule } from './comments/comments.module';
     AiModule,
     UsersModule,
     CommentsModule,
+    NotificationsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

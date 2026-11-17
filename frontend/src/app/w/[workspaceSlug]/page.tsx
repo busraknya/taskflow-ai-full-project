@@ -11,6 +11,7 @@ import { SettingsModal } from '@/components/settings/SettingsModal';
 import { TaskDetailModal } from '@/components/kanban/TaskDetailModal';
 import { Navbar } from '@/components/layout/Navbar';
 import { CreateProjectModal } from '@/components/projects/CreateProjectModal';
+import { useAuthStore } from '@/store/useAuthStore';
 
 interface Project { id: string; name: string; }
 interface Member { user: { id: string; fullName: string; email: string; }; }
@@ -25,6 +26,7 @@ const COLUMNS = [
 
 export default function WorkspaceDashboard() {
   const router = useRouter();
+  const currentUserId = useAuthStore((state) => state.user?.id ?? null);
   const params = useParams();
   const workspaceSlug = params.workspaceSlug as string;
 
@@ -43,27 +45,7 @@ export default function WorkspaceDashboard() {
   const [showProjectModal, setShowProjectModal] = useState(false);
   const [activeTaskId, setActiveTaskId] = useState<string | null>(null);
 
-  useEffect(() => {
-    const initWorkspace = async () => {
-      try {
-        const res = await api.get('/workspaces');
-        const currentWs = res.data.find((w: any) => w.slug === workspaceSlug);
-        if (!currentWs) {
-          setError('Workspace not found or unauthorized.');
-          setLoading(false);
-          return;
-        }
-        setWorkspaceId(currentWs.id);
-        setCurrentUserRole(currentWs.role); // <-- Kullanıcının bu workspace'teki rolü set ediliyor
-        fetchProjects(currentWs.id);
-        fetchMembers(currentWs.id);
-      } catch (err: any) {
-        setError('Failed to initialize workspace.');
-        setLoading(false);
-      }
-    };
-    initWorkspace();
-  }, [workspaceSlug]);
+
 
   const fetchProjects = async (wsId: string) => {
     try {
@@ -135,6 +117,28 @@ export default function WorkspaceDashboard() {
     }
   };
 
+  useEffect(() => {
+    const initWorkspace = async () => {
+      try {
+        const res = await api.get('/workspaces');
+        const currentWs = res.data.find((w: any) => w.slug === workspaceSlug);
+        if (!currentWs) {
+          setError('Workspace not found or unauthorized.');
+          setLoading(false);
+          return;
+        }
+        setWorkspaceId(currentWs.id);
+        setCurrentUserRole(currentWs.role); // <-- Kullanıcının bu workspace'teki rolü set ediliyor
+        fetchProjects(currentWs.id);
+        fetchMembers(currentWs.id);
+      } catch (err: any) {
+        setError('Failed to initialize workspace.');
+        setLoading(false);
+      }
+    };
+    initWorkspace();
+  }, [workspaceSlug]);
+
   const isOwnerOrAdmin = currentUserRole === 'OWNER' || currentUserRole === 'ADMIN';
 
   if (loading) return <div className={`min-h-screen ${theme.colors.bg.primary} flex items-center justify-center text-sm text-zinc-500`}>Loading dashboard...</div>;
@@ -148,6 +152,7 @@ export default function WorkspaceDashboard() {
         projects={projects}
         selectedProjectId={selectedProject?.id}
         isOwnerOrAdmin={isOwnerOrAdmin}
+        canCreateTask={currentUserRole !== 'VIEWER'}
         onProjectChange={(projId) => {
           const proj = projects.find(p => p.id === projId);
           if (proj && workspaceId) {
@@ -185,6 +190,7 @@ export default function WorkspaceDashboard() {
                 title={col.title}
                 tasks={tasks.filter((t) => t.status === col.id)}
                 onMoveForward={handleStatusChange}
+                canEditTasks={currentUserRole !== 'VIEWER'}
                 onTaskClick={(taskId) => setActiveTaskId(taskId)}
               />
             ))}
@@ -213,6 +219,9 @@ export default function WorkspaceDashboard() {
         <TaskDetailModal
           taskId={activeTaskId}
           workspaceId={workspaceId || ''}
+          currentUserId={currentUserId}
+          canAddComment={currentUserRole !== 'VIEWER'}
+          canManageAllComments={isOwnerOrAdmin}
           onClose={() => setActiveTaskId(null)}
           onTaskUpdated={() => {
             if (workspaceId && selectedProject) {

@@ -10,7 +10,8 @@ interface NavbarProps {
   workspaceSlug?: string;
   projects?: Array<{ id: string; name: string }>;
   selectedProjectId?: string;
-  isOwnerOrAdmin?: boolean; // <-- Yeni eklenen yetki prop'u
+  isOwnerOrAdmin?: boolean;
+  canCreateTask?: boolean;
   onProjectChange?: (projectId: string) => void;
   onNewTaskClick?: () => void;
   onNewProjectClick?: () => void;
@@ -22,6 +23,7 @@ export function Navbar({
   projects = [],
   selectedProjectId,
   isOwnerOrAdmin = false,
+  canCreateTask = true,
   onProjectChange,
   onNewTaskClick,
   onNewProjectClick,
@@ -109,14 +111,14 @@ export function Navbar({
               <Activity size={14} />
               <span>Activity</span>
             </button>
-            <button
+            {canCreateTask && <button
               onClick={onNewTaskClick}
               disabled={!selectedProjectId}
               className={`${theme.colors.accent.DEFAULT} text-xs font-medium px-3 py-1.5 rounded-md transition-colors flex items-center space-x-1 disabled:opacity-50`}
             >
               <Plus size={14} />
               <span>New Task</span>
-            </button>
+            </button>}
           </>
         )}
 
