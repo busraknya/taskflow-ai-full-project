@@ -539,3 +539,8 @@ Bu bölüm, ilk akış taslağının mevcut branch'teki gerçek kaynak kodla kar
 - Modal, task değiştirildiğinde önceki task'ın yorumlarını temizliyor ve bulunamayan/erişilemeyen task için ayrı durum gösteriyor.
 
 **Doğrulama notu:** Bu değişiklikler `fix/go-live-blockers` branch'indedir; CI sonucu bekleniyor. UI'daki gizleme test edilmiş backend yetkisinin yerine geçmez. Controller integration testleri ve gerçek Web E2E senaryosu ayrıca gereklidir.
+
+
+### 13.11 ML sayısal skorunun kaldırılması — 17 Kasım 2026 branch güncellemesi
+
+Önceki API, LOW/MEDIUM/HIGH sınıfından 0.20/0.50/0.85 sabit değerleri türetip risk_score alanında döndürüyordu. Bu değerler olasılık veya model güveni değildi. fix/go-live-blockers branch'inde bu sahte sayısal skor kaldırıldı: risk_score artık null dönüyor ve backend tipi nullable olarak tanımlandı. ML API testi de bu davranışı doğruluyor. Model yalnızca deneysel sınıflandırma üretmeye devam ediyor; gerçek gecikme olasılığı için etiketli veri, değerlendirme ve calibration çalışması hâlâ gerekli. CI henüz doğrulanmadı.
