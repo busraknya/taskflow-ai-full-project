@@ -16,10 +16,11 @@ interface KanbanColumnProps {
   title: string;
   tasks: Task[];
   onMoveForward: (taskId: string, version: number, nextStatus: string) => void;
-  onTaskClick: (taskId: string) => void; // <-- Yeni eklenen prop
+  onTaskClick: (taskId: string) => void;
+  canEditTasks: boolean;
 }
 
-export function KanbanColumn({ columnId, title, tasks, onMoveForward, onTaskClick }: KanbanColumnProps) {
+export function KanbanColumn({ columnId, title, tasks, onMoveForward, onTaskClick, canEditTasks }: KanbanColumnProps) {
   return (
     <div className={`${theme.colors.bg.secondary} border ${theme.colors.border.primary} rounded-lg p-3 space-y-3 flex flex-col max-h-[75vh]`}>
       <div className="flex justify-between items-center px-1">
@@ -56,7 +57,7 @@ export function KanbanColumn({ columnId, title, tasks, onMoveForward, onTaskClic
                 
                 <div className="flex space-x-1" onClick={(e) => e.stopPropagation()}> 
                   {/* Not: onStopPropagation sayesinde sağa kaydırma butonuna basıldığında kartın detayı AÇILMAZ! */}
-                  {columnId !== 'DONE' && (
+                  {canEditTasks && columnId !== 'DONE' && (
                     <button
                       onClick={() => {
                         const nextStatus = columnId === 'TODO' ? 'IN_PROGRESS' : columnId === 'IN_PROGRESS' ? 'IN_REVIEW' : 'DONE';
