@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { api } from '@/lib/api';
 import { theme } from '@/lib/theme';
 import { X, Send, Trash2, Calendar, User, AlertCircle } from 'lucide-react';
@@ -40,6 +40,7 @@ export function TaskDetailModal({ taskId, workspaceId, onClose, onTaskUpdated, c
     setLoading(true);
     setLoadError('');
     setTask(null);
+    setComments([]);
     api.get<Record<string, unknown>>(`/workspaces/${workspaceId}/tasks/${taskId}`)
       .then((res) => {
         if (!cancelled) setTask(res.data);
