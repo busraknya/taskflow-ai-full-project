@@ -27,6 +27,7 @@ export function TaskDetailModal({ taskId, workspaceId, onClose, onTaskUpdated, c
   const [comments, setComments] = useState<Comment[]>([]);
   const [newComment, setNewComment] = useState('');
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
 
@@ -37,13 +38,14 @@ export function TaskDetailModal({ taskId, workspaceId, onClose, onTaskUpdated, c
     let cancelled = false;
 
     setLoading(true);
+    setLoadError('');
     setTask(null);
     api.get<Record<string, unknown>>(`/workspaces/${workspaceId}/tasks/${taskId}`)
       .then((res) => {
         if (!cancelled) setTask(res.data);
       })
       .catch(() => {
-        if (!cancelled) console.error('Failed to load task details');
+        if (!cancelled) setLoadError('Task details could not be loaded. It may have been deleted or you may no longer have access.');
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -113,8 +115,10 @@ export function TaskDetailModal({ taskId, workspaceId, onClose, onTaskUpdated, c
           <button onClick={onClose} className="text-zinc-400 hover:text-white p-1 rounded-md hover:bg-zinc-800"><X size={18} /></button>
         </div>
 
-        {loading || !task ? (
+        {loading ? (
           <div className="flex-1 flex items-center justify-center text-xs text-zinc-500">Loading details...</div>
+        ) : loadError || !task ? (
+          <div className="flex-1 flex items-center justify-center text-xs text-zinc-500">{loadError || 'Task not found.'}</div>
         ) : (
           <div className="space-y-6 pt-6 flex-1 flex flex-col">
             
