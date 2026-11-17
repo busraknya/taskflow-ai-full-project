@@ -150,6 +150,7 @@ export default function WorkspaceDashboard() {
         projects={projects}
         selectedProjectId={selectedProject?.id}
         isOwnerOrAdmin={isOwnerOrAdmin}
+        canCreateTask={currentUserRole !== 'VIEWER'}
         onProjectChange={(projId) => {
           const proj = projects.find(p => p.id === projId);
           if (proj && workspaceId) {
