@@ -525,3 +525,17 @@ Bu bölüm, ilk akış taslağının mevcut branch'teki gerçek kaynak kodla kar
 6. Davet kabul akışının ürün kapsamını kararlaştır; ardından durum makinesi tasarla.
 7. ML task CRUD senkron bağımlılığını timeout/asenkron işleme ile azalt.
 8. E2E testleri gerçek DB/Redis/ML/Frontend senaryolarıyla tamamla.
+
+
+### 13.10 Task detay ve yorum yetkileri — branch çalışması, 17 Kasım 2026
+
+İncelenen kaynaklar: `backend/src/tasks/tasks.controller.ts`, `backend/src/tasks/tasks.service.ts`, `frontend/src/components/kanban/TaskDetailModal.tsx`, `frontend/src/components/kanban/KanbanColumn.tsx`.
+
+- Önceki Web task detail modal'ı tüm workspace task listesini çekip seçili task'ı istemcide arıyordu. Bu hem gereksiz veri transferi hem de liste büyüdükçe ölçeklenme sorunu.
+- `GET /workspaces/:workspaceId/tasks/:taskId` endpoint'i eklendi. Sorgu taskId + workspaceId + deletedAt:null koşullarını birlikte kullanıyor; assignee ve en güncel risk assessment döndürüyor.
+- TaskService testlerine workspace kapsamı ve bulunamayan/silinmiş task davranışı için testler eklendi.
+- VIEWER için Kanban durum ilerletme butonları gizlendi. Backend VIEWER yazma kontrolü korunuyor.
+- Task detail yorum formu VIEWER için gizlendi. Yorum silme aksiyonu yalnız yorum sahibi veya OWNER/ADMIN için gösteriliyor; backend izin kontrolü nihai güvenlik sınırı olmaya devam ediyor.
+- Modal, task değiştirildiğinde önceki task'ın yorumlarını temizliyor ve bulunamayan/erişilemeyen task için ayrı durum gösteriyor.
+
+**Doğrulama notu:** Bu değişiklikler `fix/go-live-blockers` branch'indedir; CI sonucu bekleniyor. UI'daki gizleme test edilmiş backend yetkisinin yerine geçmez. Controller integration testleri ve gerçek Web E2E senaryosu ayrıca gereklidir.
