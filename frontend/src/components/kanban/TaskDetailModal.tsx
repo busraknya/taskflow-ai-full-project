@@ -131,14 +131,14 @@ export function TaskDetailModal({ taskId, workspaceId, onClose, onTaskUpdated }:
               <div className="p-3 bg-zinc-900 border border-zinc-800 rounded-lg space-y-2">
                 <div className="flex justify-between items-center">
                   <span className="text-[10px] uppercase font-mono text-zinc-400 flex items-center gap-1">
-                    <AlertCircle size={12} /> AI Risk Assessment
+                    <AlertCircle size={12} /> Experimental Risk Classification
                   </span>
                   <span className={`text-[10px] uppercase px-2 py-0.5 rounded font-mono ${
                     task.riskAssessments[0].riskLevel === 'HIGH' ? 'bg-red-950 text-red-400 border border-red-900' :
                     task.riskAssessments[0].riskLevel === 'MEDIUM' ? 'bg-amber-950 text-amber-400 border border-amber-900' :
                     'bg-zinc-800 text-zinc-400'
                   }`}>
-                    {task.riskAssessments[0].riskLevel} ({Math.round(task.riskAssessments[0].riskScore * 100)}%)
+                    {task.riskAssessments[0].riskLevel === 'UNAVAILABLE' ? 'Prediction unavailable' : task.riskAssessments[0].riskLevel}
                   </span>
                 </div>
                 {task.riskAssessments[0].factors?.length > 0 && (
