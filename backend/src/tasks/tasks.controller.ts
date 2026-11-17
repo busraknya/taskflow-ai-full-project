@@ -46,6 +46,14 @@ export class TasksController {
     return this.tasksService.findAllInWorkspace(workspaceId, projectId);
   }
 
+  @Get(':taskId')
+  async findOne(
+    @Param('workspaceId') workspaceId: string,
+    @Param('taskId') taskId: string,
+  ) {
+    return this.tasksService.findOneInWorkspace(workspaceId, taskId);
+  }
+
   @Patch(':taskId')
   async update(
     @Param('workspaceId') workspaceId: string,
