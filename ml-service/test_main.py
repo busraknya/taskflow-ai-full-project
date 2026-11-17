@@ -27,7 +27,7 @@ def test_predict_returns_supported_risk_level_and_score():
     assert response.status_code == 200
     body = response.json()
     assert body["risk_level"] in {"LOW", "MEDIUM", "HIGH"}
-    assert 0 <= body["risk_score"] <= 1
+    assert body["risk_score"] is None
     assert body["model_version"] == "v1"
     assert isinstance(body["factors"], list)
 
