@@ -1,6 +1,5 @@
-import { Controller, Get, Post, Delete, Body, Param, UseGuards, Req } from '@nestjs/common';
+import { Controller, Get, Post, Delete, Body, Param, UseGuards, Req, ForbiddenException } from '@nestjs/common';
 import { CommentsService } from './comments.service';
-import { ForbiddenException } from '@nestjs/common';
 import { WorkspaceRole } from '@prisma/client';
 import { CreateCommentDto } from './dto/create-comment.dto';
 import { AuthGuard } from '@nestjs/passport';
