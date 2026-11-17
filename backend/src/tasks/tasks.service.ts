@@ -90,6 +90,7 @@ export class TasksService {
         taskId: task.id,
         assigneeId: task.assigneeId,
         workspaceId,
+        taskVersion: task.version,
       });
     }
 
@@ -218,6 +219,7 @@ export class TasksService {
         taskId: updatedTask.id,
         assigneeId: updatedTask.assigneeId,
         workspaceId,
+        taskVersion: updatedTask.version,
       });
     }
 
