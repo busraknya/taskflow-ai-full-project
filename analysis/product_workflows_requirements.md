@@ -411,3 +411,117 @@ Her akışta şu sıra izlenir:
 - Bu belge ürünün **ne yapması gerektiğini**; go_live.md ise ürünün **yayına hazır olup olmadığını ve kanıtları** takip eder.
 
 **Sonraki adım:** Akışları kaynak kod bazında derinleştirip her gereksinime dosya/endpoint/test referansı eklemek; açık ürün kararlarını netleştirmek; sonra bu gereksinimlerden öncelikli test ve geliştirme işleri çıkarmak.
+
+
+## 13. İlk kaynak kod çapraz kontrolü — 17 Kasım 2026
+
+Bu bölüm, ilk akış taslağının mevcut branch'teki gerçek kaynak kodla karşılaştırılmasından çıkan bulgulardır. Bunlar otomatik testle doğrulanmış sonuçlar değildir; ilgili dosyalar incelenmiştir.
+
+### 13.1 Üyelik daveti gerçekte kabul akışı değil
+
+İncelenen kaynak: `backend/src/workspaces/workspaces.service.ts`, `backend/src/workspaces/workspaces.controller.ts`.
+
+- Davet edilen kullanıcının sistemde önceden kayıtlı olması gerekiyor.
+- Davet endpoint'i üyeliği doğrudan `ACTIVE` olarak oluşturuyor.
+- Davet token'ı, davet süresi, kabul/ret ve iptal durum makinesi görünmüyor.
+- Bu nedenle WF-03'teki gerçek davet-kabul yolculuğu mevcut haliyle **eksik**; var olan davranış daha çok kayıtlı kullanıcıyı doğrudan workspace'e eklemek.
+
+**Gereksinim etkisi:** MEM-01 ve MEM-06 henüz karşılanmış değil. Ürün kararı: davetli kişi kayıtlı değilse ne olacak? İlk sürümde davet linkiyle kayıt + kabul mü, yoksa yalnız mevcut kullanıcıya ekleme mi?
+
+### 13.2 Workspace rolü ve Web arayüzü aynı davranışı sunmuyor
+
+İncelenen kaynak: `frontend/src/components/layout/Navbar.tsx`, `frontend/src/app/w/[workspaceSlug]/page.tsx`, `backend/src/tasks/tasks.controller.ts`, `backend/src/projects/projects.service.ts`.
+
+- Backend task create/update için VIEWER rolünü reddediyor.
+- Navbar'daki **New Task** butonu VIEWER için gizlenmiyor; kullanıcı butona basıp backend'den 403 alabilir.
+- Yeni proje butonu OWNER/ADMIN için gösteriliyor; backend de proje oluşturmayı OWNER/ADMIN ile sınırlandırıyor.
+- Bu yüzden task yazma yetkisi UI ile backend arasında tutarlı değil.
+
+**Gereksinim etkisi:** AUTHZ-03 backend tarafında uygulanmış görünse de UX/role-based UI kabul kriteri tamamlanmamış. UI kontrolü güvenlik sınırı değildir; backend kontrolü korunmalı.
+
+### 13.3 Görev detay ekranı ve yorum akışı
+
+İncelenen kaynak: `frontend/src/components/kanban/TaskDetailModal.tsx`, `backend/src/comments/comments.service.ts`, `backend/src/comments/comments.controller.ts`.
+
+- Task detail modal tek görev endpoint'i çağırmak yerine workspace task listesini indirip taskId ile istemci tarafında arıyor.
+- Yorum listeleme ve oluşturma task'ın workspace'e ait olduğunu kontrol ediyor.
+- Yorum silme yalnız yorum yazarı veya OWNER/ADMIN için izinli; soft delete uygulanıyor.
+- UI silme butonunu her yorum için herkese gösteriyor; backend reddetse de kullanıcı gereksiz hata deneyimi yaşayabilir.
+- Yorum oluşturma için ayrıca VIEWER yazma politikası görünmüyor. WorkspaceMemberGuard tek başına VIEWER'ın yorum yazmasını engelliyor mu, guard/role policy üzerinden ayrıca doğrulanmalı.
+
+**Gereksinim etkisi:** TASK-07 tek görev detay endpoint'i ihtiyacını destekliyor. Yorum izin matrisi AUTHZ-03 kapsamına dahil edilmeli.
+
+### 13.4 ML tahmininin kullanıcıya sunumu kritik bir tutarsızlık taşıyor
+
+İncelenen kaynak: `ml-service/train.py`, `ml-service/MODEL_CARD.md`, `ml-service/main.py`, `backend/src/ai/ai.service.ts`, `frontend/src/components/kanban/TaskDetailModal.tsx`.
+
+- Model yalnızca altı elle yazılmış sentetik örnekle eğitilmiş.
+- Model card bunun deneysel olduğunu, gerçek dünya doğrulaması ve kalibrasyon bulunmadığını açıkça belirtiyor.
+- API sınıf tahmininden sonra 0.20/0.50/0.85 sabit değerleri risk_score olarak döndürüyor.
+- Task detail UI bu değeri 100 ile çarpıp yüzde işaretiyle gösteriyor (ör. HIGH için 85%). Bu gerçek gecikme olasılığı değildir ve kullanıcıyı yanıltabilir.
+
+**P0 ürün/güven gereksinimi:** Gerçek olasılık modeli ve kalibrasyon doğrulanana kadar arayüz bu değeri yüzde/olasılık olarak sunmamalı. Deneysel risk sınıfı gösterilecekse bunun deneysel sınıflandırma olduğu açıkça belirtilmeli ve yüzde işareti kaldırılmalı.
+
+### 13.5 ML feature extraction tenant sınırı ve veri kalitesi
+
+İncelenen kaynak: `backend/src/ai/risk-feature.service.ts`.
+
+- Assignee aktif görev sayısı sorgusunda `workspaceId` filtresi yok; kişinin diğer workspace'lerdeki görevleri de sayılabilir. Bu hem tahmini bozar hem workspace'ler arası aktivite bilgisini feature'a taşır.
+- Yorumlar `include: { comments: true }` ile tümü çekiliyor; silinmiş yorumlar filtrelenmiyor ve yalnız count için tüm satırlar belleğe alınıyor.
+- Assignee aktif görev sayısı ve comment count için dar kapsamlı count sorguları daha uygun.
+- Due date yoksa 7 gün varsayılıyor; bu değer ürün/ML kararı olarak gerekçelendirilmeli, sessiz varsayım olmamalı.
+
+**Gereksinim etkisi:** ML feature'ları workspace kapsamlı ve tutarlı tanımlanmalı; deletedAt filtreleri ve feature contract testleri eklenmeli. Assignee workload özelliğinin tanımı (yalnız bu workspace mi, tüm workspace'ler mi?) açık karara bağlanmalı. Multi-tenant ürün güvenliği nedeniyle varsayılan öneri workspace kapsamıdır.
+
+### 13.6 ML isteği ana task isteğinin içinde bekleniyor
+
+İncelenen kaynak: `backend/src/tasks/tasks.service.ts`, `backend/src/ai/ai.service.ts`.
+
+- Task create/update akışı `assessAndSaveRisk` çağrısını await ediyor.
+- AI servisinde HTTP timeout açıkça tanımlı görünmüyor.
+- ML erişilemezse servis UNAVAILABLE döndürüyor; task kaydı başarısız olmuyor ancak tahmin kaydı yine de oluşturuluyor.
+- Bu davranış ürün açısından kısmi başarıya yakın; fakat API yanıt süresi ML servisine bağlı kalıyor.
+
+**Gereksinim etkisi:** ML çağrısı için timeout, retry/idempotency, PENDING/UNAVAILABLE durumu ve asenkron işleme kararı netleştirilmeli. Task CRUD kullanılabilirliği tahmin servisi sağlığına bağlanmamalı.
+
+### 13.7 Atama bildirimi tekrarlanabilir ve HTML güvenliği eksik
+
+İncelenen kaynak: `backend/src/tasks/tasks.service.ts`, `backend/src/tasks/events/task-assigned.listener.ts`, `backend/src/notifications/email.processor.ts`, `backend/src/notifications/notifications.module.ts`.
+
+- Listener TasksModule provider'ı olarak kayıtlı; email queue TasksModule ve NotificationsModule içinde register ediliyor; processor NotificationsModule provider'ı olarak mevcut. İlk incelemede modül bağlantısı bulunuyor.
+- Task update sırasında assigneeId mevcut olduğu sürece `task.assigned` olayı emit ediliyor; assignee değişmemiş olsa da aynı kullanıcıya tekrar e-posta kuyruğa girebilir.
+- Listener hataları yakalayıp logluyor; event/outbox garantisi bulunmuyor ve hatalar üst akışa taşınmıyor.
+- EmailProcessor HTML gövdesine kullanıcı adı ve task title değerlerini escape etmeden yerleştiriyor.
+- Job kimliği/idempotency, retry sınırları ve başarısız işlerin operasyonel yönetimi ayrıca tanımlanmalı.
+
+**Gereksinim etkisi:** NOTIF-01, NOTIF-03, NOTIF-05 ve NOTIF-07 P1/P0 kapsamına alınmalı. Bildirim yalnızca yeni atama veya gerçek assignee değişiminde tetiklenmeli.
+
+### 13.8 Proje silme ve görev oluşturma ilişkisi
+
+İncelenen kaynak: `backend/src/projects/projects.service.ts`, `backend/src/tasks/tasks.service.ts`, `backend/prisma/schema.prisma`.
+
+- Proje silme fiziksel silme yerine `deletedAt` ile soft delete yapıyor.
+- Task create içindeki proje sorgusu workspaceId ve id kontrol ediyor ancak deletedAt null şartı görünmüyor.
+- Bu nedenle soft-deleted projeye yeni task oluşturulması mümkün olabilir.
+- Task relation'ında project silinmesi için Restrict davranışı bulunuyor; mevcut soft-delete davranışıyla ürün politikası netleştirilmeli.
+
+**Gereksinim etkisi:** TASK-01/PROJ-03 için task create sırasında projenin aktif olması zorunlu olmalı; arşivli/silinmiş proje davranışı ayrı tanımlanmalı.
+
+### 13.9 Mevcut test engeli ve düzeltme
+
+Önceki CI run `43923614882` içinde backend TypeScript kontrolü başarılıydı; Jest'te yalnız TasksService test dosyası, `@nestjs/axios` ESM modülünün CommonJS Jest ortamında yüklenmesi nedeniyle başlamıyordu. Test, gerçek HTTP transport'u kullanmadığı için AI servis modülü testte mock'landı ve AI tipi type-only import'a çevrildi.
+
+- Düzeltme commit'i: `67fd27809462440edc91b0d8b0b74ee97a9263e7`
+- Yeni CI run: [44031495018](https://github.com/busraknya/taskflow-ai-full-project/actions/runs/44031495018)
+- Bu run incelendiğinde ML testi başarılıydı; backend, Android, frontend ve Compose işleri hâlâ çalışıyordu. Sonuç henüz yeşil kabul edilmemeli.
+
+### Güncellenmiş ilk öncelik sırası
+
+1. ML yüzde gösterimini güvenli hale getir; feature extraction workspace sınırını düzelt.
+2. Task create sırasında soft-deleted proje kontrolünü ekle.
+3. Task update'te yalnız gerçek assignee değişiminde atama bildirimi üret; e-posta HTML escape et.
+4. VIEWER için Web task aksiyonunu gizle; yorum yazma rol politikasını netleştir.
+5. TaskService unit test Jest izolasyonu düzeltmesini CI'da doğrula.
+6. Davet kabul akışının ürün kapsamını kararlaştır; ardından durum makinesi tasarla.
+7. ML task CRUD senkron bağımlılığını timeout/asenkron işleme ile azalt.
+8. E2E testleri gerçek DB/Redis/ML/Frontend senaryolarıyla tamamla.
