@@ -42,7 +42,7 @@ export class TasksService {
 
   async create(workspaceId: string, userId: string, dto: CreateTaskDto) {
     const project = await this.prisma.project.findFirst({
-      where: { id: dto.projectId, workspaceId },
+      where: { id: dto.projectId, workspaceId, deletedAt: null },
     });
 
     if (!project) {
@@ -213,7 +213,7 @@ export class TasksService {
       metadata: { title: updatedTask.title, status: updatedTask.status, version: updatedTask.version },
     });
 
-    if (updatedTask.assigneeId) {
+    if (updatedTask.assigneeId && updatedTask.assigneeId !== task.assigneeId) {
       this.eventEmitter.emit('task.assigned', {
         taskId: updatedTask.id,
         assigneeId: updatedTask.assigneeId,
