@@ -484,3 +484,37 @@ Bu bölüm, yukarıdaki ilk denetim raporunu silmez; branch üzerinde sonradan y
 - Önceki Android hesap izolasyonu commit'i `dcbb25428cb0682fbc4698668691a09c440e12ab` için CI run #95 (`43918642822`) beş işin tamamında başarılı oldu: Backend, Frontend, ML, Android ve Docker. [Run #95](https://github.com/busraknya/taskflow-ai-full-project/actions/runs/43918642822)
 - Bu bölümdeki yeni backend/ML değişikliklerinin CI doğrulaması henüz tamamlanmış sayılmıyor. Ara commit'lere ait Actions çalışmaları yeni push'larla iptal edildi; son branch commit'i: `ebfb5bf2d6555381a613e0a0dd36e6c23f16d8aa`. Bu commit için yeni CI sonucunu bekle.
 - **GO/NO-GO: NO-GO devam ediyor.** Backend CAS ve ML startup düzeltmeleri, gerçek deployment/E2E, ML model validasyonu, Android sync Worker HTTP senaryoları ve release/backup doğrulamasının yerine geçmez.
+
+
+---
+
+## 17 Kasım 2026 — Son branch denetimi ve devam eden düzeltmeler
+
+> Bu bölüm önceki denetim tarihçesini silmez; 17 Kasım'daki kaynak incelemesi ve branch değişikliklerinin güncel notudur.
+
+### Kodda doğrulanan ek bulgular
+- RiskFeatureService assignee aktif görev sayımını workspaceId ile sınırlandırıyor ve yorum sayısını yalnız deletedAt:null kayıtlarından count sorgusuyla alıyor.
+- Task create aktif olmayan/silinmiş proje ilişkisini reddediyor.
+- Task update yalnız assignee gerçekten değiştiğinde assignment event yayımlıyor.
+- ML risk paneli sabit 0.20/0.50/0.85 değerlerini yüzde gibi göstermiyor; deneysel risk sınıfı olarak etiketleniyor.
+- E-posta HTML gövdesinde kullanıcı adı ve görev başlığı escape ediliyor; escape helper için unit test eklendi.
+- Atama e-posta kuyruğuna taskId + taskVersion bazlı jobId veriliyor; aynı task version event'inin yinelenmesi engelleniyor. Bu tek başına DB transaction ile event/outbox garantisi sağlamaz.
+- Workspace-scoped task detail GET endpoint'i eklendi; silinmiş/başka workspace task'ı 404 döner.
+- Web task detail modal artık bütün task listesini indirip task aramak yerine tekil endpoint kullanıyor.
+- VIEWER için Kanban durum ilerletme, task create ve comment create UI aksiyonları gizlendi. Backend write guard'ları korunuyor; yorum silme UI yalnız yazar veya OWNER/ADMIN için gösteriliyor.
+
+### Henüz kanıtlanmamış / açık kalanlar
+- 17 Kasım'daki en son commitler için CI tamamlanmış ve yeşil olarak doğrulanmadı.
+- Backend genel lint borcu hâlâ ayrı bir kalite işi; yalnızca ilgili yeni dosyalarda hedefli lint/format uygulanmalı.
+- Atama event'i halen in-process EventEmitter üzerinden; DB commit sonrası process crash event kaybına yol açabilir. Transactional outbox veya eşdeğer dayanıklı event aktarımı gerekir.
+- Email processor retry davranışı BullMQ yapılandırmasına bağlı; queue attempts/backoff/retention ve failed job operasyonu gerçek Redis ile test edilmedi.
+- Task CRUD halen ML servisini senkron await ediyor; timeout ve asenkron tahmin durum makinesi tamamlanmadı.
+- Task detail endpoint'i ve VIEWER akışları için backend controller integration + gerçek Web E2E testleri eksik.
+- Üye daveti henüz süreli token ve kabul durum makinesi değil; kayıtlı kullanıcıyı doğrudan ACTIVE üyeliğe ekleme davranışı mevcut.
+- ML veri kümesi altı sentetik örnek; gerçek gecikme olasılığı, calibration veya üretim doğruluğu iddiası yok.
+
+### Güncel GO/NO-GO
+**NO-GO devam ediyor.** Kod düzeltmeleri ve unit testler ürünün üretim hazır olduğunu kanıtlamaz. CI, gerçek DB/Redis/ML entegrasyonu, rol bazlı E2E, temiz Docker kurulumu, backup/restore ve alıcı dokümantasyonu tamamlanmadan yayın/satış kararı verilmemeli.
+
+### Devam eden branch
+fix/go-live-blockers — main üzerinde yalnız ürün gereksinim belgesi güncellendi. Kod değişiklikleri bu branch'te tutuluyor ve merge edilmedi.
