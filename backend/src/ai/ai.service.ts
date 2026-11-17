@@ -5,7 +5,7 @@ import { ConfigService } from '@nestjs/config';
 
 export interface RiskPredictionResult {
   risk_level: 'LOW' | 'MEDIUM' | 'HIGH' | 'UNAVAILABLE';
-  risk_score: number;
+  risk_score: number | null;
   model_version: string;
   factors: Array<{ feature: string; explanation: string }>;
 }
@@ -40,7 +40,7 @@ export class AiService {
       this.logger.error('Failed to communicate with ML service, falling back to UNAVAILABLE', error);
       return {
         risk_level: 'UNAVAILABLE',
-        risk_score: 0,
+        risk_score: null,
         model_version: 'unknown',
         factors: [],
       };
