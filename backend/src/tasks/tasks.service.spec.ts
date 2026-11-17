@@ -43,6 +43,44 @@ describe('TasksService atomic version updates', () => {
     audit.log.mockResolvedValue(undefined);
   });
 
+  it('loads task details only within the requested workspace', async () => {
+    const task = {
+      ...existingTask,
+      assignee: null,
+      riskAssessments: [],
+    };
+    prisma.task.findFirst.mockResolvedValue(task);
+
+    await expect(
+      service.findOneInWorkspace('workspace-1', 'task-1'),
+    ).resolves.toEqual(task);
+
+    expect(prisma.task.findFirst).toHaveBeenCalledWith({
+      where: {
+        id: 'task-1',
+        workspaceId: 'workspace-1',
+        deletedAt: null,
+      },
+      include: {
+        assignee: {
+          select: { id: true, fullName: true, avatarUrl: true },
+        },
+        riskAssessments: {
+          orderBy: { computedAt: 'desc' },
+          take: 1,
+        },
+      },
+    });
+  });
+
+  it('returns not found when the task is outside the workspace or deleted', async () => {
+    prisma.task.findFirst.mockResolvedValue(null);
+
+    await expect(
+      service.findOneInWorkspace('workspace-1', 'task-2'),
+    ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
   it('uses a single conditional database update to compare and increment the version', async () => {
     const updatedTask = {
       ...existingTask,
