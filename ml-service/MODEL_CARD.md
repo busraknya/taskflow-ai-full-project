@@ -21,7 +21,7 @@ This model is an experimental demonstration of task-delay risk classification in
 
 Version 1 is trained on exactly six hand-authored synthetic examples in `train.py`. They are illustrative examples, not observations of real task outcomes. There is no representative holdout set, cross-validation, measured accuracy, calibration analysis, fairness analysis, or drift evaluation.
 
-The service currently maps the predicted class to fixed display values (0.2, 0.5, 0.85). These values are **not** probabilities and must not be described as confidence or likelihood percentages. The explanatory factors returned by the API are simple threshold-based hints and are not a complete explanation of the classifier.
+The service does not emit a numeric risk score (`risk_score` is null). A previous implementation mapped predicted classes to fixed values (0.2, 0.5, 0.85); those values were not probabilities and have been removed. Do not display a percentage or likelihood until a model is trained and calibrated on representative outcome data. The explanatory factors returned by the API are simple threshold-based hints and are not a complete explanation of the classifier.
 
 ## Operational requirements
 
