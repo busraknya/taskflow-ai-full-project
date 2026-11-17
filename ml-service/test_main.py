@@ -14,7 +14,7 @@ def test_health_reports_loaded_model():
     assert response.json()["model_loaded"] is True
 
 
-def test_predict_returns_supported_risk_level_and_score():
+def test_predict_returns_experimental_classification_without_probability():
     response = client.post(
         "/predict",
         json={
