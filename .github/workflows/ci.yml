@@ -83,8 +83,8 @@ jobs:
 
   android:
     name: Android unit tests and debug build
-    # Pin the emulator job to the stable runner image; ubuntu-latest moved to 26.04,
-    # where ADB repeatedly reports the API 35 emulator as offline.
+    # Use a stable runner and the lightweight Android Test Device (ATD) image.
+    # The full API 35 image booted but its ADB shell became unresponsive in CI.
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -103,8 +103,13 @@ jobs:
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 35
+          target: google_atd
           arch: x86_64
-          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim
+          cores: 2
+          ram-size: 2048M
+          heap-size: 512M
+          emulator-boot-timeout: 600
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -wipe-data -noaudio -no-boot-anim
           disable-animations: true
           script: cd android && ./gradlew connectedDebugAndroidTest
 
