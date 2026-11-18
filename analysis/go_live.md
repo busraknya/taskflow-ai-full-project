@@ -1,3 +1,16 @@
+> **Güncel doğrulama — 18 Kasım 2026:** Aşağıdaki ilk denetim bölümleri tarihsel başlangıç durumunu ve o tarihteki bulguları korur. Branch'te yapılan sonraki düzeltmeler için en güncel kanıt:
+> - Branch: `fix/go-live-blockers`
+> - Doğrulanan commit: `b7063ad86e7a0ccb744ed46bd1f50716abcccd6e`
+> - GitHub Actions run: [#44262570835](https://github.com/busraknya/taskflow-ai-full-project/actions/runs/44262570835)
+> - **5/5 job başarılı:** Android unit tests + debug build + instrumented Room queue tests; frontend lint/typecheck/build/audit; Docker Compose validation + tüm servis image build'leri; ML pytest + pip-audit; backend TypeScript/Jest/build/audit.
+> - Android instrumented test adımı artık `google_atd` Android Test Device imajıyla başarılı. Önceki `device offline`, emulator shell timeout ve `Unknown API Level` hataları test assertion hatası değil, CI emulator/ADB ortamı sorunlarıydı.
+> - Backend'in yeni authorization testleri için lint blocking. Mevcut backend lint baseline non-blocking kaldığından tüm backend lint borcu kapanmış değildir.
+> - Bu run test/build/image build kanıtıdır; temiz makinede Compose runtime, migration, gerçek Web/Android kullanıcı yolculukları, release signing, production deployment, backup/restore veya ML model kalitesini kanıtlamaz.
+>
+> **Güncel karar: NO-GO devam ediyor.** CI yeşil olsa da ürün kabul kriterleri ve operasyonel kontroller tamamlanmış değildir. Bu belgedeki “ilk denetim” bölümlerini güncel branch durumuyla karıştırmayın; bir bulgu branch'te düzeltildiyse aşağıdaki güncel doğrulama ve ilgili commit/test kanıtı esas alınmalıdır.
+>
+> ---
+>
 > **Durum güncellemesi — 16 Kasım 2026:** İlk denetim bulguları aşağıda, denetlenen başlangıç commit'i main / 31e8554faef5b0fa6a2c3418966226ae94efc9a1 esas alınarak korunmuştur. Düzeltmeler fix/go-live-blockers dalında yapılmıştır; bu dal henüz main dalına birleştirilmemiştir.
 >
 > **CI doğrulaması — run #69, commit ae95093bd70136c2f5f39fe81a096a8dc9ccad33:**
