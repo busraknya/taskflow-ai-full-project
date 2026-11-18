@@ -586,3 +586,49 @@ Gerçek gecikme olasılığı hedefleniyorsa model yalnızca mevcut task snapsho
 - **Ürün davranışı:** Yeterli veri ve kalibrasyon yoksa skor `null` kalır; deneysel sınıf etiketi olasılık gibi sunulmaz. Tahmin başarısızlığı task oluşturma/güncelleme işlemini engellemez.
 
 **Önerilen teknik önkoşul:** Önce status transition history veya `completedAt` alanı için migration ve task lifecycle testleri; sonra immutable feature snapshot + outcome dataset export; en son model eğitimi ve calibration. Bu sıra izlenmeden `predict_proba()` eklemek tek başına gerçek olasılık sağlamaz.
+
+
+## 13.16 Güncel çapraz kontrol — 18 Kasım 2026
+
+Bu ek, `fix/go-live-blockers` dalındaki kaynak kodun yeniden okunmasıyla hazırlanmıştır. Bu bölüm ürün gereksinimlerini ana dalda tutar; kaynak kod değişikliklerinin main'e merge edildiği anlamına gelmez. CI kanıtı: branch commit `b7063ad86e7a0ccb744ed46bd1f50716abcccd6e`, Actions run [#44262570835](https://github.com/busraknya/taskflow-ai-full-project/actions/runs/44262570835), 5/5 job başarılı.
+
+### Android offline sync — kısmi ilerleme
+
+Güncel kodda `TaskViewModel.queueStatusChange` pending status değişikliğini Room'a yazar, `ownerUserId` ile hesap bazında ayırır ve `SyncScheduler` unique WorkManager işi başlatır. `SyncWorker` yalnızca mevcut oturum kullanıcısının kuyruğunu işler; Authorization header ile API'ye PATCH gönderir; 2xx sonrası siler. 401 BLOCKED_AUTH, 403 FAILED, 409 CONFLICT, 408/429/5xx ve exception retry olarak ayrılır. Login sonrası aynı kullanıcıya ait BLOCKED_AUTH kayıtları yeniden kuyruğa alınır.
+
+**Durum:** OFF hesap izolasyonu ve temel HTTP işleme kodda mevcut; Worker için 2xx/401/403/409/429/5xx/network/malformed payload test matrisi ve gerçek backend entegrasyon testi henüz yeterli kanıtlanmadı. Android refresh token akışı bulunmuyor; 401 sonrası yeniden giriş gerekebilir. Logout yerel session'ı temizliyor ancak backend logout/revoke çağrısı yapmıyor.
+
+### Backend auth/session — açık P0
+
+- Refresh token doğrulama, aktif tokenları listeleme, eşleşen tokenı revoke etme ve yeni token üretme ayrı DB işlemleri. Atomik compare-and-swap/transaction yok; aynı refresh token ile eşzamanlı istekler yarışabilir.
+- `refreshTokens` catch bloğu tüm hataları `INVALID_REFRESH_TOKEN` olarak dönüştürüyor; `TOKEN_THEFT_DETECTED` ayrımı kayboluyor.
+- Parola değişimi `passwordHash` güncelliyor; aktif refresh tokenları revoke etmiyor.
+- Android AuthApiService yalnız login içeriyor; refresh/logout ve cookie yönetimi bulunmuyor. Backend refresh tokenı HttpOnly cookie olarak sunuyor; Android istemcinin bu cookie akışına katıldığına dair kod yok.
+
+**Kabul kriterleri:** Refresh rotation transaction/CAS; paralel refresh testi (tek başarılı rotasyon); token reuse davranışı ve güvenli audit; parola değişiminde tüm oturumların revoke edilmesi; Web ve Android logout/refresh davranışının açık ve test edilmiş sözleşmesi.
+
+### RBAC ve üyelik
+
+- TasksController VIEWER'ın task create/update işlemlerini; CommentsController VIEWER'ın comment create işlemini engelliyor.
+- ProjectsService create/delete yalnız OWNER/ADMIN kabul ediyor.
+- WorkspacesService ADMIN'in OWNER veya ADMIN davet etmesini engelliyor; son OWNER'ın rolünü düşürme/üyeliğini silme kontrolü var.
+- MEMBER'ın task create/update yapabilmesi mevcut kod davranışı. Bu ürün politikası açık bir RBAC matrisiyle kesinleştirilmeli.
+- Üye daveti hâlâ kayıtlı kullanıcıya doğrudan ACTIVE üyelik oluşturuyor; davet tokenı, expiry, accept/reject/revoke state machine yok. `workspace.member_invited` event'inin listener'ı görünmüyor.
+
+### Notifications, audit ve yan etkiler
+
+NotificationsModule AppModule'a dahil; TaskAssignedListener TasksModule provider'ı; email queue ve EmailProcessor kodda bağlı. E-posta HTML alanları escape ediliyor. Ancak queue add çağrısında attempts/backoff/retention ayarı görünmüyor ve SMTP gerçek teslimat testi yok. AuditService DB hatasını catch edip yuttuğu için domain write başarılıyken audit kaydı kaybolabilir. Transactional outbox bulunmuyor.
+
+### Task, ML ve API davranışı
+
+- Task version update tek koşullu `updateMany` compare-and-swap kullanıyor; unit test başarı ve yarışta 409 yolunu kapsıyor. Gerçek PostgreSQL concurrency integration testi yine gerekli.
+- Task create/update ML tahminini senkron bekliyor. AiService HTTP timeout tanımlamıyor; servis yanıt vermezse task API uzun süre bekleyebilir.
+- ML endpoint sabit risk_score üretmiyor; `risk_score: null`. Altı sentetik örnekli GradientBoosting sınıflandırıcısı yalnız deneysel LOW/MEDIUM/HIGH etiketi üretiyor. Model card gerçek dünya doğruluğu iddiası olmadığını belirtiyor.
+- Feature extraction'da due date olmayan görev için 7 gün varsayımı kullanılıyor; bu ürün/ML semantiği olarak açıkça onaylanmalı.
+- Task listelerinde pagination görünmüyor. Schema'da archivedAt/deletedAt var; TasksController'da archive/delete/restore endpoint'i görünmüyor.
+
+### Test kanıtı ve takip
+
+CI run #44262570835 tüm beş job'ı geçmiştir (Android unit + instrumented Room queue; frontend lint/typecheck/build/audit; Docker Compose validation + image build; ML pytest + pip-audit; backend TypeScript/Jest/build/audit). Backend'in mevcut lint baseline'ı non-blocking'dir. Bu sonuçlar build/test kanıtıdır; yukarıdaki E2E, gerçek SMTP, gerçek Android refresh ve production runtime kabul kriterlerini kapatmaz.
+
+**Sıradaki geliştirme sırası:** (1) auth/session atomikliği ve Android/Web refresh/logout sözleşmesi, (2) notification retry + audit/outbox güvenilirliği, (3) ML HTTP timeout/async scoring, (4) Android Worker fault-injection/integration testleri, (5) pagination ve task archive lifecycle.
