@@ -553,3 +553,19 @@ fix/go-live-blockers — main üzerinde yalnız ürün gereksinim belgesi günce
 ### CI durumu
 - 18 Kasım düzeltmeleri art arda commit edildiğinden bazı Actions run'ları yeni commitler tarafından iptal edildi. Son commit `36c5401f074bf0646addf9125df7c8a784877871` için CI sonucu ayrıca doğrulanmalı.
 - Backend lint borcu devam ediyor; CI lint script'i tüm backend dosyalarını taradığı için yalnız yeni dosyaları düzeltmek yeşil CI sağlamayabilir. Kalan lint hataları sınıflandırılmalı ve sistematik biçimde ele alınmalı.
+
+
+### 18 Kasım 2026 — CI run 44247578789 son inceleme
+
+Run sonucu: **FAILURE**. Başarısız tek job Android instrumented Room queue tests; backend, frontend, ML ve Docker job'ları SUCCESS.
+
+Android log incelemesi:
+- `testDebugUnitTest` ve `assembleDebug` adımları başarısız değil.
+- `connectedDebugAndroidTest` aşamasında emulator başlatılıyor; emulator boot sırasında ADB tekrar tekrar `device offline` döndürüyor ve sonunda exit code 224 ile kapanıyor.
+- Bu log, Room test assertion failure kanıtı değil; CI emulator/ADB provisioning sorunu.
+
+CI düzeltmesi:
+- Android job `ubuntu-latest` (run anında Ubuntu 26.04.1) yerine `ubuntu-24.04` olarak sabitlendi.
+- Emulator `-no-window -gpu swiftshader_indirect -noaudio -no-boot-anim` ile başlatılacak ve animasyonlar kapatılacak.
+- Commit: `1b24947888d8ab5da26fee6f90e531b55713c5cb`.
+- Bu değişiklik henüz yeniden CI ile doğrulanmadı. Android emulator testleri geçmeden Android entegrasyon testleri PASS sayılmayacak.
