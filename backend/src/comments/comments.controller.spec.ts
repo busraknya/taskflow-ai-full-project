@@ -1,7 +1,15 @@
+jest.mock('@nestjs/passport', () => ({
+  AuthGuard: () => class MockAuthGuard {},
+}));
+
+jest.mock('../workspaces/guards/workspace-member.guard', () => ({
+  WorkspaceMemberGuard: class MockWorkspaceMemberGuard {},
+}));
+
 import { ForbiddenException } from '@nestjs/common';
 import { WorkspaceRole } from '@prisma/client';
 import { CommentsController } from './comments.controller';
-import { CommentsService } from './comments.service';
+import type { CommentsService } from './comments.service';
 
 describe('CommentsController write permissions', () => {
   const commentsService = {
