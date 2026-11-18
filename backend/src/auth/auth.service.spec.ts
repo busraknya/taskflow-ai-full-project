@@ -10,6 +10,12 @@ jest.mock('bcrypt', () => ({
   hash: jest.fn(),
 }));
 
+// AuthService only needs the JwtService injection token in this unit test.
+// Avoid loading the package's ESM runtime through Jest's CommonJS transform.
+jest.mock('@nestjs/jwt', () => ({
+  JwtService: class JwtService {},
+}));
+
 describe('AuthService refresh token rotation', () => {
   const now = new Date();
   const transactionClient = {
