@@ -12,21 +12,42 @@ interface Comment {
   author: { id: string; fullName: string; avatarUrl?: string };
 }
 
+interface RiskFactor {
+  explanation: string;
+}
+
+interface TaskRiskAssessment {
+  riskLevel: string;
+  riskScore: number | null;
+  factors: RiskFactor[];
+}
+
+interface TaskDetails {
+  id: string;
+  title: string;
+  description: string | null;
+  status: string;
+  priority: number;
+  dueDate: string | null;
+  assignee: { id: string; fullName: string; avatarUrl?: string | null } | null;
+  riskAssessments: TaskRiskAssessment[];
+}
+
 interface TaskDetailModalProps {
   taskId: string | null;
   workspaceId: string;
   onClose: () => void;
-  onTaskUpdated: () => void;
   currentUserId: string | null;
   canAddComment: boolean;
   canManageAllComments: boolean;
 }
 
-export function TaskDetailModal({ taskId, workspaceId, onClose, onTaskUpdated, currentUserId, canAddComment, canManageAllComments }: TaskDetailModalProps) {
-  const [task, setTask] = useState<any>(null);
+export function TaskDetailModal({ taskId, workspaceId, onClose, currentUserId, canAddComment, canManageAllComments }: TaskDetailModalProps) {
+  const [task, setTask] = useState<TaskDetails | null>(null);
+  const [loadedTaskId, setLoadedTaskId] = useState<string | null>(null);
   const [comments, setComments] = useState<Comment[]>([]);
   const [newComment, setNewComment] = useState('');
-  const [loading, setLoading] = useState(true);
+  const loading = Boolean(taskId) && loadedTaskId !== taskId;
   const [loadError, setLoadError] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
@@ -37,28 +58,31 @@ export function TaskDetailModal({ taskId, workspaceId, onClose, onTaskUpdated, c
 
     let cancelled = false;
 
-    setLoading(true);
-    setLoadError('');
-    setTask(null);
-    setComments([]);
-    api.get<Record<string, unknown>>(`/workspaces/${workspaceId}/tasks/${taskId}`)
-      .then((res) => {
-        if (!cancelled) setTask(res.data);
-      })
-      .catch(() => {
-        if (!cancelled) setLoadError('Task details could not be loaded. It may have been deleted or you may no longer have access.');
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
+    const loadTaskDetails = async () => {
+      const [taskResult, commentsResult] = await Promise.allSettled([
+        api.get<TaskDetails>(`/workspaces/${workspaceId}/tasks/${taskId}`),
+        api.get<Comment[]>(`/workspaces/${workspaceId}/tasks/${taskId}/comments`),
+      ]);
 
-    api.get<Comment[]>(`/workspaces/${workspaceId}/tasks/${taskId}/comments`)
-      .then((res) => {
-        if (!cancelled) setComments(res.data);
-      })
-      .catch(() => {
-        if (!cancelled) console.error('Failed to load comments');
-      });
+      if (cancelled) return;
+
+      if (taskResult.status === 'fulfilled') {
+        setTask(taskResult.value.data);
+        setLoadError('');
+      } else {
+        setTask(null);
+        setLoadError(
+          'Task details could not be loaded. It may have been deleted or you may no longer have access.',
+        );
+      }
+
+      setComments(
+        commentsResult.status === 'fulfilled' ? commentsResult.value.data : [],
+      );
+      setLoadedTaskId(taskId);
+    };
+
+    void loadTaskDetails();
 
     return () => {
       cancelled = true;
@@ -150,7 +174,7 @@ export function TaskDetailModal({ taskId, workspaceId, onClose, onTaskUpdated, c
                 </div>
                 {task.riskAssessments[0].factors?.length > 0 && (
                   <ul className="text-[11px] text-zinc-400 space-y-1 pl-4 list-disc">
-                    {task.riskAssessments[0].factors.map((f: any, idx: number) => (
+                    {task.riskAssessments[0].factors.map((f, idx) => (
                       <li key={idx}>{f.explanation}</li>
                     ))}
                   </ul>
