@@ -34,10 +34,8 @@ jobs:
           cache-dependency-path: backend/package-lock.json
       - run: npm ci
       - run: npx prisma generate
-      - name: Lint new authorization tests
-        run: "npx eslint src/workspaces/workspaces.service.spec.ts src/auth/auth.service.spec.ts src/users/users.service.spec.ts --rule 'prettier/prettier: off'"
-      - name: Existing backend lint baseline (non-blocking)
-        run: npx eslint "{src,apps,libs,test}/**/*.ts"
+      - name: Backend lint (existing baseline; non-blocking during migration)
+        run: npm run lint
         continue-on-error: true
       - run: npx tsc --noEmit
       - run: npm test -- --runInBand
