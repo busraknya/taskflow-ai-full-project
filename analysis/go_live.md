@@ -569,3 +569,22 @@ CI düzeltmesi:
 - Emulator `-no-window -gpu swiftshader_indirect -noaudio -no-boot-anim` ile başlatılacak ve animasyonlar kapatılacak.
 - Commit: `1b24947888d8ab5da26fee6f90e531b55713c5cb`.
 - Bu değişiklik henüz yeniden CI ile doğrulanmadı. Android emulator testleri geçmeden Android entegrasyon testleri PASS sayılmayacak.
+
+
+### 18 Kasım 2026 — CI run 44259059256: ikinci emulator denemesi
+
+Run sonucu yine FAILURE; yalnız Android job başarısız. Backend, frontend, ML ve Docker job'ları SUCCESS.
+
+Log incelemesi:
+- Runner Ubuntu 24.04 olarak doğru seçilmiş.
+- API 35 emulator boot tamamlandı (`Emulator booted.`).
+- Ardından emulator console başlatılamadı; `ShellCommandUnresponsiveException` oluştu.
+- Gradle cihazı `Unknown API Level` olarak atladı; `No compatible devices connected` ile instrumented test başlatılamadı.
+- Unit test ve debug APK assemble adımları başarılı.
+- Bu sonuç Room test assertion hatası değil, CI emulator imajı/ADB shell erişilebilirliği sorunudur.
+
+İkinci CI denemesi düzeltmesi:
+- `google_atd` (Android Test Device) sistem imajına geçildi.
+- Emulator RAM 2048 MB / heap 512 MB, boot timeout 600 sn, `-no-snapshot -wipe-data` ile temiz başlangıç ayarlandı.
+- Commit: `a719a7577ee19afdda9fa57ef18d58f7d8489635`.
+- Henüz CI sonucu yok. Sonuç gelmeden Android instrumented test PASS denmeyecek.
