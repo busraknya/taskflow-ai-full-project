@@ -25,7 +25,7 @@ describe('AuthService refresh token rotation', () => {
       updateMany: jest.fn(),
       create: jest.fn(),
     },
-    $transaction: jest.fn(async (callback: (tx: typeof transactionClient) => unknown) =>
+    $transaction: jest.fn((callback: (tx: typeof transactionClient) => unknown) =>
       callback(transactionClient),
     ),
   };
@@ -71,15 +71,15 @@ describe('AuthService refresh token rotation', () => {
         id: 'refresh-1',
         userId: 'user-1',
         revokedAt: null,
-        expiresAt: { gt: expect.any(Date) },
+        expiresAt: { gt: expect.any(Date) as Date },
       },
-      data: { revokedAt: expect.any(Date) },
+      data: { revokedAt: expect.any(Date) as Date },
     });
     expect(transactionClient.refreshToken.create).toHaveBeenCalledWith({
       data: {
         userId: 'user-1',
         tokenHash: 'next-token-hash',
-        expiresAt: expect.any(Date),
+        expiresAt: expect.any(Date) as Date,
       },
     });
   });
