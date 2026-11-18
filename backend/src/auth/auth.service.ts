@@ -132,12 +132,13 @@ export class AuthService {
       });
     }
 
+    const matchedTokenId = matchedToken.id;
     const nextTokens = await this.createTokenPair(payload.sub, payload.email);
 
     return this.prisma.$transaction(async (tx) => {
       const rotation = await tx.refreshToken.updateMany({
         where: {
-          id: matchedToken.id,
+          id: matchedTokenId,
           userId: payload.sub,
           revokedAt: null,
           expiresAt: { gt: new Date() },
