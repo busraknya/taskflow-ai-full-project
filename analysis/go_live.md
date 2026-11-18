@@ -1,3 +1,36 @@
+> **Kaynak kod yeniden kontrolü — 18 Kasım 2026 (latest branch):**
+>
+> Bu ek, yukarıdaki tarihsel ilk denetim notlarının yerine geçmez; ancak aşağıdaki noktaları güncel branch için düzeltir:
+>
+> **Düzeltildi / artık mevcut:**
+> - Android offline status değişikliği `TaskViewModel.queueStatusChange` ile `PendingOperationEntity` olarak Room'a yazılıyor; işlem `ownerUserId` ile hesaba bağlanıyor ve `SyncScheduler` unique WorkManager işi başlatıyor.
+> - `SyncWorker` yalnızca aktif oturumun kullanıcısına ait işlemleri alıyor, açık Authorization header ile PATCH gönderiyor; 2xx sonrası kuyruğu siliyor. 401 `BLOCKED_AUTH`, 403 `FAILED`, 409 `CONFLICT`, 408/429/5xx ve exception retry olarak ayrılıyor.
+> - Android login başarılı olunca token + userId kaydediliyor ve o hesaba ait BLOCKED_AUTH işlemleri yeniden kuyruğa alınıyor. Logout yerel token/userId'yi temizliyor.
+> - Android API URL artık `BuildConfig.API_BASE_URL` üzerinden; Authorization/Cookie log header'ları redacted.
+> - Backend task version güncellemesi `updateMany` koşullu compare-and-swap kullanıyor; stale yarışta 409 dönüyor. İlgili unit testler mevcut.
+> - Task detay endpoint'i workspace kapsamıyla tek kayıt getiriyor; frontend modal bunu kullanıyor.
+> - VIEWER task create/update ve comment create işlemlerinden controller'da engelleniyor. Project create/delete OWNER/ADMIN ile sınırlandırılmış.
+> - ADMIN'in OWNER veya ADMIN rolü davet etmesi engellenmiş; son OWNER'ın rolünü düşürme/üyeliğini silme koruması mevcut.
+> - NotificationsModule AppModule'a bağlı; TaskAssignedListener TasksModule provider'ı; email queue ve EmailProcessor kod bağlantısı mevcut. HTML e-posta alanları escape ediliyor.
+> - ML API artık sahte sabit `risk_score` üretmiyor; `null` döndürüyor. Model card altı sentetik örnekle eğitildiğini ve deneysel olduğunu açıkça belirtiyor. UI bunu yüzde olasılık diye göstermiyor.
+>
+> **Hâlâ açık / test kanıtı yetersiz:**
+> - AuthService refresh rotasyonu token'ı önce okuyup sonra ayrı update ile revoke ediyor; transaction/CAS yok. Hata catch'i `TOKEN_THEFT_DETECTED` dahil tüm hataları `INVALID_REFRESH_TOKEN` olarak maskeliyor.
+> - Parola değişimi yalnız passwordHash güncelliyor; kullanıcının aktif refresh token'ları revoke edilmiyor.
+> - Android yalnız access token alıyor; AuthApiService'de refresh/logout çağrısı veya refresh-cookie yönetimi yok. Access token 15 dakika sonra expire olduğunda Android yenileme yapamıyor. Android logout yalnızca yerel tokenı siliyor; backend refresh token kayıtlarını revoke etmiyor.
+> - Android offline kuyruğunda 401 `BLOCKED_AUTH` olur; login sonrası requeue var, fakat access token yenileme mekanizması yok. Uzun süren oturumda kullanıcı tekrar login olmak zorunda kalabilir.
+> - Bildirim listener'ı ve processor bağlanmış olsa da `emailQueue.add` çağrısında attempts/backoff/retention ayarı verilmemiş; BullMQ varsayılanı ile başarısız teslimatın otomatik retry garantisi yok. Gerçek SMTP teslimatı doğrulanmadı; transporter her job'da oluşturuluyor.
+> - Workspace daveti hâlâ önceden kayıtlı kullanıcıyı doğrudan ACTIVE yapıyor; token/expiry/accept/revoke akışı yok. `workspace.member_invited` event'inin karşılayan listener'ı görünmüyor.
+> - AuditService yazma hatasını yakalayıp yutuyor; task/comment ana işlemi başarılı olsa bile audit kaydı kaybolabilir. Transactional outbox yok.
+> - Task oluşturma/güncelleme ML çağrısını senkron bekliyor; AiService HTTP timeout tanımlamıyor. ML erişilemezse UNAVAILABLE sonucu saklanabiliyor; fakat yavaş/askıda servis API yanıtını bekletebilir.
+> - Frontend'de 401 refresh mekanizması var ancak refresh token rotasyonu eşzamanlı sekmeler/istemciler açısından backend tarafında atomik değil. Login state yalnız Zustand belleğinde tutuluyor; sayfa yenilemesinde state'in nasıl geri kurulduğu ayrıca test edilmeli.
+> - Task/project listelerinde pagination görünmüyor. Task archive/delete schema alanları var fakat TasksController'da archive/delete/restore endpoint'i görünmüyor.
+> - Backend testleri task CAS ve workspace guard/rol kurallarının bazılarını kapsıyor; AuthService refresh paralelliği, parola sonrası revoke, notification retry/delivery, cross-tenant uçtan uca senaryolar ve Android Worker HTTP hata matrisi için özel test kanıtı eksik.
+>
+> **Güncel teknik öncelik önerisi:** Önce auth/session yaşam döngüsü (özellikle refresh CAS + password revoke + Android refresh/logout sözleşmesi), ardından event/audit/notification güvenilirliği ve ML timeout davranışı. Bunlar tamamlanmadan yeni UI özelliklerine geçmeyelim.
+>
+> ---
+>
 > **Güncel doğrulama — 18 Kasım 2026:** Aşağıdaki ilk denetim bölümleri tarihsel başlangıç durumunu ve o tarihteki bulguları korur. Branch'te yapılan sonraki düzeltmeler için en güncel kanıt:
 > - Branch: `fix/go-live-blockers`
 > - Doğrulanan commit: `b7063ad86e7a0ccb744ed46bd1f50716abcccd6e`
