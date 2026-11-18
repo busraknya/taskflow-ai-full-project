@@ -223,11 +223,6 @@ export default function WorkspaceDashboard() {
           canAddComment={currentUserRole !== 'VIEWER'}
           canManageAllComments={isOwnerOrAdmin}
           onClose={() => setActiveTaskId(null)}
-          onTaskUpdated={() => {
-            if (workspaceId && selectedProject) {
-              fetchTasks(workspaceId, selectedProject.id);
-            }
-          }}
         />
 
       </div>
