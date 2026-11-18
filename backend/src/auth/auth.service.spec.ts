@@ -1,19 +1,13 @@
 import { UnauthorizedException } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
-import { JwtService } from '@nestjs/jwt';
-import { ConfigService } from '@nestjs/config';
-import { PrismaService } from '../prisma/prisma.service';
+import type { JwtService } from '@nestjs/jwt';
+import type { ConfigService } from '@nestjs/config';
+import type { PrismaService } from '../prisma/prisma.service';
 import { AuthService } from './auth.service';
 
 jest.mock('bcrypt', () => ({
   compare: jest.fn(),
   hash: jest.fn(),
-}));
-
-// AuthService only needs the JwtService injection token in this unit test.
-// Avoid loading the package's ESM runtime through Jest's CommonJS transform.
-jest.mock('@nestjs/jwt', () => ({
-  JwtService: class JwtService {},
 }));
 
 describe('AuthService refresh token rotation', () => {
