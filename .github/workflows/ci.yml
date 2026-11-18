@@ -27,6 +27,8 @@ jobs:
       REDIS_PORT: 6379
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -34,7 +36,21 @@ jobs:
           cache-dependency-path: backend/package-lock.json
       - run: npm ci
       - run: npx prisma generate
-      - name: Backend lint (existing baseline; non-blocking during migration)
+      - name: Lint changed backend TypeScript files
+        env:
+          BASE_REF: ${{ github.base_ref || 'main' }}
+        run: |
+          git fetch origin "$BASE_REF" --depth=1
+          mapfile -t changed_files < <(
+            git diff --name-only --diff-filter=ACMRT "origin/$BASE_REF...HEAD" -- 'backend/**/*.ts' |
+            sed 's#^backend/##'
+          )
+          if [ "${#changed_files[@]}" -gt 0 ]; then
+            npx eslint "${changed_files[@]}"
+          else
+            echo "No changed backend TypeScript files to lint."
+          fi
+      - name: Backend lint baseline (non-blocking during migration)
         run: npm run lint
         continue-on-error: true
       - run: npx tsc --noEmit
