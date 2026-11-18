@@ -525,3 +525,31 @@ fix/go-live-blockers — main üzerinde yalnız ürün gereksinim belgesi günce
 - NestJS RiskPredictionResult alanı number | null olarak güncellendi; ML servisi erişilemediğinde de null dönüyor.
 - ML API testi risk_score değerinin null olmasını bekliyor; model card eski sabit eşlemelerin kaldırıldığını açıklıyor.
 - Bu değişiklik olasılık tahmini sağlamaz; yalnızca yanıltıcı skorun API ve DB'ye aktarılmasını önler. Gerçek olasılık modeli ve calibration hâlâ P0 kapsamındadır.
+
+
+---
+
+## 18 Kasım 2026 — CI hata analizi ve workspace üyelik akışı
+
+### CI run 44136596994 (commit ee6f622)
+- Android unit tests/debug build: PASS.
+- ML API tests: PASS.
+- Docker Compose validation/image build: PASS.
+- Backend: FAIL — yeni `comments.controller.spec.ts`, controller'ın `@nestjs/passport` ESM modülünü CommonJS Jest içinde yüklemesi nedeniyle suite başlamadı. Ayrıca lint raporu 183 error / 23 warning içeriyordu.
+- Frontend: FAIL — `TaskDetailModal` effect içinde senkron setState nedeniyle `react-hooks/set-state-in-effect`; lint toplam 1 error / 35 warning.
+
+### Düzeltmeler (branch `fix/go-live-blockers`)
+- Comment controller request tipi tanımlandı; `req.user` ve membership erişimleri artık `any` değil.
+- Comment controller unit testinde Passport AuthGuard ve WorkspaceMemberGuard test-double ile izole edildi; gerçek HTTP guard davranışı ayrı integration test gerektirir.
+- TaskDetailModal task + comments yüklemesini async effect içinde başlatıyor; yükleniyor durumu seçili taskId ile yüklenen taskId karşılaştırılarak türetiliyor. Eski task verisi yeni task seçiliyken gösterilmiyor.
+- TaskDetailModal API response tipi tanımlandı; kullanılmayan `onTaskUpdated` prop'u kaldırıldı.
+- WorkspaceMemberGuard request tipi tanımlandı; body bulunmayabileceği için `request.body?.workspaceId` kullanılıyor; kullanılmayan ForbiddenException import kaldırıldı.
+
+### Workspace daveti mevcut durum
+- Invite endpoint yalnız kayıtlı e-postaları kabul ediyor; kayıtlı kullanıcıya üyelik anında ACTIVE oluşturuluyor ve e-posta bilgilendirme olarak gönderiliyor.
+- PENDING/EXPIRED enumları var fakat token, kabul, ret, iptal ve expiration akışı yok. Bu nedenle gerçek davet kabul ürünü tamamlanmış değil.
+- Gerçek davet token/state machine P1 ürün gereksinimi olarak `analysis/product_workflows_requirements.md` içinde tanımlandı.
+
+### CI durumu
+- 18 Kasım düzeltmeleri art arda commit edildiğinden bazı Actions run'ları yeni commitler tarafından iptal edildi. Son commit `36c5401f074bf0646addf9125df7c8a784877871` için CI sonucu ayrıca doğrulanmalı.
+- Backend lint borcu devam ediyor; CI lint script'i tüm backend dosyalarını taradığı için yalnız yeni dosyaları düzeltmek yeşil CI sağlamayabilir. Kalan lint hataları sınıflandırılmalı ve sistematik biçimde ele alınmalı.
