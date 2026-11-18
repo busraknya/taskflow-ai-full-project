@@ -83,7 +83,9 @@ jobs:
 
   android:
     name: Android unit tests and debug build
-    runs-on: ubuntu-latest
+    # Pin the emulator job to the stable runner image; ubuntu-latest moved to 26.04,
+    # where ADB repeatedly reports the API 35 emulator as offline.
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -102,6 +104,8 @@ jobs:
         with:
           api-level: 35
           arch: x86_64
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim
+          disable-animations: true
           script: cd android && ./gradlew connectedDebugAndroidTest
 
   compose:
