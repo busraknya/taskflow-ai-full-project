@@ -572,3 +572,17 @@ Aşağıdaki notlar 13.3–13.8 bölümlerindeki tarihsel bulguları güncel bra
 ### 13.14 18 Kasım — doğrulama durumu
 
 18 Kasım'daki branch düzeltmeleri (yorum controller test izolasyonu, TaskDetailModal effect/lifecycle ve WorkspaceMemberGuard request typing) için CI henüz tamamlanmış kabul edilmemelidir. Sonuçlar yalnız Actions run tamamlandığında ve ilgili job logları incelendiğinde doğrulanacaktır.
+
+
+### 13.15 ML gecikme tahmini için veri ve etiket gereksinimi
+
+Gerçek gecikme olasılığı hedefleniyorsa model yalnızca mevcut task snapshot'larından eğitilemez; tahmin anındaki feature değerleri ile sonradan gerçekleşen sonuç arasında zaman ilişkisi kurulmalıdır.
+
+- **Etiket önerisi:** Task tamamlandığında `completedAt > dueDate` ise gecikmiş; `completedAt <= dueDate` ise zamanında. Due date bulunmayan task'lar bu ikili etiketten ayrı tutulmalı. Due date geçmiş ve hâlâ tamamlanmamış görevler için sağdan sansürleme/observation cutoff politikası ayrıca tanımlanmalı; bunları doğrudan completed-late ile aynı sınıfa koymak veri yanlılığı oluşturabilir.
+- **Zaman damgası:** Mevcut `Task.updatedAt` tamamlanma zamanı değildir; açıklama, atama veya diğer güncellemelerde değişebilir. Güvenilir `completedAt` veya task status transition history gerekir.
+- **Feature snapshot:** Her tahmin anında kullanılan `days_until_due`, workspace içi assignee workload, comment count, priority ve diğer feature'lar o ana ait değerleriyle saklanmalı. Sonradan oluşan yorum veya görev yükü geçmiş tahmin kaydını değiştirmemeli.
+- **Veri kalitesi:** Sentetik altı örnek yalnızca pipeline testi içindir. Gerçek model için yeterli sayıda gerçek/izinli etiketli task, workspace bazlı train/test ayrımı veya zamansal holdout, class imbalance raporu, baseline karşılaştırması, ROC-AUC/PR-AUC, Brier score ve calibration curve gerekir. Ölçümler yoksa performans iddiası yapılmaz.
+- **Tenant ve gizlilik:** Eğitim verisi workspace'ler arasında otomatik birleştirilmemeli. Veri kullanımı, saklama süresi, anonimleştirme/pseudonymization ve kullanıcıya açıklama politikası belirlenmeli. Metin içerikleri (yorum/görev açıklaması) varsayılan olarak modele taşınmamalı.
+- **Ürün davranışı:** Yeterli veri ve kalibrasyon yoksa skor `null` kalır; deneysel sınıf etiketi olasılık gibi sunulmaz. Tahmin başarısızlığı task oluşturma/güncelleme işlemini engellemez.
+
+**Önerilen teknik önkoşul:** Önce status transition history veya `completedAt` alanı için migration ve task lifecycle testleri; sonra immutable feature snapshot + outcome dataset export; en son model eğitimi ve calibration. Bu sıra izlenmeden `predict_proba()` eklemek tek başına gerçek olasılık sağlamaz.
