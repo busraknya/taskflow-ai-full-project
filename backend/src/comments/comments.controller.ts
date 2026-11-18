@@ -1,12 +1,27 @@
-import { Controller, Get, Post, Delete, Body, Param, UseGuards, Req, ForbiddenException } from '@nestjs/common';
-import { CommentsService } from './comments.service';
+import {
+  Body,
+  Controller,
+  Delete,
+  ForbiddenException,
+  Get,
+  Param,
+  Post,
+  Req,
+  UseGuards,
+} from '@nestjs/common';
 import { WorkspaceRole } from '@prisma/client';
-import { CreateCommentDto } from './dto/create-comment.dto';
 import { AuthGuard } from '@nestjs/passport';
+import { CreateCommentDto } from './dto/create-comment.dto';
+import { CommentsService } from './comments.service';
 import { WorkspaceMemberGuard } from '../workspaces/guards/workspace-member.guard';
 
+type AuthenticatedRequest = {
+  user: { id: string };
+  membership?: { role: WorkspaceRole };
+};
+
 @Controller('workspaces/:workspaceId/tasks/:taskId/comments')
-@UseGuards(AuthGuard('jwt'), WorkspaceMemberGuard) // Tenant koruması aktif!
+@UseGuards(AuthGuard('jwt'), WorkspaceMemberGuard)
 export class CommentsController {
   constructor(private readonly commentsService: CommentsService) {}
 
@@ -14,12 +29,13 @@ export class CommentsController {
   async create(
     @Param('workspaceId') workspaceId: string,
     @Param('taskId') taskId: string,
-    @Req() req: any,
+    @Req() req: AuthenticatedRequest,
     @Body() dto: CreateCommentDto,
   ) {
     if (req.membership?.role === WorkspaceRole.VIEWER) {
       throw new ForbiddenException('VIEWER rolü yorum ekleyemez.');
     }
+
     return this.commentsService.create(workspaceId, taskId, req.user.id, dto);
   }
 
@@ -36,8 +52,13 @@ export class CommentsController {
     @Param('workspaceId') workspaceId: string,
     @Param('taskId') taskId: string,
     @Param('commentId') commentId: string,
-    @Req() req: any,
+    @Req() req: AuthenticatedRequest,
   ) {
-    return this.commentsService.remove(workspaceId, taskId, req.user.id, commentId);
+    return this.commentsService.remove(
+      workspaceId,
+      taskId,
+      req.user.id,
+      commentId,
+    );
   }
 }
