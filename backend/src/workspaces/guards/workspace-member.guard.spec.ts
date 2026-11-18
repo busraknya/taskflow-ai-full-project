@@ -1,5 +1,5 @@
 import { NotFoundException, type ExecutionContext } from '@nestjs/common';
-import { PrismaService } from '../../prisma/prisma.service';
+import type { PrismaService } from '../../prisma/prisma.service';
 import { WorkspaceMemberGuard } from './workspace-member.guard';
 
 describe('WorkspaceMemberGuard', () => {
