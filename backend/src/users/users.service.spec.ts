@@ -16,7 +16,7 @@ describe('UsersService password changes', () => {
   const prisma = {
     user: { findUnique: jest.fn() },
     notificationPreference: { findMany: jest.fn(), upsert: jest.fn() },
-    $transaction: jest.fn(async (callback: (tx: typeof transactionClient) => unknown) =>
+    $transaction: jest.fn((callback: (tx: typeof transactionClient) => unknown) =>
       callback(transactionClient),
     ),
   };
@@ -51,7 +51,7 @@ describe('UsersService password changes', () => {
     });
     expect(transactionClient.refreshToken.updateMany).toHaveBeenCalledWith({
       where: { userId: 'user-1', revokedAt: null },
-      data: { revokedAt: expect.any(Date) },
+      data: { revokedAt: expect.any(Date) as Date },
     });
   });
 
