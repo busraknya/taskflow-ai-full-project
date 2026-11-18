@@ -6,6 +6,18 @@ import * as bcrypt from 'bcrypt';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 
+interface TokenPayload {
+  sub: string;
+  email: string;
+}
+
+interface TokenPair {
+  accessToken: string;
+  refreshToken: string;
+  tokenHash: string;
+  expiresAt: Date;
+}
+
 @Injectable()
 export class AuthService {
   constructor(
@@ -82,46 +94,77 @@ export class AuthService {
   }
 
   async refreshTokens(refreshToken: string) {
+    let payload: TokenPayload;
     try {
-      const secret = this.getJwtSecret();
-      const payload = this.jwtService.verify(refreshToken, { secret });
-
-      const storedTokens = await this.prisma.refreshToken.findMany({
-        where: { userId: payload.sub, revokedAt: null },
+      payload = this.jwtService.verify<TokenPayload>(refreshToken, {
+        secret: this.getJwtSecret(),
       });
+    } catch {
+      throw this.invalidRefreshToken();
+    }
 
-      let matchedTokenId: string | null = null;
-      for (const t of storedTokens) {
-        const isValid = await bcrypt.compare(refreshToken, t.tokenHash);
-        if (isValid) {
-          matchedTokenId = t.id;
-          break;
-        }
+    const storedTokens = await this.prisma.refreshToken.findMany({
+      where: { userId: payload.sub },
+    });
+
+    let matchedToken: (typeof storedTokens)[number] | null = null;
+    for (const storedToken of storedTokens) {
+      if (await bcrypt.compare(refreshToken, storedToken.tokenHash)) {
+        matchedToken = storedToken;
+        break;
       }
+    }
 
-      if (!matchedTokenId) {
-        await this.prisma.refreshToken.updateMany({
-          where: { userId: payload.sub },
-          data: { revokedAt: new Date() },
-        });
-        throw new UnauthorizedException({
-          code: 'TOKEN_THEFT_DETECTED',
-          message: 'Güvenlik ihlali tespit edildi. Lütfen tekrar giriş yapın.',
-        });
-      }
+    if (!matchedToken || matchedToken.expiresAt <= new Date()) {
+      throw this.invalidRefreshToken();
+    }
 
-      await this.prisma.refreshToken.update({
-        where: { id: matchedTokenId },
+    if (matchedToken.revokedAt) {
+      // A previously rotated token is being reused. Revoke the remaining
+      // sessions for this user, but do not treat a concurrent CAS loser as reuse.
+      await this.prisma.refreshToken.updateMany({
+        where: { userId: payload.sub, revokedAt: null },
+        data: { revokedAt: new Date() },
+      });
+      throw new UnauthorizedException({
+        code: 'TOKEN_REUSE_DETECTED',
+        message: 'Bu oturum anahtarı daha önce kullanılmış. Lütfen tekrar giriş yapın.',
+      });
+    }
+
+    const nextTokens = await this.createTokenPair(payload.sub, payload.email);
+
+    return this.prisma.$transaction(async (tx) => {
+      const rotation = await tx.refreshToken.updateMany({
+        where: {
+          id: matchedToken.id,
+          userId: payload.sub,
+          revokedAt: null,
+          expiresAt: { gt: new Date() },
+        },
         data: { revokedAt: new Date() },
       });
 
-      return this.generateTokens(payload.sub, payload.email);
-    } catch (error) {
-      throw new UnauthorizedException({
-        code: 'INVALID_REFRESH_TOKEN',
-        message: 'Oturum süresi doldu. Lütfen tekrar giriş yapın.',
+      if (rotation.count !== 1) {
+        throw new UnauthorizedException({
+          code: 'REFRESH_TOKEN_ALREADY_USED',
+          message: 'Oturum anahtarı artık geçerli değil. Lütfen tekrar giriş yapın.',
+        });
+      }
+
+      await tx.refreshToken.create({
+        data: {
+          userId: payload.sub,
+          tokenHash: nextTokens.tokenHash,
+          expiresAt: nextTokens.expiresAt,
+        },
       });
-    }
+
+      return {
+        accessToken: nextTokens.accessToken,
+        refreshToken: nextTokens.refreshToken,
+      };
+    });
   }
 
   async logout(userId: string) {
@@ -132,9 +175,15 @@ export class AuthService {
     return { message: 'Başarıyla çıkış yapıldı.' };
   }
 
-  private async generateTokens(userId: string, email: string) {
-    const secret = this.getJwtSecret(); // Artık merkezi ve hardcode'suz!
+  private invalidRefreshToken() {
+    return new UnauthorizedException({
+      code: 'INVALID_REFRESH_TOKEN',
+      message: 'Oturum süresi doldu. Lütfen tekrar giriş yapın.',
+    });
+  }
 
+  private async createTokenPair(userId: string, email: string): Promise<TokenPair> {
+    const secret = this.getJwtSecret();
     const payload = { sub: userId, email };
 
     const accessToken = this.jwtService.sign(payload, {
@@ -151,14 +200,23 @@ export class AuthService {
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + 30);
 
+    return { accessToken, refreshToken, tokenHash, expiresAt };
+  }
+
+  private async generateTokens(userId: string, email: string) {
+    const tokenPair = await this.createTokenPair(userId, email);
+
     await this.prisma.refreshToken.create({
       data: {
         userId,
-        tokenHash,
-        expiresAt,
+        tokenHash: tokenPair.tokenHash,
+        expiresAt: tokenPair.expiresAt,
       },
     });
 
-    return { accessToken, refreshToken };
+    return {
+      accessToken: tokenPair.accessToken,
+      refreshToken: tokenPair.refreshToken,
+    };
   }
 }
