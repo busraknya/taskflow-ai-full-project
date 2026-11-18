@@ -544,3 +544,31 @@ Bu bölüm, ilk akış taslağının mevcut branch'teki gerçek kaynak kodla kar
 ### 13.11 ML sayısal skorunun kaldırılması — 17 Kasım 2026 branch güncellemesi
 
 Önceki API, LOW/MEDIUM/HIGH sınıfından 0.20/0.50/0.85 sabit değerleri türetip risk_score alanında döndürüyordu. Bu değerler olasılık veya model güveni değildi. fix/go-live-blockers branch'inde bu sahte sayısal skor kaldırıldı: risk_score artık null dönüyor ve backend tipi nullable olarak tanımlandı. ML API testi de bu davranışı doğruluyor. Model yalnızca deneysel sınıflandırma üretmeye devam ediyor; gerçek gecikme olasılığı için etiketli veri, değerlendirme ve calibration çalışması hâlâ gerekli. CI henüz doğrulanmadı.
+
+
+### 13.12 18 Kasım 2026 — Önceki tespitlerin güncel kodla yeniden değerlendirilmesi
+
+Aşağıdaki notlar 13.3–13.8 bölümlerindeki tarihsel bulguları güncel branch koduna göre tamamlar; eski bulguların tarihsel kaydı silinmemiştir.
+
+- **TASK detail:** `GET /workspaces/:workspaceId/tasks/:taskId` eklendi; sorgu workspace ve `deletedAt: null` ile kapsamlanıyor. Web modal artık workspace görev listesini indirerek task aramıyor. Modal yükleme durumunu seçili task kimliği üzerinden türetiyor.
+- **Yorum izinleri:** VIEWER yorum oluşturamaz; UI formu VIEWER için gizlenir. Yorum silme UI yalnız yazar veya OWNER/ADMIN için gösterilir. Backend service/controller kontrolleri gerçek güvenlik sınırıdır; controller testi ESM bağımlılıklarını mock'layarak izole edildi.
+- **ML:** `risk_score` sabit 0.20/0.50/0.85 değerlerinden türetilmiyor; `null`. Bu nedenle UI yüzde/olasılık göstermiyor. Mevcut altı sentetik eğitim örneği gerçek dünyada tahmin başarısı kanıtlamaz.
+- **Feature extraction:** assignee aktif görev sayısı workspace ile sınırlandırıldı; yorum sayısı yalnız silinmemiş yorumları sayan count sorgusuyla alınıyor.
+- **Atama bildirimi:** task update yalnız assignee gerçekten değiştiğinde assignment event üretir. E-posta HTML alanları escape edilir; job ID task + version ile tekrarlı kuyruğa alımı azaltır. EventEmitter hâlâ transactional outbox değildir; process crash kayıp riski açık kalır.
+- **Silinmiş proje:** task create yalnız aynı workspace içindeki aktif projeyi kabul eder.
+
+### 13.13 Workspace üye daveti — gerçek ürün akışı ile mevcut davranış arasındaki fark
+
+İncelenen kaynaklar: `backend/src/workspaces/workspaces.controller.ts`, `backend/src/workspaces/workspaces.service.ts`, `backend/src/workspaces/dto/invite-member.dto.ts`, `backend/prisma/schema.prisma`, Web members sayfası.
+
+**Mevcut davranış:** OWNER/ADMIN davet endpoint'ine e-posta ve rol gönderir. E-posta sistemde kayıtlı değilse 404 döner. Kayıtlı kullanıcı varsa üyelik hemen `ACTIVE` olarak oluşturulur; davet e-postası yalnız bilgilendirme niteliğindedir. `MembershipStatus.PENDING` ve `EXPIRED` enum değerleri tanımlı olmasına rağmen davet kabul/ret durum makinesinde kullanılmıyor. Tekrarlı üyelik unique constraint nedeniyle conflict verir.
+
+**Ürün gereksinimi kararı:** Gerçek SaaS daveti için e-posta linki/token, token hash saklama, expiration, kabul/ret, davet iptali/yeniden gönderim, zaten üye/önceden davetli kullanıcı, yanlış workspace, token tekrar kullanımı ve davet rolünün kabul anındaki geçerliliği senaryoları tanımlanmalı. Davet kabul edilene kadar üyelik PENDING olmalı; workspace erişimi yalnız ACTIVE üyeliğe verilmeli. Davet linki token'ı loglara veya audit metadata'ya yazılmamalı. Kullanıcı zaten kayıtlı mı değil mi ayrıntısı gereksiz yere dışarı sızdırılmamalı.
+
+**Kabul kriterleri:** (1) yalnız OWNER/ADMIN uygun roller için davet oluşturabilir; (2) OWNER rolü normal davetle verilemez; (3) ADMIN yalnız MEMBER/VIEWER davet edebilir; (4) davet token'ı tek kullanımlık ve süreli; (5) kabul işlemi atomik; (6) expired/revoked/used token reddedilir; (7) PENDING üyelik API/guard tarafından workspace erişimi alamaz; (8) davet ve kabul olayları audit edilir; (9) e-posta gönderimi dayanıklı kuyrukla yapılır.
+
+**Öncelik:** P1 ürün kapsamı; mevcut otomatik ACTIVE ekleme davranışı demo için çalışabilir ancak gerçek davet kabul akışı olarak sunulmamalı.
+
+### 13.14 18 Kasım — doğrulama durumu
+
+18 Kasım'daki branch düzeltmeleri (yorum controller test izolasyonu, TaskDetailModal effect/lifecycle ve WorkspaceMemberGuard request typing) için CI henüz tamamlanmış kabul edilmemelidir. Sonuçlar yalnız Actions run tamamlandığında ve ilgili job logları incelendiğinde doğrulanacaktır.
