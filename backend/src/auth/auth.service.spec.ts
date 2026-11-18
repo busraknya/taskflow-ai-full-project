@@ -10,6 +10,10 @@ jest.mock('bcrypt', () => ({
   hash: jest.fn(),
 }));
 
+// Keep this unit test isolated from Nest packages that ship ESM entry points.
+jest.mock('@nestjs/jwt', () => ({ JwtService: class JwtService {} }));
+jest.mock('@nestjs/config', () => ({ ConfigService: class ConfigService {} }));
+
 describe('AuthService refresh token rotation', () => {
   const now = new Date();
   const transactionClient = {
