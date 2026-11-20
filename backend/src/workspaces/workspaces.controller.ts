@@ -9,6 +9,7 @@ import {
   Patch,
   Delete,
 } from '@nestjs/common';
+import type { AuthenticatedRequest } from '../common/types/authenticated-request';
 import { WorkspacesService } from './workspaces.service';
 import { CreateWorkspaceDto } from './dto/create-workspace.dto';
 import { InviteMemberDto } from './dto/invite-member.dto';
@@ -22,12 +23,15 @@ export class WorkspacesController {
   constructor(private readonly workspacesService: WorkspacesService) {}
 
   @Post()
-  async create(@Req() req: any, @Body() dto: CreateWorkspaceDto) {
+  async create(
+    @Req() req: AuthenticatedRequest,
+    @Body() dto: CreateWorkspaceDto,
+  ) {
     return this.workspacesService.create(req.user.id, dto);
   }
 
   @Get()
-  async findAll(@Req() req: any) {
+  async findAll(@Req() req: AuthenticatedRequest) {
     return this.workspacesService.findAllForUser(req.user.id);
   }
 
@@ -35,7 +39,7 @@ export class WorkspacesController {
   @UseGuards(WorkspaceMemberGuard)
   async inviteMember(
     @Param('workspaceId') workspaceId: string,
-    @Req() req: any,
+    @Req() req: AuthenticatedRequest,
     @Body() dto: InviteMemberDto,
   ) {
     return this.workspacesService.inviteMember(
@@ -57,7 +61,7 @@ export class WorkspacesController {
   async updateMemberRole(
     @Param('workspaceId') workspaceId: string,
     @Param('membershipId') membershipId: string,
-    @Req() req: any,
+    @Req() req: AuthenticatedRequest,
     @Body() dto: UpdateMemberRoleDto,
   ) {
     return this.workspacesService.updateMemberRole(
@@ -85,7 +89,7 @@ export class WorkspacesController {
   async removeMember(
     @Param('workspaceId') workspaceId: string,
     @Param('membershipId') membershipId: string,
-    @Req() req: any,
+    @Req() req: AuthenticatedRequest,
   ) {
     return this.workspacesService.removeMember(
       workspaceId,
