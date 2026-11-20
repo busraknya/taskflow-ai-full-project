@@ -96,5 +96,8 @@
   },
   "prisma": {
     "seed": "ts-node prisma/seed.ts"
+  },
+  "overrides": {
+    "effect": "3.22.2"
   }
 }
