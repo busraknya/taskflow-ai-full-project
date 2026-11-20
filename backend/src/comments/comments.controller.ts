@@ -10,15 +10,11 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { WorkspaceRole } from '@prisma/client';
+import type { WorkspaceMemberRequest } from '../common/types/authenticated-request';
 import { AuthGuard } from '@nestjs/passport';
 import { CreateCommentDto } from './dto/create-comment.dto';
 import { CommentsService } from './comments.service';
 import { WorkspaceMemberGuard } from '../workspaces/guards/workspace-member.guard';
-
-type AuthenticatedRequest = {
-  user: { id: string };
-  membership?: { role: WorkspaceRole };
-};
 
 @Controller('workspaces/:workspaceId/tasks/:taskId/comments')
 @UseGuards(AuthGuard('jwt'), WorkspaceMemberGuard)
@@ -29,10 +25,10 @@ export class CommentsController {
   async create(
     @Param('workspaceId') workspaceId: string,
     @Param('taskId') taskId: string,
-    @Req() req: AuthenticatedRequest,
+    @Req() req: WorkspaceMemberRequest,
     @Body() dto: CreateCommentDto,
   ) {
-    if (req.membership?.role === WorkspaceRole.VIEWER) {
+    if (req.membership.role === WorkspaceRole.VIEWER) {
       throw new ForbiddenException('VIEWER rolü yorum ekleyemez.');
     }
 
@@ -52,7 +48,7 @@ export class CommentsController {
     @Param('workspaceId') workspaceId: string,
     @Param('taskId') taskId: string,
     @Param('commentId') commentId: string,
-    @Req() req: AuthenticatedRequest,
+    @Req() req: WorkspaceMemberRequest,
   ) {
     return this.commentsService.remove(
       workspaceId,
