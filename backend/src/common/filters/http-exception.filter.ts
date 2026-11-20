@@ -1,34 +1,48 @@
-import { ExceptionFilter, Catch, ArgumentsHost, HttpException, HttpStatus } from '@nestjs/common';
+import {
+  ArgumentsHost,
+  Catch,
+  ExceptionFilter,
+  HttpException,
+  HttpStatus,
+} from '@nestjs/common';
 import { Response } from 'express';
 
 @Catch()
 export class HttpExceptionFilter implements ExceptionFilter {
-  catch(exception: unknown, host: ArgumentsHost) {
+  catch(exception: unknown, host: ArgumentsHost): void {
     const ctx = host.switchToHttp();
     const response = ctx.getResponse<Response>();
 
     let status = HttpStatus.INTERNAL_SERVER_ERROR;
     let errorCode = 'INTERNAL_ERROR';
     let message = 'Beklenmeyen bir sunucu hatası oluştu.';
-    let details: any = {};
+    let details: unknown = {};
 
     if (exception instanceof HttpException) {
       status = exception.getStatus();
       const exceptionResponse = exception.getResponse();
 
       if (typeof exceptionResponse === 'object' && exceptionResponse !== null) {
-        const errObj = exceptionResponse as any;
-        errorCode = errObj.code || errObj.error || 'API_ERROR';
-        message = errObj.message || exception.message;
-        
-        if (Array.isArray(errObj.message)) {
-          message = 'Validasyon hatası.';
-          details = { fields: errObj.message };
-        } else {
-          details = errObj.details || {};
+        const errorResponse = exceptionResponse as Record<string, unknown>;
+        const code = errorResponse.code ?? errorResponse.error;
+        const responseMessage = errorResponse.message;
+
+        if (typeof code === 'string') {
+          errorCode = code;
         }
-      } else {
-        message = exceptionResponse as string;
+
+        if (Array.isArray(responseMessage)) {
+          message = 'Validasyon hatası.';
+          details = { fields: responseMessage };
+        } else if (typeof responseMessage === 'string') {
+          message = responseMessage;
+          details = errorResponse.details ?? {};
+        } else {
+          message = exception.message;
+          details = errorResponse.details ?? {};
+        }
+      } else if (typeof exceptionResponse === 'string') {
+        message = exceptionResponse;
       }
     } else if (exception instanceof Error) {
       message = exception.message;
@@ -37,8 +51,8 @@ export class HttpExceptionFilter implements ExceptionFilter {
     response.status(status).json({
       statusCode: status,
       code: errorCode,
-      message: message,
-      details: details,
+      message,
+      details,
     });
   }
 }
