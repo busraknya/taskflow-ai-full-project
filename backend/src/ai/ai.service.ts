@@ -20,7 +20,8 @@ export class AiService {
     private readonly configService: ConfigService,
   ) {
     // FastAPI servisimizin Docker içindeki adresi (ml-service:8000)
-    this.mlServiceUrl = this.configService.get<string>('ML_SERVICE_URL') || 'http://localhost:8000';
+    this.mlServiceUrl =
+      this.configService.get<string>('ML_SERVICE_URL') || 'http://localhost:8000';
   }
 
   async assessTaskRisk(taskData: {
@@ -31,13 +32,19 @@ export class AiService {
   }): Promise<RiskPredictionResult> {
     try {
       const response = await firstValueFrom(
-        this.httpService.post<RiskPredictionResult>(`${this.mlServiceUrl}/predict`, taskData),
+        this.httpService.post<RiskPredictionResult>(
+          `${this.mlServiceUrl}/predict`,
+          taskData,
+        ),
       );
       return response.data;
     } catch (error) {
       // Master Invariant #3: Model çalışmıyorsa "çalışıyormuş gibi" sahte sonuç üretilmez.
       // AI Spec §9: Fail-safe - UNAVAILABLE döner.
-      this.logger.error('Failed to communicate with ML service, falling back to UNAVAILABLE', error);
+      this.logger.error(
+        'Failed to communicate with ML service, falling back to UNAVAILABLE',
+        error,
+      );
       return {
         risk_level: 'UNAVAILABLE',
         risk_score: null,
