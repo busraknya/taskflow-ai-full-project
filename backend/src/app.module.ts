@@ -26,7 +26,9 @@ import { NotificationsModule } from './notifications/notifications.module';
         const port = configService.get<string>('REDIS_PORT');
 
         if (!host || !port) {
-          throw new Error('FATAL: REDIS_HOST or REDIS_PORT is missing in environment variables!');
+          throw new Error(
+            'FATAL: REDIS_HOST or REDIS_PORT is missing in environment variables!',
+          );
         }
 
         const password = configService.get<string>('REDIS_PASSWORD');
