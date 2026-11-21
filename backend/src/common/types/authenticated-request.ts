@@ -1,4 +1,4 @@
-import type { WorkspaceMembership, WorkspaceRole } from '@prisma/client';
+import type { WorkspaceMembership } from '@prisma/client';
 import type { Request } from 'express';
 
 export type AuthenticatedRequest = Omit<Request, 'user'> & {
@@ -19,8 +19,4 @@ export type WorkspaceGuardRequest = Omit<
   params: { workspaceId?: string };
   body?: { workspaceId?: string };
   membership?: Pick<WorkspaceMembership, 'role'>;
-};
-
-export type WorkspaceRoleRequest = {
-  role: WorkspaceRole;
 };
