@@ -20,14 +20,20 @@ class LoginViewModel : ViewModel() {
     var uiState: LoginState by mutableStateOf(LoginState.Idle)
         private set
 
-    fun login(email: String, pass: String, onTokenReceived: (String, String) -> Unit) {
+    fun login(
+        email: String,
+        pass: String,
+        onTokenReceived: (String, String, String) -> Unit,
+    ) {
         viewModelScope.launch {
             uiState = LoginState.Loading
             try {
                 val response = ApiClient.retrofitService.login(LoginRequest(email, pass))
                 val body = response.body()
-                if (response.isSuccessful && body != null && body.user.id.isNotBlank()) {
-                    onTokenReceived(body.accessToken, body.user.id)
+                if (response.isSuccessful && body != null && body.user.id.isNotBlank() &&
+                    body.refreshToken.isNotBlank()
+                ) {
+                    onTokenReceived(body.accessToken, body.refreshToken, body.user.id)
                     uiState = LoginState.Success(body.accessToken)
                 } else {
                     uiState = LoginState.Error("Invalid email or password.")
