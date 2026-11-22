@@ -50,7 +50,8 @@ describe('AuthService refresh token rotation', () => {
     (bcrypt.compare as jest.Mock).mockResolvedValue(true);
     (bcrypt.hash as jest.Mock).mockResolvedValue('next-token-hash');
     jwt.sign.mockReturnValueOnce('next-access-token').mockReturnValueOnce('next-refresh-token');
-    jwt.verify.mockReturnValue({ sub: 'user-1', email: 'user@example.com' });
+    jwt.verify.mockReturnValue({ sub: 'user-1', email: 'user@example.com', tokenType: 'refresh' });
+    prisma.user.findUnique.mockResolvedValue({ id: 'user-1', deletedAt: null });
     prisma.refreshToken.findMany.mockResolvedValue([
       {
         id: 'refresh-1',
@@ -117,6 +118,27 @@ describe('AuthService refresh token rotation', () => {
       data: { revokedAt: expect.any(Date) },
     });
     expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+
+  it('rejects access tokens presented to the refresh endpoint', async () => {
+    jwt.verify.mockReturnValue({ sub: 'user-1', email: 'user@example.com', tokenType: 'access' });
+
+    await expect(service.refreshTokens('access-token')).rejects.toBeInstanceOf(
+      UnauthorizedException,
+    );
+
+    expect(prisma.refreshToken.findMany).not.toHaveBeenCalled();
+  });
+
+  it('rejects refresh for a deleted account', async () => {
+    prisma.user.findUnique.mockResolvedValue({ id: 'user-1', deletedAt: new Date() });
+
+    await expect(service.refreshTokens('refresh-token')).rejects.toBeInstanceOf(
+      UnauthorizedException,
+    );
+
+    expect(prisma.refreshToken.findMany).not.toHaveBeenCalled();
   });
 
   it('normalizes invalid JWTs without querying stored tokens', async () => {
