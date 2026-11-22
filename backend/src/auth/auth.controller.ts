@@ -13,6 +13,7 @@ import type { Request, Response } from 'express';
 import { AuthService } from './auth.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
+import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { AuthGuard } from '@nestjs/passport';
 
 type RefreshTokenRequest = Request & {
@@ -85,6 +86,32 @@ export class AuthController {
     return {
       accessToken: result.accessToken,
     };
+  }
+
+  // Mobile clients cannot rely on browser-managed HttpOnly cookies.
+  // These endpoints return/accept the refresh token in the HTTPS request body;
+  // the Android app must keep it in encrypted local storage.
+  @HttpCode(HttpStatus.OK)
+  @Post('mobile/login')
+  async mobileLogin(@Body() dto: LoginDto) {
+    const result = await this.authService.login(dto);
+    return {
+      accessToken: result.accessToken,
+      refreshToken: result.refreshToken,
+      user: result.user,
+    };
+  }
+
+  @HttpCode(HttpStatus.OK)
+  @Post('mobile/refresh')
+  async mobileRefresh(@Body() dto: RefreshTokenDto) {
+    return this.authService.refreshTokens(dto.refreshToken);
+  }
+
+  @HttpCode(HttpStatus.OK)
+  @Post('mobile/logout')
+  async mobileLogout(@Body() dto: RefreshTokenDto) {
+    return this.authService.logoutWithRefreshToken(dto.refreshToken);
   }
 
   @UseGuards(AuthGuard('jwt'))
