@@ -8,7 +8,7 @@ COPY package*.json ./
 RUN npm ci
 COPY . .
 RUN npx prisma generate
-RUN npm run build
+RUN npm run build && test -f dist/src/main.js
 
 # This target is used by the one-shot migration service.
 FROM build AS migrate
@@ -31,4 +31,4 @@ COPY --from=build /app/prisma ./prisma
 COPY --from=build /app/prisma.config.ts ./prisma.config.ts
 USER node
 EXPOSE 4000
-CMD ["node", "dist/main"]
+CMD ["node", "dist/src/main.js"]
