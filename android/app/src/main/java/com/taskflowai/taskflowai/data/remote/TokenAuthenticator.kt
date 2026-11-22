@@ -51,7 +51,12 @@ class TokenAuthenticator(
 
                 refreshClient.newCall(request).execute().use { refreshResponse ->
                     if (!refreshResponse.isSuccessful) {
-                        tokenManager.clearToken()
+                        // A rejected refresh token means the session cannot be renewed.
+                        // Server errors and rate limits are temporary; keep the session
+                        // so the user can retry when the service is available again.
+                        if (refreshResponse.code == 401 || refreshResponse.code == 403) {
+                            tokenManager.clearToken()
+                        }
                         return null
                     }
 
@@ -67,7 +72,8 @@ class TokenAuthenticator(
                         .build()
                 }
             } catch (_: Exception) {
-                tokenManager.clearToken()
+                // Network failures and malformed/transient responses must not erase
+                // a potentially valid session. A later request can retry the refresh.
                 null
             }
         }
