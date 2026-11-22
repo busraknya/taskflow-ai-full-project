@@ -77,12 +77,18 @@ api.interceptors.response.use(
 
         originalRequest.headers.Authorization = `Bearer ${newAccessToken}`;
         return api(originalRequest);
-      } catch (refreshError) {
+      } catch (refreshError: any) {
         processQueue(refreshError, null);
-        // Refresh de başarısız olduysa oturumu temizle ve login'e at
-        useAuthStore.getState().clearAuth();
-        if (typeof window !== 'undefined') {
-          window.location.href = '/login';
+
+        // Only a definitive authentication rejection means the refresh
+        // cookie is no longer valid. Network errors and 5xx responses are
+        // temporary; preserve the in-memory session and let later requests retry.
+        const status = refreshError.response?.status;
+        if (status === 401 || status === 403) {
+          useAuthStore.getState().clearAuth();
+          if (typeof window !== 'undefined') {
+            window.location.href = '/login';
+          }
         }
         return Promise.reject(refreshError);
       } finally {
