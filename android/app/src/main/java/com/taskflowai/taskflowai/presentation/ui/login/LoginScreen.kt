@@ -67,8 +67,8 @@ fun LoginScreen(
             Spacer(modifier = Modifier.height(24.dp))
             Button(
                 onClick = {
-                    viewModel.login(email, password) { token, userId ->
-                        TokenManager(context).saveSession(token, userId)
+                    viewModel.login(email, password) { token, refreshToken, userId ->
+                        TokenManager(context).saveSession(token, refreshToken, userId)
                         scope.launch {
                             AppDatabase.getDatabase(context).operationDao()
                                 .requeueBlockedOperations(userId)
