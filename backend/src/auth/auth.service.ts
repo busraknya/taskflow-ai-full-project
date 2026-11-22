@@ -187,6 +187,9 @@ export class AuthService {
         secret: this.getJwtSecret(),
       });
     } catch {
+      if (payload.tokenType !== 'refresh') {
+        throw new Error('Expected a refresh token.');
+      }
       throw this.invalidRefreshToken();
     }
 
