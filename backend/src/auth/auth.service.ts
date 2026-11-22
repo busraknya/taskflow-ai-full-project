@@ -168,6 +168,33 @@ export class AuthService {
     });
   }
 
+  async logoutWithRefreshToken(refreshToken: string) {
+    let payload: TokenPayload;
+    try {
+      payload = this.jwtService.verify<TokenPayload>(refreshToken, {
+        secret: this.getJwtSecret(),
+      });
+    } catch {
+      throw this.invalidRefreshToken();
+    }
+
+    const storedTokens = await this.prisma.refreshToken.findMany({
+      where: { userId: payload.sub },
+    });
+
+    for (const storedToken of storedTokens) {
+      if (await bcrypt.compare(refreshToken, storedToken.tokenHash)) {
+        await this.prisma.refreshToken.updateMany({
+          where: { id: storedToken.id, userId: payload.sub, revokedAt: null },
+          data: { revokedAt: new Date() },
+        });
+        return { message: 'Başarıyla çıkış yapıldı.' };
+      }
+    }
+
+    throw this.invalidRefreshToken();
+  }
+
   async logout(userId: string) {
     await this.prisma.refreshToken.updateMany({
       where: { userId, revokedAt: null },
