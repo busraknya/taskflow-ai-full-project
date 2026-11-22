@@ -1,11 +1,15 @@
 package com.taskflowai.taskflowai.presentation.navigation
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 import androidx.compose.ui.platform.LocalContext
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.taskflowai.taskflowai.data.local.TokenManager
+import com.taskflowai.taskflowai.data.remote.ApiClient
+import com.taskflowai.taskflowai.data.remote.RefreshTokenRequest
 import com.taskflowai.taskflowai.presentation.ui.login.LoginScreen
 import com.taskflowai.taskflowai.presentation.ui.tasks.TaskScreen
 import com.taskflowai.taskflowai.presentation.ui.workspaces.WorkspaceSelectionScreen
@@ -19,6 +23,7 @@ sealed class Screen(val route: String) {
 fun AppNavGraph() {
     val navController = rememberNavController()
     val context = LocalContext.current.applicationContext
+    val scope = rememberCoroutineScope()
 
     NavHost(navController = navController, startDestination = "login") {
         composable("login") {
@@ -47,7 +52,16 @@ fun AppNavGraph() {
                     }
                 },
                 onLogout = {
-                    TokenManager(context).clearToken()
+                    val tokenManager = TokenManager(context)
+                    val refreshToken = tokenManager.getRefreshToken()
+                    tokenManager.clearToken()
+                    if (!refreshToken.isNullOrBlank()) {
+                        scope.launch {
+                            runCatching {
+                                ApiClient.retrofitService.logout(RefreshTokenRequest(refreshToken))
+                            }
+                        }
+                    }
                     navController.navigate("login") {
                         popUpTo(0) { inclusive = true }
                     }
