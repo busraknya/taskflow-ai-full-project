@@ -4,7 +4,11 @@ import android.content.Context
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
 
-data class AuthSession(val accessToken: String, val userId: String)
+data class AuthSession(
+    val accessToken: String,
+    val refreshToken: String,
+    val userId: String,
+)
 
 class TokenManager(context: Context) {
     private val masterKey = MasterKey.Builder(context)
@@ -19,37 +23,39 @@ class TokenManager(context: Context) {
         EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
     )
 
-    fun saveSession(token: String, userId: String) {
-        require(token.isNotBlank()) { "Access token must not be blank." }
+    fun saveSession(accessToken: String, refreshToken: String, userId: String) {
+        require(accessToken.isNotBlank()) { "Access token must not be blank." }
+        require(refreshToken.isNotBlank()) { "Refresh token must not be blank." }
         require(userId.isNotBlank()) { "User ID must not be blank." }
         sharedPreferences.edit()
-            .putString("access_token", token)
+            .putString("access_token", accessToken)
+            .putString("refresh_token", refreshToken)
             .putString("user_id", userId)
             .apply()
     }
 
     fun getSession(): AuthSession? {
-        val token = sharedPreferences.getString("access_token", null)
+        val accessToken = sharedPreferences.getString("access_token", null)
+        val refreshToken = sharedPreferences.getString("refresh_token", null)
         val userId = sharedPreferences.getString("user_id", null)
-        return if (!token.isNullOrBlank() && !userId.isNullOrBlank()) {
-            AuthSession(token, userId)
+        return if (!accessToken.isNullOrBlank() &&
+            !refreshToken.isNullOrBlank() &&
+            !userId.isNullOrBlank()
+        ) {
+            AuthSession(accessToken, refreshToken, userId)
         } else {
             null
         }
     }
 
     fun getToken(): String? = getSession()?.accessToken
-
+    fun getRefreshToken(): String? = getSession()?.refreshToken
     fun getUserId(): String? = getSession()?.userId
-
-    @Deprecated("Use saveSession so the token is always bound to an account.")
-    fun saveToken(token: String) {
-        sharedPreferences.edit().putString("access_token", token).remove("user_id").apply()
-    }
 
     fun clearToken() {
         sharedPreferences.edit()
             .remove("access_token")
+            .remove("refresh_token")
             .remove("user_id")
             .apply()
     }
