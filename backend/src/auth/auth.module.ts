@@ -8,8 +8,9 @@ import { PassportModule } from '@nestjs/passport';
 @Module({
   imports: [
     PassportModule,
+    // AuthService and JwtStrategy receive the required secret explicitly
+    // from ConfigService. Do not provide a hard-coded fallback here.
     JwtModule.register({
-      secret: process.env.JWT_SECRET || 'super-secret-key-change-it',
       signOptions: { expiresIn: '15m' },
     }),
   ],
