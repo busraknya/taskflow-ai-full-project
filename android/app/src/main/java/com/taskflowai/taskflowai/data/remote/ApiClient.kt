@@ -47,6 +47,7 @@ object ApiClient {
                 }
                 chain.proceed(requestWithAuth)
             }
+            .authenticator(TokenAuthenticator(tokenManager))
             .addInterceptor(loggingInterceptor)
             .connectTimeout(30, TimeUnit.SECONDS)
             .readTimeout(30, TimeUnit.SECONDS)
