@@ -9,6 +9,7 @@ import { ConfigService } from '@nestjs/config';
 interface TokenPayload {
   sub: string;
   email: string;
+  tokenType?: 'access' | 'refresh';
 }
 
 interface TokenPair {
@@ -99,7 +100,18 @@ export class AuthService {
       payload = this.jwtService.verify<TokenPayload>(refreshToken, {
         secret: this.getJwtSecret(),
       });
+      if (payload.tokenType !== 'refresh') {
+        throw new Error('Expected a refresh token.');
+      }
     } catch {
+      throw this.invalidRefreshToken();
+    }
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: payload.sub },
+      select: { id: true, deletedAt: true },
+    });
+    if (!user || user.deletedAt) {
       throw this.invalidRefreshToken();
     }
 
@@ -212,17 +224,15 @@ export class AuthService {
 
   private async createTokenPair(userId: string, email: string): Promise<TokenPair> {
     const secret = this.getJwtSecret();
-    const payload = { sub: userId, email };
+    const accessToken = this.jwtService.sign(
+      { sub: userId, email, tokenType: 'access' },
+      { secret, expiresIn: '15m' },
+    );
 
-    const accessToken = this.jwtService.sign(payload, {
-      secret,
-      expiresIn: '15m',
-    });
-
-    const refreshToken = this.jwtService.sign(payload, {
-      secret,
-      expiresIn: '30d',
-    });
+    const refreshToken = this.jwtService.sign(
+      { sub: userId, email, tokenType: 'refresh' },
+      { secret, expiresIn: '30d' },
+    );
 
     const tokenHash = await bcrypt.hash(refreshToken, 10);
     const expiresAt = new Date();
