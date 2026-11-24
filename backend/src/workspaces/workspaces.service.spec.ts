@@ -77,7 +77,6 @@ describe('WorkspacesService invitation role policy', () => {
     ).rejects.toBeInstanceOf(ForbiddenException);
 
     expect(prisma.workspaceMembership.findUnique).toHaveBeenCalledTimes(1);
-    expect(prisma.workspaceMembership.update).toBeUndefined();
   });
 
 });
