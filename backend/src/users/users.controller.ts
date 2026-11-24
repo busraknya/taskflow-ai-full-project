@@ -3,6 +3,7 @@ import type { AuthenticatedRequest } from '../common/types/authenticated-request
 import { UsersService } from './users.service';
 import { AuthGuard } from '@nestjs/passport';
 import { ChangePasswordDto } from './dto/change-password.dto';
+import { UpdateNotificationPreferenceDto } from './dto/update-notification-preference.dto';
 
 @Controller('users/me')
 @UseGuards(AuthGuard('jwt'))
@@ -17,12 +18,12 @@ export class UsersController {
   @Patch('notification-preferences')
   async updatePreference(
     @Req() req: AuthenticatedRequest,
-    @Body() body: { category: string; emailEnabled: boolean },
+    @Body() dto: UpdateNotificationPreferenceDto,
   ) {
     return this.usersService.updatePreference(
       req.user.id,
-      body.category,
-      body.emailEnabled,
+      dto.category,
+      dto.emailEnabled,
     );
   }
 
