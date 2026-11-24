@@ -29,8 +29,10 @@ export class AuthService {
 
   private getJwtSecret(): string {
     const secret = this.configService.get<string>('JWT_SECRET');
-    if (!secret) {
-      throw new Error('FATAL: JWT_SECRET is missing in environment variables!');
+    if (!secret || Buffer.byteLength(secret, 'utf8') < 32) {
+      throw new Error(
+        'FATAL: JWT_SECRET must contain at least 32 bytes of high-entropy secret material.',
+      );
     }
     return secret;
   }
