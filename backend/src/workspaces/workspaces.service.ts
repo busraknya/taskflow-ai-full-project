@@ -161,6 +161,14 @@ export class WorkspacesService {
       );
     }
 
+    // Ownership changes require a dedicated transfer flow so that assigning
+    // OWNER cannot accidentally create ambiguous ownership.
+    if (newRole === WorkspaceRole.OWNER) {
+      throw new ForbiddenException(
+        'OWNER rolü bu işlemle atanamaz. Sahiplik devri ayrı bir işlem olmalıdır.',
+      );
+    }
+
     const targetMembership = await this.prisma.workspaceMembership.findUnique({
       where: { id: targetMembershipId },
     });
