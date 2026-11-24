@@ -3,6 +3,7 @@ import { ConflictException, NotFoundException } from '@nestjs/common';
 // TasksService unit tests do not exercise the HTTP client; isolate the ESM-only
 // @nestjs/axios dependency instead of loading the real AI transport module.
 jest.mock('../ai/ai.service', () => ({ AiService: class AiService {} }));
+jest.mock('@nestjs/event-emitter', () => ({ EventEmitter2: class EventEmitter2 {} }));
 import { TasksService } from './tasks.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../common/audit/audit.service';
