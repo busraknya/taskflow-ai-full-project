@@ -97,3 +97,18 @@ Her kapı için değişiklik → test → CI log incelemesi → bu belgedeki dur
 - Backend genel lint borcu ve tam dependency/security review hâlâ kapanmadı.
 
 **GO/NO-GO: NO-GO.** README ve email retry iyileştirmeleri teslimat kalitesini artırır ancak gerçek deployment/E2E, lisans, güvenlik ve operasyon kabul kapıları tamamlanmadan satışa çıkarılmamalıdır.
+
+## 24 Kasım 2026 — güvenlik ve gecikme kontrolü
+
+### Bu oturumda branch'e uygulanan değişiklikler
+- `AuthService` artık `JWT_SECRET` değerinin en az 32 byte olmasını zorunlu tutuyor; eksik veya kısa değerle token üretimi reddediliyor.
+- `JwtStrategy` aynı minimum secret uzunluğunu uygulama başlangıcında doğruluyor; zayıf yapılandırma ile API'nin açılması engelleniyor.
+- AuthService unit testlerine eksik ve zayıf JWT secret senaryoları eklendi.
+- FastAPI ML istemcisini sağlayan NestJS `HttpModule` için 3 saniye timeout ve redirect kapatma eklendi. ML servisi core task akışını süresiz bekletemez.
+
+### Henüz doğrulanmadı
+- Değişiklikler GitHub dalına yazıldı ve dosyalar geri okunarak kontrol edildi; bu oturumda CI job sonucu alınmadı. Testlerin geçtiği iddia edilmiyor.
+- 32 byte uzunluk kontrolü secret'ın kriptografik rastgeleliğini kanıtlamaz. Alıcı benzersiz, rastgele secret üretmelidir.
+- ML timeout değişikliği unit/integration testinde ve çalışan Compose ortamında doğrulanmalıdır.
+
+**GO/NO-GO: NO-GO devam ediyor.** Bu değişiklikler güvenli varsayılanları ve servis dayanıklılığını iyileştirir; gerçek kurulum/E2E, tenant izolasyonu, rate limiting, production TLS, backup/restore, lisans ve Codester paket kabul kapılarını kapatmaz.
