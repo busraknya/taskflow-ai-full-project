@@ -74,3 +74,26 @@ Her kapı için değişiklik → test → CI log incelemesi → bu belgedeki dur
 - ML risk analizi ilk sürümde deneysel/opsiyonel olarak sunulacak; doğrulanmış model kalitesi olmadan satış vaadi yapılmayacak.
 
 **Şimdiki karar: NO-GO.** P0 ve ilgili kabul testleri tamamlanmadan ürün pazaryerine yüklenmeyecek.
+
+
+## 24 Kasım 2026 — satış hazırlığı ilerleme notu
+
+### Son doğrulanan CI
+- Branch commit'i `8528ea6cdba582793de357fdf6299b37ff678915` için GitHub Actions run [45415943640](https://github.com/busraknya/taskflow-ai-full-project/actions/runs/45415943640) **5/5 başarılı**.
+- Backend, frontend, ML, Android (unit + debug APK + instrumented Room tests) ve Docker Compose servis başlatma/healthcheck işleri başarılı.
+- Bu kanıt CI ortamındaki test ve Compose smoke test kapsamındadır; gerçek müşteri sunucusunda production deployment veya gerçek web/Android kullanıcı yolculuğu değildir.
+
+### Bu tarihte tamamlanan hazırlıklar
+- Kök `README.md` eklendi: ürün bileşenleri, Docker quick start, ortam değişkenleri, migration, veri kalıcılığı, production HTTPS/reverse proxy uyarıları, Android release notları ve bilinen sınırlamalar anlatılıyor. README açıkça pre-release/NO-GO durumunu ve lisansın henüz seçilmediğini belirtiyor.
+- Kullanıcı parola değiştirdiğinde parola hash güncellemesi ve tüm aktif refresh tokenların iptali aynı Prisma transaction içinde yapılıyor; ilgili unit test mevcut.
+- E-posta kuyruğu için beş denemeli exponential backoff, tamamlanan/başarısız işler için bounded retention ayarlandı. Bu yapılandırma gerçek SMTP teslimat testi yerine geçmez.
+
+### Sonraki engelleyiciler
+- Son email queue retry değişikliği commit'i `06de1701d7ba184787b4f71d70006b663af04e88` için CI sonucu bekleniyor.
+- Kök README kurulum adımları temiz bir makinede bağımsız olarak takip edilip doğrulanmalı.
+- Gerçek tarayıcı ve Android cihaz/emülatörde kayıt → giriş → token yenileme → parola değiştirme → eski oturum reddi → çıkış akışları E2E olarak kanıtlanmalı.
+- Rate limiting/brute-force koruması, production TLS/reverse proxy, yedekleme/geri yükleme ve secret rotation belgeleri tamamlanmalı.
+- Lisans seçimi ve üçüncü taraf lisans/attribution envanteri tamamlanmalı; bu nedenle README lisans izni vermediğini açıkça söylüyor.
+- Backend genel lint borcu ve tam dependency/security review hâlâ kapanmadı.
+
+**GO/NO-GO: NO-GO.** README ve email retry iyileştirmeleri teslimat kalitesini artırır ancak gerçek deployment/E2E, lisans, güvenlik ve operasyon kabul kapıları tamamlanmadan satışa çıkarılmamalıdır.
