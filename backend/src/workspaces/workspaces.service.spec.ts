@@ -62,4 +62,22 @@ describe('WorkspacesService invitation role policy', () => {
       service.inviteMember('workspace-1', 'member-1', 'new@example.com', WorkspaceRole.MEMBER),
     ).rejects.toBeInstanceOf(ForbiddenException);
   });
+  it('does not allow OWNER assignment through ordinary role updates', async () => {
+    prisma.workspaceMembership.findUnique.mockResolvedValue({
+      role: WorkspaceRole.OWNER,
+    });
+
+    await expect(
+      service.updateMemberRole(
+        'workspace-1',
+        'owner-1',
+        'membership-2',
+        WorkspaceRole.OWNER,
+      ),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+
+    expect(prisma.workspaceMembership.findUnique).toHaveBeenCalledTimes(1);
+    expect(prisma.workspaceMembership.update).toBeUndefined();
+  });
+
 });
