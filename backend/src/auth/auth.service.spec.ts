@@ -37,7 +37,7 @@ describe('AuthService refresh token rotation', () => {
     verify: jest.fn(),
     sign: jest.fn(),
   };
-  const config = { get: jest.fn().mockReturnValue('test-secret') };
+  const config = { get: jest.fn().mockReturnValue('test-secret-value-with-at-least-32-bytes') };
   const service = new AuthService(
     prisma as unknown as PrismaService,
     jwt as unknown as JwtService,
@@ -46,7 +46,7 @@ describe('AuthService refresh token rotation', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    config.get.mockReturnValue('test-secret');
+    config.get.mockReturnValue('test-secret-value-with-at-least-32-bytes');
     (bcrypt.compare as jest.Mock).mockResolvedValue(true);
     (bcrypt.hash as jest.Mock).mockResolvedValue('next-token-hash');
     jwt.sign.mockReturnValueOnce('next-access-token').mockReturnValueOnce('next-refresh-token');
@@ -62,6 +62,24 @@ describe('AuthService refresh token rotation', () => {
     ]);
     transactionClient.refreshToken.updateMany.mockResolvedValue({ count: 1 });
     transactionClient.refreshToken.create.mockResolvedValue({});
+  });
+
+  it('rejects a missing JWT secret before issuing tokens', async () => {
+    config.get.mockReturnValue(undefined);
+    const secretAccessor = service as unknown as { getJwtSecret: () => string };
+
+    expect(() => secretAccessor.getJwtSecret()).toThrow(
+      'JWT_SECRET must contain at least 32 bytes',
+    );
+  });
+
+  it('rejects a weak JWT secret before issuing tokens', async () => {
+    config.get.mockReturnValue('too-short');
+    const secretAccessor = service as unknown as { getJwtSecret: () => string };
+
+    expect(() => secretAccessor.getJwtSecret()).toThrow(
+      'JWT_SECRET must contain at least 32 bytes',
+    );
   });
 
   it('atomically revokes the current token and stores its replacement', async () => {
