@@ -177,10 +177,7 @@ export class WorkspacesService {
       throw new NotFoundException('Üyelik bulunamadı.');
     }
 
-    if (
-      targetMembership.role === WorkspaceRole.OWNER &&
-      newRole !== WorkspaceRole.OWNER
-    ) {
+    if (targetMembership.role === WorkspaceRole.OWNER) {
       const ownerCount = await this.prisma.workspaceMembership.count({
         where: {
           workspaceId,
