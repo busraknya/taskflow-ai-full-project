@@ -14,6 +14,7 @@ import { AiModule } from './ai/ai.module';
 import { UsersModule } from './users/users.module';
 import { CommentsModule } from './comments/comments.module';
 import { NotificationsModule } from './notifications/notifications.module';
+import { RateLimitModule } from './common/rate-limit/rate-limit.module';
 
 @Module({
   imports: [
@@ -53,6 +54,7 @@ import { NotificationsModule } from './notifications/notifications.module';
     UsersModule,
     CommentsModule,
     NotificationsModule,
+    RateLimitModule,
   ],
   controllers: [AppController],
   providers: [AppService],
