@@ -466,3 +466,15 @@ Pazaryeri kuralları değişebileceğinden gönderim gününde resmi seller/auth
 - Henüz gerçek browser/Android E2E, SMTP teslimatı, backup/restore, production TLS, tam secret-history taraması, ticari lisans/attribution ve Codester ZIP kabulü tamamlanmamıştır.
 
 **Güncel karar: NO-GO.** Bu remediation değişiklikleri başlangıç denetimindeki bazı bulguları kapatmıştır; ancak `main` branch'e merge edilmemiştir ve marketplace release için gerekli operasyonel, E2E ve lisans kapıları açık kalır.
+
+
+## 25 Kasım 2026 — CI run 45683129340 ara sonuç
+
+- Frontend job tamamlandı: lint, TypeScript, build ve `npm audit --omit=dev --audit-level=high` başarılı.
+- ML job tamamlandı: pytest ve `pip-audit` başarılı.
+- Android job başarısız: `./gradlew testDebugUnitTest` aşamasında `org.jetbrains.kotlin.plugin.compose` sürüm `2.2.10` plugin marker çözümlenemedi; unit testler başlamadı, APK ve instrumented test adımları atlandı. Plugin Portal'da bu sürümün yayımlı olduğu doğrulandığı için başarısızlık şimdilik kod/test assertion hatası olarak sınıflandırılmıyor; Gradle plugin resolution/runner erişimi olarak ele alınıyor.
+- Backend job'ı inceleme anında non-blocking genel lint aşamasındaydı; TypeScript/Jest/build/audit henüz sonuçlanmamıştı.
+- Docker Compose config doğrulandı; image build devam ediyordu, runtime healthcheck başlamamıştı.
+- Android job yeniden çalıştırma isteği, workflow hâlâ çalıştığı için GitHub tarafından reddedildi. Run tamamlandıktan sonra yalnız başarısız job yeniden denenecek.
+
+Bu run tamamlanmadan CI PASS denmeyecek. Backend lint non-blocking kalmaya devam ediyor; lisans, E2E, SMTP, TLS, backup/restore ve release ZIP kapıları da açık.
