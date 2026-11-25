@@ -161,17 +161,10 @@ describe('WorkspacesService invitations', () => {
 
   it('accepts a pending invitation only for the authenticated user', async () => {
     prisma.workspaceMembership.updateMany.mockResolvedValue({ count: 1 });
-    prisma.workspaceMembership.findUnique.mockImplementationOnce(
-      async () => ({
-        id: 'membership-1',
-        status: MembershipStatus.ACTIVE,
-        workspace: { id: 'workspace-1' },
-      }) as never,
-    );
 
     await expect(
       service.acceptInvitation('workspace-1', 'invitee-1'),
-    ).resolves.toMatchObject({ status: MembershipStatus.ACTIVE });
+    ).resolves.toEqual({ message: 'Workspace daveti kabul edildi.' });
 
     expect(prisma.workspaceMembership.updateMany).toHaveBeenCalledWith({
       where: {
