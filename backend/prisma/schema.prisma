@@ -103,6 +103,8 @@ model WorkspaceMembership {
   @@index([workspaceId])
   @@index([userId])
   @@index([invitedById])
+  @@index([userId, status, invitationExpiresAt])
+  @@index([workspaceId, status, invitationExpiresAt])
 }
 
 model Project {
