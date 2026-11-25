@@ -77,4 +77,4 @@ describe('RateLimitService', () => {
       () => new RateLimitService(invalidConfig as unknown as ConfigService),
     ).toThrow('valid REDIS_HOST and REDIS_PORT are required');
   });
-}
+});
