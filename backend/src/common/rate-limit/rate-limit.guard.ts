@@ -24,15 +24,19 @@ export class AuthRateLimitGuard implements CanActivate {
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest<Request>();
     const response = context.switchToHttp().getResponse<Response>();
-    const routePath = request.route?.path;
+    const route = request.route as unknown as { path?: string } | undefined;
+    const routePath = route?.path;
     const policy =
       routePath === 'refresh' || routePath === 'mobile/refresh'
         ? REFRESH_POLICY
         : DEFAULT_POLICY;
 
     // Use the direct socket-derived IP unless a trusted proxy is explicitly configured.
-    const clientIp = request.ip || request.socket.remoteAddress || 'unknown';
-    const ipHash = createHash('sha256').update(clientIp).digest('hex').slice(0, 32);
+    const clientIp = request.socket.remoteAddress || 'unknown';
+    const ipHash = createHash('sha256')
+      .update(clientIp)
+      .digest('hex')
+      .slice(0, 32);
     const routeKey = `${request.method}:${request.baseUrl}:${String(
       routePath || request.path,
     )}`;
