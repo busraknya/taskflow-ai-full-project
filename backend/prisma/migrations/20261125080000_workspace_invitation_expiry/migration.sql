@@ -1,6 +1,10 @@
 ALTER TABLE "WorkspaceMembership"
 ADD COLUMN "invitationExpiresAt" TIMESTAMP(3);
 
+UPDATE "WorkspaceMembership"
+SET "invitationExpiresAt" = "invitedAt" + INTERVAL '7 days'
+WHERE "status" = 'PENDING';
+
 CREATE INDEX "WorkspaceMembership_invitedById_idx"
 ON "WorkspaceMembership"("invitedById");
 
