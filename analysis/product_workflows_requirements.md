@@ -632,3 +632,34 @@ NotificationsModule AppModule'a dahil; TaskAssignedListener TasksModule provider
 CI run #44262570835 tüm beş job'ı geçmiştir (Android unit + instrumented Room queue; frontend lint/typecheck/build/audit; Docker Compose validation + image build; ML pytest + pip-audit; backend TypeScript/Jest/build/audit). Backend'in mevcut lint baseline'ı non-blocking'dir. Bu sonuçlar build/test kanıtıdır; yukarıdaki E2E, gerçek SMTP, gerçek Android refresh ve production runtime kabul kriterlerini kapatmaz.
 
 **Sıradaki geliştirme sırası:** (1) auth/session atomikliği ve Android/Web refresh/logout sözleşmesi, (2) notification retry + audit/outbox güvenilirliği, (3) ML HTTP timeout/async scoring, (4) Android Worker fault-injection/integration testleri, (5) pagination ve task archive lifecycle.
+
+
+---
+
+# 25 Kasım 2026 — Remediation dalı güncellemesi
+
+> Bu ek, önceki gereksinim ve denetim notlarını silmez. Aşağıdaki uygulama durumu `fix/go-live-blockers` dalının kaynak kodundan okunmuştur; PR #1 henüz `main` dalına birleştirilmemiştir. Kodun bulunması, uçtan uca test edildiği anlamına gelmez.
+
+## Kimlik, oturum ve workspace
+
+- Backend'de parola değişimi parola hash güncellemesi ile aktif refresh token iptalini aynı Prisma transaction içinde yapacak şekilde güncellenmiştir.
+- Yeni refresh tokenlar SHA-256 fingerprint ile saklanıp unique index üzerinden bulunur; eski bcrypt formatı için geriye dönük doğrulama yolu korunur. Paralel refresh, reuse ve eski kayıt temizliği gerçek PostgreSQL E2E testiyle doğrulanmalıdır.
+- Auth endpoint'leri ve workspace daveti oluşturma Redis Lua tabanlı atomik IP rate limit kullanır. Varsayılan limit genel auth uçlarında 60 saniyede 10, refresh uçlarında 30 istektir. Limit aşımı 429, Redis erişilemezliği 503 fail-closed davranışı üretir. Proxy hop ayarı ve hesap bazlı brute-force koruması ayrıca test edilmelidir.
+- Workspace daveti, kayıtlı kullanıcı için PENDING üyelik, 7 günlük expiry, kabul/ret ve yönetici iptali akışına sahiptir; davet e-postası BullMQ kuyruğuna bağlanmıştır. Yeni hesap için token-link ile self-service onboarding kapsam dışıdır. Gerçek SMTP teslimatı/retry ve davet audit kayıtları henüz kabul testiyle kanıtlanmamıştır.
+- Android kaynak kodunda login/refresh/logout endpoint tanımları, EncryptedSharedPreferences tabanlı token saklama ve 401 sonrası TokenAuthenticator refresh akışı vardır. Gerçek backend ile cihaz/emülatör E2E testleri hâlâ gereklidir.
+
+## Deployment ve repo hijyeni
+
+- Remediation dalında root `.env` kaldırılmış; `.env.example` yer tutucu değerlerle düzenlenmiş; `.gitignore` sırlar, Python cache/bytecode, Android IDE ve build artefact'larını hariç tutar. Tarihsel tüm Git objeleri için tam secret scan yapılmış değildir; gerçek bir sır kullanıldıysa rotasyon ve gerekirse history rewrite değerlendirilmelidir.
+- Docker Compose PostgreSQL, Redis, ML, migration, backend ve frontend servislerini içerir. CI'daki Compose doğrulama, image build ve healthcheck adımları temiz müşteri makinesi kabul testi, TLS/reverse proxy, backup/restore veya gerçek kullanıcı akışının yerine geçmez.
+- Root README ürünün hâlâ geliştirme aşamasında olduğunu ve ML modelinin sentetik küçük veriyle eğitilmiş deneysel bir model olduğunu açıkça belirtir. Doğrulanmış gecikme olasılığı iddiası yapılmamalıdır.
+- Ticari lisans ve üçüncü taraf attribution envanteri henüz seçilmemiş/tamamlanmamıştır; lisans kararı olmadan Codester yeniden dağıtım paketi yayınlanamaz.
+
+## 25 Kasım CI gözlemi
+
+- Run [45683129340](https://github.com/busraknya/taskflow-ai-full-project/actions/runs/45683129340), merge ref `6c26465d327eac0077ed21a223f5203da6c4cc37` üzerinde çalıştı. ML testleri ve pip-audit başarılı; frontend lint, typecheck, build ve production dependency audit başarılı.
+- Android unit test job'ı Gradle'ın `org.jetbrains.kotlin.plugin.compose:2.2.10` plugin marker artifact'ını çözememesi nedeniyle build konfigürasyonu aşamasında başarısız oldu. Bu, uygulama unit test assertion hatası değildir; Gradle plugin resolution/CI erişimi kaynaklı bir build blocker olarak ele alınmalıdır. Plugin Portal'da 2.2.10 sürümünün yayımlı olduğu doğrulanmıştır; dolayısıyla önce aynı job yeniden çalıştırılarak geçici repository erişim sorunu olup olmadığı ayrıştırılmalıdır.
+- Backend job'ı inceleme anında non-blocking genel lint adımındaydı; TypeScript/test/build/audit adımları henüz başlamamıştı. Docker image build devam ediyordu; healthcheck henüz başlamamıştı.
+- Workflow genel backend lint adımını `continue-on-error: true` ile çalıştırır. Bu nedenle CI job'ının yeşil olması, tüm backend lint borcunun kapandığı anlamına gelmez.
+
+**Güncel kabul kararı: NO-GO.** PR #1 draft kalmalıdır. Öncelik Android plugin resolution/build hatasını yeniden üretip ayırmak, bu run'daki backend/Docker sonuçlarını almak, sonra E2E/SMTP/operasyon/lisans kapılarını kapatmaktır.
