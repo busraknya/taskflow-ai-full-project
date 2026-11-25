@@ -92,7 +92,7 @@ Her kapı için değişiklik → test → CI log incelemesi → bu belgedeki dur
 - Son email queue retry değişikliği commit'i `06de1701d7ba184787b4f71d70006b663af04e88` için CI sonucu bekleniyor.
 - Kök README kurulum adımları temiz bir makinede bağımsız olarak takip edilip doğrulanmalı.
 - Gerçek tarayıcı ve Android cihaz/emülatörde kayıt → giriş → token yenileme → parola değiştirme → eski oturum reddi → çıkış akışları E2E olarak kanıtlanmalı.
-- Rate limiting/brute-force koruması, production TLS/reverse proxy, yedekleme/geri yükleme ve secret rotation belgeleri tamamlanmalı.
+- Redis tabanlı IP rate limiting eklendi ve CI'da test ediliyor; account-level brute-force/lockout politikası, gerçek reverse-proxy IP zinciri ve saldırı testi ayrıca doğrulanmalı. Production TLS, yedekleme/geri yükleme ve secret rotation belgeleri hâlâ açık.
 - Lisans seçimi ve üçüncü taraf lisans/attribution envanteri tamamlanmalı; bu nedenle README lisans izni vermediğini açıkça söylüyor.
 - Backend genel lint borcu ve tam dependency/security review hâlâ kapanmadı.
 
@@ -134,8 +134,27 @@ Her kapı için değişiklik → test → CI log incelemesi → bu belgedeki dur
 
 ### Açık doğrulamalar / bulgular
 - Yukarıdaki mobil akış statik kod incelemesinde mevcut; gerçek API ile mobil E2E kanıtı henüz yok.
-- Workspace davet kodu hâlâ mevcut kullanıcıyı doğrudan ACTIVE üyeliğe alıyor. Şema PENDING statüsünü desteklese de token üretimi, davet kabulü, iptal ve süre sonu akışı uygulanmış değil. Bu özellik satış paketinde tamamlanmalı veya açıkça kapsam dışı bırakılıp arayüzden kaldırılmalı.
-- Refresh token kayıtları için süre aşımı/revocation temizliği ve oturum sayısı politikası ayrıca incelenmeli; refreshTokens kullanıcıya ait token hash'lerini sırayla karşılaştırıyor. Çok sayıda eski kayıt sorgu maliyetini artırabilir.
-- Auth uçları için dağıtık ortama uygun rate limiting/brute-force koruması henüz doğrulanmış değil. Tek process belleğinde sayaç kullanmak çoklu instance deployment için yeterli çözüm sayılmamalı.
+- Workspace davetleri artık mevcut hesap için PENDING üyelik, 7 günlük expiry, Workspaces ekranından kabul/ret ve BullMQ e-posta kuyruğu kullanıyor. Gerçek SMTP ve browser E2E testi açık; davet/kabul/ret/iptal audit kaydı ayrıca tamamlanmalı.
+- Yeni refresh tokenlar SHA-256 fingerprint ile unique index üzerinden bulunuyor; eski bcrypt hash'li oturumlar geriye dönük uyumluluk için fallback taramasını kullanıyor. Expired/revoked kayıt temizliği ve oturum sayısı politikası ayrıca incelenmeli. Çok sayıda eski kayıt sorgu maliyetini artırabilir.
+- Auth uçları ve workspace davet oluşturma Redis tabanlı atomik IP rate limit kullanıyor; Redis yoksa fail-closed davranıyor. Çoklu instance konfigürasyonu, proxy güven sınırı, account-level brute-force ve gerçek saldırı testi hâlâ doğrulanmalı.
 
 Bu not statik kaynak kod incelemesidir; bu akışların çalıştırıldığı veya saldırı testinden geçtiği anlamına gelmez.
+
+
+## 25 Kasım 2026 — güvenlik, davet ve performans uygulama turu
+
+### Branch'e eklenen değişiklikler
+- **Redis rate limiting:** Auth register/login/refresh/mobile login/refresh/logout ve workspace invitation creation endpoint'leri Redis Lua fixed-window sayacıyla korunuyor. Varsayılan 60 saniyede 10 istek; refresh uçlarında 30 istek. Limit aşımında 429, Redis kullanılamadığında 503 fail-closed. IP değeri key'e doğrudan yazılmıyor; hash kullanılıyor. `TRUST_PROXY_HOPS` ile reverse proxy güven sınırı yapılandırılabiliyor.
+- **Workspace invitation lifecycle:** Yalnız kayıtlı kullanıcı hesabına davet, PENDING üyelik, 7 günlük expiry, kullanıcıya bağlı accept/decline, expired state, yönetici tarafından pending üyeliği kaldırarak iptal ve Workspaces inbox arayüzü eklendi. BullMQ davet e-postası kuyruğu 5 deneme/exponential backoff/retention politikasıyla kullanılıyor. Token-link ile yeni hesap kaydı ilk sürüm kapsamı değil.
+- **Refresh token lookup:** Yeni tokenlar bcrypt yerine SHA-256 fingerprint ile saklanıp unique index üzerinden bulunuyor. Eski bcrypt oturumları için geriye dönük fallback korunuyor; yeni oturumlarda tüm token listesini bcrypt ile tarama yapılmıyor.
+- **Veritabanı:** Davet expiry alanı, inviter ilişkisi ve pending-invitation sorguları için bileşik indeks migration'ı eklendi.
+- **CI:** Backend 13 test suite / 46 test, TypeScript, strict lint gate; frontend lint/typecheck/build; ML testleri; Android unit/debug/instrumented testleri; Docker Compose image build ve servis healthcheck kontrolleri son doğrulama turunda başarılı oldu. Bu kanıt yalnız CI ortamındaki otomatik kontrollerdir.
+
+### Henüz satış onayı vermeyen açık kapılar
+- Gerçek SMTP hesabıyla davet e-postası teslimatı ve retry davranışı uçtan uca test edilmedi.
+- Tarayıcıda kayıt/giriş/refresh/password change/logout ve workspace invite/accept/decline akışları E2E olarak doğrulanmalı.
+- Android'de gerçek API ile refresh rotation, eşzamanlı 401, offline queue, logout ve fiziksel cihaz testi yapılmalı.
+- Davet, üyelik rolü ve güvenlik olayları için audit log kapsamı tamamlanmalı; transactional outbox değerlendirilmelidir.
+- Backend genel lint borcu hâlâ migration/non-blocking durumunda; tam dependency/SBOM ve güvenlik incelemesi, TLS, backup/restore, secret rotation, lisans ve üçüncü taraf attribution açık.
+
+**GO/NO-GO: NO-GO.** Otomatik CI kapıları geçilmiş olsa da gerçek müşteri kurulum/E2E, SMTP, audit, operasyon ve marketplace lisans kapıları tamamlanmadan Codester'a yükleme yapılmamalı.
