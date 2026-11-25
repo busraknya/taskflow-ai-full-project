@@ -204,3 +204,15 @@ Bu not statik kaynak kod incelemesidir; bu akışların çalıştırıldığı v
 - Backend genel lint CI adımı non-blocking olduğundan tam lint temizliği ayrı bir kabul kapısıdır.
 
 **Karar: NO-GO.** Pending run tamamlanmadan CI sonucu açıklanmayacak. Gerçek E2E/SMTP/backup-restore/TLS/secret-history scan/lisans ve paketleme işleri açık.
+
+
+## 25 Kasım 2026 — CI run 45683129340 ara sonuç
+
+- Frontend job tamamlandı: lint, TypeScript, build ve `npm audit --omit=dev --audit-level=high` başarılı.
+- ML job tamamlandı: pytest ve `pip-audit` başarılı.
+- Android job başarısız: `./gradlew testDebugUnitTest` aşamasında `org.jetbrains.kotlin.plugin.compose` sürüm `2.2.10` plugin marker çözümlenemedi; unit testler başlamadı, APK ve instrumented test adımları atlandı. Plugin Portal'da bu sürümün yayımlı olduğu doğrulandığı için başarısızlık şimdilik kod/test assertion hatası olarak sınıflandırılmıyor; Gradle plugin resolution/runner erişimi olarak ele alınıyor.
+- Backend job'ı inceleme anında non-blocking genel lint aşamasındaydı; TypeScript/Jest/build/audit henüz sonuçlanmamıştı.
+- Docker Compose config doğrulandı; image build devam ediyordu, runtime healthcheck başlamamıştı.
+- Android job yeniden çalıştırma isteği, workflow hâlâ çalıştığı için GitHub tarafından reddedildi. Run tamamlandıktan sonra yalnız başarısız job yeniden denenecek.
+
+Bu run tamamlanmadan CI PASS denmeyecek. Backend lint non-blocking kalmaya devam ediyor; lisans, E2E, SMTP, TLS, backup/restore ve release ZIP kapıları da açık.
