@@ -1,4 +1,4 @@
-import { ExecutionContext, TooManyRequestsException } from '@nestjs/common';
+import { ExecutionContext, HttpException, HttpStatus } from '@nestjs/common';
 import { AuthRateLimitGuard } from './rate-limit.guard';
 import { RateLimitService } from './rate-limit.service';
 
@@ -67,8 +67,8 @@ describe('AuthRateLimitGuard', () => {
     });
 
     await expect(guard.canActivate(context)).rejects.toBeInstanceOf(
-      TooManyRequestsException,
-    );
+      HttpException,
+    ).rejects.toMatchObject({ status: HttpStatus.TOO_MANY_REQUESTS });
     expect(response.setHeader).toHaveBeenCalledWith('Retry-After', '17');
   });
 });
