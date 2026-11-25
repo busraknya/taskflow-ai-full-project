@@ -70,7 +70,10 @@ export class EmailProcessor extends WorkerHost {
       console.log(`[EmailWorker] Email successfully sent to ${recipient}`);
       return { sent: true };
     } catch (error) {
-      console.error(`[EmailWorker] Failed to send email to ${recipient}:`, error);
+      console.error(
+        `[EmailWorker] Failed to send email to ${recipient}:`,
+        error,
+      );
       throw error;
     }
   }
