@@ -8,7 +8,9 @@ import { RateLimitService } from './rate-limit.service';
 
 describe('AuthRateLimitGuard', () => {
   const rateLimit = { consume: jest.fn() };
-  const guard = new AuthRateLimitGuard(rateLimit as unknown as RateLimitService);
+  const guard = new AuthRateLimitGuard(
+    rateLimit as unknown as RateLimitService,
+  );
   const response = {
     setHeader: jest.fn(),
   };
@@ -45,7 +47,10 @@ describe('AuthRateLimitGuard', () => {
       60,
     );
     expect(response.setHeader).toHaveBeenCalledWith('X-RateLimit-Limit', '10');
-    expect(response.setHeader).toHaveBeenCalledWith('X-RateLimit-Remaining', '8');
+    expect(response.setHeader).toHaveBeenCalledWith(
+      'X-RateLimit-Remaining',
+      '8',
+    );
   });
 
   it('uses a separate higher policy for refresh requests', async () => {
