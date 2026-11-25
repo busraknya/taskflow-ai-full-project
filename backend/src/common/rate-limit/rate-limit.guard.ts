@@ -2,7 +2,8 @@ import {
   CanActivate,
   ExecutionContext,
   Injectable,
-  TooManyRequestsException,
+  HttpException,
+  HttpStatus,
 } from '@nestjs/common';
 import { createHash } from 'crypto';
 import type { Request, Response } from 'express';
@@ -32,7 +33,9 @@ export class AuthRateLimitGuard implements CanActivate {
     // Use the direct socket-derived IP unless a trusted proxy is explicitly configured.
     const clientIp = request.ip || request.socket.remoteAddress || 'unknown';
     const ipHash = createHash('sha256').update(clientIp).digest('hex').slice(0, 32);
-    const routeKey = `${request.method}:${request.baseUrl}:${String(routePath || request.path)}`;
+    const routeKey = `${request.method}:${request.baseUrl}:${String(
+      routePath || request.path,
+    )}`;
     const key = `rate-limit:auth:${ipHash}:${routeKey}`;
 
     const result = await this.rateLimit.consume(
@@ -46,8 +49,9 @@ export class AuthRateLimitGuard implements CanActivate {
 
     if (!result.allowed) {
       response.setHeader('Retry-After', String(result.retryAfterSeconds));
-      throw new TooManyRequestsException(
+      throw new HttpException(
         'Too many authentication attempts. Please try again later.',
+        HttpStatus.TOO_MANY_REQUESTS,
       );
     }
 
