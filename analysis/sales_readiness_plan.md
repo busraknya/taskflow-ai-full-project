@@ -170,3 +170,26 @@ Bu not statik kaynak kod incelemesidir; bu akışların çalıştırıldığı v
 - PR değişiklik listesinde `.env` silinmiş; diff içeriğinde yalnızca örnek/değiştirilebilir parola değerleri görünüyor. Yine de geçmişte gerçek bir sır kullanıldıysa rotasyon gerekir. `.gitignore` artık `.env`, Python cache ve Android IDE dosyalarını dışlıyor; ilgili IDE/cache dosyaları PR'da silinmiş.
 
 **Bu aşamadaki karar: NO-GO.** CI tamamlanmadan test sonucu ilan edilmeyecek. CI yeşil olsa bile gerçek kullanıcı E2E, temiz kurulumun bağımsız kabulü, TLS/reverse proxy, backup/restore, gerçek SMTP, lisans/attribution ve release paketi ayrıca kapanmalı.
+
+
+## 25 Kasım 2026 — CI run 45682776849 / commit 86582cc
+
+- Run: [TaskFlow CI #360](https://github.com/busraknya/taskflow-ai-full-project/actions/runs/45682776849).
+- Son kontrol anında run devam ediyordu; tamamlanmış sonuç olarak raporlanmamalı.
+- ML API tests ve `pip-audit`: SUCCESS.
+- Backend: security/invitation modüllerinin hedefli ESLint adımı tamamlandı; genel lint baseline non-blocking çalışıyor, build adımı başlamıştı. TypeScript/test/audit adımları henüz sonuçlanmamıştı.
+- Frontend: `npm ci` sürüyordu; lint/typecheck/build/audit henüz tamamlanmamıştı.
+- Android: unit testler sürüyordu; debug APK ve instrumented Room testleri bekliyordu.
+- Docker: Compose config doğrulandı; tüm image build işlemi sürüyordu; runtime healthcheck henüz başlamamıştı.
+
+### Repo hijyeni ve sır geçmişi
+- Güncel `.gitignore` `.env`, `.env.*` (örnek dosya hariç), Python bytecode/cache, Android `.idea`, Gradle/build ve Node artefact'larını dışlıyor.
+- `.env.example` yalnızca değiştirilmesi gereken örnek değerler içeriyor; `JWT_SECRET` için en az 32 rastgele byte, DB parolası ve Redis ayarları belgelenmiş.
+- Tarihsel denetim notu, geçmiş `.env` dosyasında placeholder/sample değerleri bulunduğunu kaydediyor; bu tek başına canlı sır sızdığını kanıtlamaz. Ancak `REDIS_PASSWORD` örnek değeri daha önce sabit bir parola biçimindeydi. Bu değer herhangi bir gerçek ortamda kullanıldıysa döndürülmeli. Tam geçmiş secret scan ve history rewrite gerekip gerekmediği ayrıca doğrulanmalı; mevcut connector incelemesi tüm git objelerinde secret scanner çalıştırmış değildir.
+
+### Paketleme kararı
+- README kendi ifadesiyle ürünü hâlâ geliştirme aşamasında tanımlıyor ve hiçbir lisans seçilmediğini söylüyor.
+- Ticari lisans ve third-party notice envanteri olmadan Codester'a yeniden dağıtım/satış yetkisi veren bir ZIP hazırlanamaz.
+- Şu anki CI workflow'u gerçek tarayıcı E2E, Android gerçek backend E2E, SMTP teslimatı veya backup/restore testi çalıştırmıyor.
+
+**Karar: NO-GO.** Bu run tamamlanmadan CI sonucu ilan edilmez; CI geçse dahi lisans, gerçek kullanıcı kabulü, sır taraması, operasyonel kontroller ve final ZIP inspection ayrı kapılardır.
