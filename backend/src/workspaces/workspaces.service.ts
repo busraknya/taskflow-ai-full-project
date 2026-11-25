@@ -60,7 +60,10 @@ export class WorkspacesService {
 
   async getWorkspaceMembers(workspaceId: string) {
     return this.prisma.workspaceMembership.findMany({
-      where: { workspaceId, status: MembershipStatus.ACTIVE },
+      where: {
+        workspaceId,
+        status: { in: [MembershipStatus.ACTIVE, MembershipStatus.PENDING] },
+      },
       include: {
         user: {
           select: { id: true, fullName: true, email: true, avatarUrl: true },
@@ -81,20 +84,19 @@ export class WorkspacesService {
 
     if (
       !inviterMembership ||
+      inviterMembership.status !== MembershipStatus.ACTIVE ||
       (inviterMembership.role !== WorkspaceRole.OWNER &&
         inviterMembership.role !== WorkspaceRole.ADMIN)
     ) {
       throw new ForbiddenException('Bu işlem için yetkiniz yok.');
     }
 
-    // OWNER assignment must only happen through an explicit ownership-transfer flow.
     if (role === WorkspaceRole.OWNER) {
       throw new ForbiddenException(
         'OWNER rolü davet sırasında atanamaz. Sahiplik devri ayrı bir işlem olmalıdır.',
       );
     }
 
-    // ADMIN may invite regular members, but cannot grant administrative privileges.
     if (
       inviterMembership.role === WorkspaceRole.ADMIN &&
       role === WorkspaceRole.ADMIN
@@ -102,11 +104,18 @@ export class WorkspacesService {
       throw new ForbiddenException('ADMIN rolünü yalnızca OWNER atayabilir.');
     }
 
-    const targetUser = await this.prisma.user.findUnique({ where: { email } });
+    const normalizedEmail = email.trim().toLowerCase();
+    const targetUser = await this.prisma.user.findUnique({
+      where: { email: normalizedEmail },
+    });
     if (!targetUser) {
       throw new NotFoundException(
         'Bu e-posta adresine sahip bir kullanıcı sistemde bulunamadı.',
       );
+    }
+
+    if (targetUser.id === inviterUserId) {
+      throw new ConflictException('Kendinizi workspace davet edemezsiniz.');
     }
 
     const existingMembership = await this.prisma.workspaceMembership.findUnique({
@@ -115,22 +124,42 @@ export class WorkspacesService {
       },
     });
 
-    if (existingMembership) {
+    if (existingMembership?.status === MembershipStatus.ACTIVE) {
       throw new ConflictException("Bu kullanıcı zaten bu workspace'in üyesi.");
     }
+    if (existingMembership?.status === MembershipStatus.PENDING) {
+      throw new ConflictException('Bu kullanıcı için bekleyen bir davet zaten var.');
+    }
 
-    const membership = await this.prisma.workspaceMembership.create({
-      data: {
-        workspaceId,
-        userId: targetUser.id,
-        role,
-        status: MembershipStatus.ACTIVE,
-        invitedById: inviterUserId,
-      },
-      include: {
-        user: { select: { id: true, fullName: true, email: true } },
-      },
-    });
+    const now = new Date();
+    const invitationExpiresAt = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+    const membershipData = {
+      role,
+      status: MembershipStatus.PENDING,
+      invitedById: inviterUserId,
+      invitedAt: now,
+      invitationExpiresAt,
+      joinedAt: null,
+    };
+
+    const membership = existingMembership
+      ? await this.prisma.workspaceMembership.update({
+          where: { id: existingMembership.id },
+          data: membershipData,
+          include: {
+            user: { select: { id: true, fullName: true, email: true } },
+          },
+        })
+      : await this.prisma.workspaceMembership.create({
+          data: {
+            workspaceId,
+            userId: targetUser.id,
+            ...membershipData,
+          },
+          include: {
+            user: { select: { id: true, fullName: true, email: true } },
+          },
+        });
 
     const workspace = await this.prisma.workspace.findUnique({
       where: { id: workspaceId },
@@ -140,9 +169,88 @@ export class WorkspacesService {
       email: targetUser.email,
       fullName: targetUser.fullName,
       workspaceName: workspace?.name || 'Workspace',
+      expiresAt: invitationExpiresAt,
     });
 
     return membership;
+  }
+
+  async getPendingInvitations(userId: string) {
+    return this.prisma.workspaceMembership.findMany({
+      where: { userId, status: MembershipStatus.PENDING },
+      include: {
+        workspace: {
+          select: { id: true, name: true, slug: true },
+        },
+        invitedBy: {
+          select: { id: true, fullName: true, email: true },
+        },
+      },
+      orderBy: { invitedAt: 'desc' },
+    });
+  }
+
+  async acceptInvitation(workspaceId: string, userId: string) {
+    const now = new Date();
+    const result = await this.prisma.workspaceMembership.updateMany({
+      where: {
+        workspaceId,
+        userId,
+        status: MembershipStatus.PENDING,
+        OR: [
+          { invitationExpiresAt: null },
+          { invitationExpiresAt: { gt: now } },
+        ],
+      },
+      data: {
+        status: MembershipStatus.ACTIVE,
+        joinedAt: now,
+        invitationExpiresAt: null,
+      },
+    });
+
+    if (result.count !== 1) {
+      const membership = await this.prisma.workspaceMembership.findUnique({
+        where: { workspaceId_userId: { workspaceId, userId } },
+      });
+
+      if (
+        membership?.status === MembershipStatus.PENDING &&
+        membership.invitationExpiresAt &&
+        membership.invitationExpiresAt <= now
+      ) {
+        await this.prisma.workspaceMembership.update({
+          where: { id: membership.id },
+          data: { status: MembershipStatus.EXPIRED },
+        });
+        throw new ForbiddenException('Workspace davetinin süresi dolmuş.');
+      }
+
+      throw new NotFoundException('Bekleyen workspace daveti bulunamadı.');
+    }
+
+    return this.prisma.workspaceMembership.findUnique({
+      where: { workspaceId_userId: { workspaceId, userId } },
+      include: {
+        workspace: true,
+      },
+    });
+  }
+
+  async declineInvitation(workspaceId: string, userId: string) {
+    const result = await this.prisma.workspaceMembership.deleteMany({
+      where: {
+        workspaceId,
+        userId,
+        status: MembershipStatus.PENDING,
+      },
+    });
+
+    if (result.count !== 1) {
+      throw new NotFoundException('Bekleyen workspace daveti bulunamadı.');
+    }
+
+    return { message: 'Workspace daveti reddedildi.' };
   }
 
   async updateMemberRole(
