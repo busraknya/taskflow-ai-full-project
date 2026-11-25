@@ -256,12 +256,7 @@ export class WorkspacesService {
       throw new NotFoundException('Bekleyen workspace daveti bulunamadı.');
     }
 
-    return this.prisma.workspaceMembership.findUnique({
-      where: { workspaceId_userId: { workspaceId, userId } },
-      include: {
-        workspace: true,
-      },
-    });
+    return { message: 'Workspace daveti kabul edildi.' };
   }
 
   async declineInvitation(workspaceId: string, userId: string) {
