@@ -1,4 +1,12 @@
 import type { Queue } from 'bullmq';
+
+jest.mock('@nestjs/event-emitter', () => ({
+  OnEvent: () => () => undefined,
+}));
+jest.mock('@nestjs/bullmq', () => ({
+  InjectQueue: () => () => undefined,
+}));
+
 import { WorkspaceInvitationListener } from './workspace-invitation.listener';
 
 describe('WorkspaceInvitationListener', () => {
