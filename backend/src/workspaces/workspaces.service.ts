@@ -197,10 +197,7 @@ export class WorkspacesService {
         workspaceId,
         userId,
         status: MembershipStatus.PENDING,
-        OR: [
-          { invitationExpiresAt: null },
-          { invitationExpiresAt: { gt: now } },
-        ],
+        invitationExpiresAt: { gt: now },
       },
       data: {
         status: MembershipStatus.ACTIVE,
@@ -216,8 +213,8 @@ export class WorkspacesService {
 
       if (
         membership?.status === MembershipStatus.PENDING &&
-        membership.invitationExpiresAt &&
-        membership.invitationExpiresAt <= now
+        (!membership.invitationExpiresAt ||
+          membership.invitationExpiresAt <= now)
       ) {
         await this.prisma.workspaceMembership.update({
           where: { id: membership.id },
