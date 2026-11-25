@@ -16,7 +16,7 @@ Alıcı kaynak kodu, kurulum dosyalarını ve dokümantasyonu satın alır; kend
 
 ### P0 — satış öncesi engelleyiciler
 
-- [ ] **Android oturum yenileme:** Android yalnızca access token alıyor; refresh endpoint'i/cookie akışı istemcide yok. Access token 15 dakika sonra sona erdiğinde mobil istemcinin oturumu yenileme yolu bulunmuyor. Mobil logout da sunucudaki refresh oturumunu iptal etmiyor.
+- [ ] **Android oturum yenileme E2E doğrulaması:** Kodda /auth/mobile/login, /auth/mobile/refresh, /auth/mobile/logout uçları mevcut. Android tarafında refresh token EncryptedSharedPreferences içinde saklanıyor; TokenAuthenticator 401 sonrasında refresh yapıp dönen access/refresh token çiftini kaydediyor. Bu akışın gerçek backend ile fiziksel cihaz/emülatörde; access token süresi dolması, eşzamanlı 401, refresh token rotation, logout sonrası eski token reddi ve ağ hatası senaryolarıyla E2E doğrulanması hâlâ gerekiyor.
 - [ ] **Üretim sırları ve yapılandırma:** `AuthModule` içinde `JWT_SECRET` yoksa kullanılabilecek sabit bir fallback secret bulunuyor. JWT stratejisi ayrıca secret zorunlu tutsa da satış paketinde sabit fallback kabul edilemez; tüm servislerde güvenli fail-fast yapılandırma doğrulanmalı.
 - [ ] **Temiz kurulum / gerçek çalışma:** Son CI Docker Compose yapılandırmasını doğrulayıp image'ları build ediyor; temiz makinede servisleri başlatma, migration, kayıt/giriş, görev akışı ve servisler arası gerçek bağlantıyı tek uçtan uca senaryo ile kanıtlamıyor.
 - [ ] **Lisans ve ürün teslimi:** Depoda kök seviyede alıcıya yönelik README ve lisans dosyası bulunmuyor. Backend ve frontend README dosyaları hâlâ framework başlangıç şablonları.
@@ -122,3 +122,20 @@ Her kapı için değişiklik → test → CI log incelemesi → bu belgedeki dur
 - Bu CI sonucu 24 Kasım güvenlik değişikliklerinin build/test hattından geçtiğini gösterir. Gerçek tarayıcı + fiziksel cihaz E2E, temiz müşteri makinesinde bağımsız kurulum, production TLS, backup/restore, SMTP teslimatı veya lisans uygunluğu kanıtı değildir.
 
 **Durum güncellemesi:** CI kabul kapısı bu commit için geçti. Satış kararı yine **NO-GO**; P0/P1 operasyon, mobil oturum E2E, rate limiting, lisans/attribution ve Codester teslim paketi açık.
+
+
+## 25 Kasım 2026 — mobil kimlik akışı ve tenant sınırı kod incelemesi
+
+### Koddan doğrulanan uygulamalar
+- Android istemcisinde mobil login/refresh/logout API tanımları mevcut.
+- Refresh token Android'de EncryptedSharedPreferences ile saklanıyor; OkHttp TokenAuthenticator ayrı bir refresh HTTP client kullanıyor, yenilenen token çiftini kaydediyor ve eşzamanlı 401 isteklerinde güncel access token'ı yeniden kullanmaya çalışıyor.
+- Backend JWT stratejisi yalnızca tokenType: access içeren token'ları kabul ediyor; refresh token'lar bearer access token olarak kullanılamıyor.
+- Task sorguları workspace ID ile sınırlandırılıyor; workspace guard aktif üyelik arıyor. Görev güncellemesi workspace ID + task ID + version koşullu atomik update kullanıyor.
+
+### Açık doğrulamalar / bulgular
+- Yukarıdaki mobil akış statik kod incelemesinde mevcut; gerçek API ile mobil E2E kanıtı henüz yok.
+- Workspace davet kodu hâlâ mevcut kullanıcıyı doğrudan ACTIVE üyeliğe alıyor. Şema PENDING statüsünü desteklese de token üretimi, davet kabulü, iptal ve süre sonu akışı uygulanmış değil. Bu özellik satış paketinde tamamlanmalı veya açıkça kapsam dışı bırakılıp arayüzden kaldırılmalı.
+- Refresh token kayıtları için süre aşımı/revocation temizliği ve oturum sayısı politikası ayrıca incelenmeli; refreshTokens kullanıcıya ait token hash'lerini sırayla karşılaştırıyor. Çok sayıda eski kayıt sorgu maliyetini artırabilir.
+- Auth uçları için dağıtık ortama uygun rate limiting/brute-force koruması henüz doğrulanmış değil. Tek process belleğinde sayaç kullanmak çoklu instance deployment için yeterli çözüm sayılmamalı.
+
+Bu not statik kaynak kod incelemesidir; bu akışların çalıştırıldığı veya saldırı testinden geçtiği anlamına gelmez.
