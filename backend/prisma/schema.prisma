@@ -94,6 +94,7 @@ model WorkspaceMembership {
   status      MembershipStatus  @default(PENDING)
   invitedById String?
   invitedAt   DateTime          @default(now())
+  invitationExpiresAt DateTime?
   joinedAt    DateTime?
 
   @@unique([workspaceId, userId])
