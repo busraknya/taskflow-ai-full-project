@@ -37,7 +37,7 @@ describe('WorkspacesService invitations', () => {
     events as unknown as EventEmitter2,
   );
 
-  beforeEach(() => jest.clearAllMocks());
+  beforeEach(() => jest.resetAllMocks());
 
   it('does not allow an ADMIN to grant OWNER', async () => {
     prisma.workspaceMembership.findUnique.mockResolvedValue({
@@ -137,12 +137,10 @@ describe('WorkspacesService invitations', () => {
   });
 
   it('rejects self-invitations', async () => {
-    prisma.workspaceMembership.findUnique
-      .mockResolvedValueOnce({
-        role: WorkspaceRole.OWNER,
-        status: MembershipStatus.ACTIVE,
-      })
-      .mockResolvedValueOnce(null);
+    prisma.workspaceMembership.findUnique.mockResolvedValueOnce({
+      role: WorkspaceRole.OWNER,
+      status: MembershipStatus.ACTIVE,
+    });
     prisma.user.findUnique.mockResolvedValue({
       id: 'owner-1',
       email: 'owner@example.com',
