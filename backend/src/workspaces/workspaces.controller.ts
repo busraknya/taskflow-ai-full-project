@@ -16,6 +16,7 @@ import { InviteMemberDto } from './dto/invite-member.dto';
 import { UpdateMemberRoleDto } from './dto/update-member-role.dto';
 import { AuthGuard } from '@nestjs/passport';
 import { WorkspaceMemberGuard } from './guards/workspace-member.guard';
+import { AuthRateLimitGuard } from '../common/rate-limit/rate-limit.guard';
 
 @Controller('workspaces')
 @UseGuards(AuthGuard('jwt'))
@@ -57,7 +58,7 @@ export class WorkspacesController {
   }
 
   @Post(':workspaceId/members/invite')
-  @UseGuards(WorkspaceMemberGuard)
+  @UseGuards(WorkspaceMemberGuard, AuthRateLimitGuard)
   async inviteMember(
     @Param('workspaceId') workspaceId: string,
     @Req() req: AuthenticatedRequest,
