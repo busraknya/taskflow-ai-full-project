@@ -35,6 +35,27 @@ export class WorkspacesController {
     return this.workspacesService.findAllForUser(req.user.id);
   }
 
+  @Get('invitations')
+  async getPendingInvitations(@Req() req: AuthenticatedRequest) {
+    return this.workspacesService.getPendingInvitations(req.user.id);
+  }
+
+  @Post(':workspaceId/members/accept')
+  async acceptInvitation(
+    @Param('workspaceId') workspaceId: string,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    return this.workspacesService.acceptInvitation(workspaceId, req.user.id);
+  }
+
+  @Delete(':workspaceId/members/invitation')
+  async declineInvitation(
+    @Param('workspaceId') workspaceId: string,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    return this.workspacesService.declineInvitation(workspaceId, req.user.id);
+  }
+
   @Post(':workspaceId/members/invite')
   @UseGuards(WorkspaceMemberGuard)
   async inviteMember(
