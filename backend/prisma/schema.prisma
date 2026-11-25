@@ -53,6 +53,7 @@ model User {
   comments          Comment[]
   refreshTokens     RefreshToken[]
   notificationPrefs NotificationPreference[]
+  sentWorkspaceInvitations WorkspaceMembership[] @relation("WorkspaceInviter")
 
   @@index([email])
 }
@@ -90,6 +91,7 @@ model WorkspaceMembership {
   workspace   Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   userId      String
   user        User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  invitedBy   User?              @relation("WorkspaceInviter", fields: [invitedById], references: [id], onDelete: SetNull)
   role        WorkspaceRole
   status      MembershipStatus  @default(PENDING)
   invitedById String?
@@ -100,6 +102,7 @@ model WorkspaceMembership {
   @@unique([workspaceId, userId])
   @@index([workspaceId])
   @@index([userId])
+  @@index([invitedById])
 }
 
 model Project {
