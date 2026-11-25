@@ -49,7 +49,7 @@ describe('AuthService refresh token rotation', () => {
   );
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    jest.resetAllMocks();
     config.get.mockReturnValue('test-secret-value-with-at-least-32-bytes');
     (bcrypt.compare as jest.Mock).mockResolvedValue(true);
     (bcrypt.hash as jest.Mock).mockResolvedValue('password-hash');
@@ -62,6 +62,10 @@ describe('AuthService refresh token rotation', () => {
       tokenType: 'refresh',
     });
     prisma.user.findUnique.mockResolvedValue({ id: 'user-1', deletedAt: null });
+    prisma.$transaction.mockImplementation(
+      (callback: (tx: typeof transactionClient) => unknown) =>
+        callback(transactionClient),
+    );
     prisma.refreshToken.findUnique.mockResolvedValue(null);
     prisma.refreshToken.findMany.mockResolvedValue([
       {
