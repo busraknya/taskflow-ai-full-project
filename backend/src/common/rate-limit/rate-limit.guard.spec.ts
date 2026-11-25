@@ -46,7 +46,10 @@ describe('AuthRateLimitGuard', () => {
       10,
       60,
     );
-    expect(response.setHeader).toHaveBeenCalledWith('X-RateLimit-Limit', '10');
+    expect(response.setHeader).toHaveBeenCalledWith(
+      'X-RateLimit-Limit',
+      '10',
+    );
     expect(response.setHeader).toHaveBeenCalledWith(
       'X-RateLimit-Remaining',
       '8',
@@ -63,7 +66,11 @@ describe('AuthRateLimitGuard', () => {
     });
 
     await expect(guard.canActivate(context)).resolves.toBe(true);
-    expect(rateLimit.consume).toHaveBeenCalledWith(expect.any(String), 30, 60);
+    expect(rateLimit.consume).toHaveBeenCalledWith(
+      expect.any(String),
+      30,
+      60,
+    );
     request.route.path = 'login';
   });
 
