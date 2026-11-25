@@ -1,15 +1,39 @@
 import { ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import Redis from 'ioredis';
 import { RateLimitService } from './rate-limit.service';
 
-jest.mock('ioredis', () => {
-  return jest.fn().mockImplementation(() => ({
-    eval: jest.fn(),
-    disconnect: jest.fn(),
-  }));
-});
+type RedisEval = (
+  script: string,
+  numberOfKeys: number,
+  key: string,
+  windowSeconds: string,
+) => Promise<unknown>;
 
-import Redis from 'ioredis';
+type RedisMock = {
+  eval: jest.MockedFunction<RedisEval>;
+  disconnect: jest.MockedFunction<() => void>;
+};
+
+jest.mock('ioredis', () => ({
+  __esModule: true,
+  default: jest.fn().mockImplementation(() => ({
+    eval: jest.fn<RedisEval>(),
+    disconnect: jest.fn<() => void>(),
+  })),
+}));
+
+const redisConstructor = Redis as unknown as jest.MockedFunction<
+  (...args: unknown[]) => RedisMock
+>;
+
+function latestRedisMock(): RedisMock {
+  const result = redisConstructor.mock.results.at(-1);
+  if (!result || result.type !== 'return') {
+    throw new Error('Redis mock instance was not created.');
+  }
+  return result.value;
+}
 
 describe('RateLimitService', () => {
   const config = {
@@ -27,10 +51,12 @@ describe('RateLimitService', () => {
 
   it('uses an atomic Redis increment and returns the remaining quota', async () => {
     const service = new RateLimitService(config as unknown as ConfigService);
-    const redis = (Redis as unknown as jest.Mock).mock.results[0].value;
+    const redis = latestRedisMock();
     redis.eval.mockResolvedValue([3, 42]);
 
-    await expect(service.consume('rate-limit:test', 5, 60)).resolves.toEqual({
+    await expect(
+      service.consume('rate-limit:test', 5, 60),
+    ).resolves.toEqual({
       allowed: true,
       limit: 5,
       remaining: 2,
@@ -42,30 +68,32 @@ describe('RateLimitService', () => {
       'rate-limit:test',
       '60',
     );
-    await service.onModuleDestroy();
+    service.onModuleDestroy();
   });
 
   it('rejects requests above the configured limit', async () => {
     const service = new RateLimitService(config as unknown as ConfigService);
-    const redis = (Redis as unknown as jest.Mock).mock.results[0].value;
+    const redis = latestRedisMock();
     redis.eval.mockResolvedValue([6, 12]);
 
-    await expect(service.consume('rate-limit:test', 5, 60)).resolves.toMatchObject({
+    await expect(
+      service.consume('rate-limit:test', 5, 60),
+    ).resolves.toMatchObject({
       allowed: false,
       remaining: 0,
     });
-    await service.onModuleDestroy();
+    service.onModuleDestroy();
   });
 
   it('fails closed when Redis is unavailable', async () => {
     const service = new RateLimitService(config as unknown as ConfigService);
-    const redis = (Redis as unknown as jest.Mock).mock.results[0].value;
+    const redis = latestRedisMock();
     redis.eval.mockRejectedValue(new Error('Redis unavailable'));
 
-    await expect(service.consume('rate-limit:test', 5, 60)).rejects.toBeInstanceOf(
-      ServiceUnavailableException,
-    );
-    await service.onModuleDestroy();
+    await expect(
+      service.consume('rate-limit:test', 5, 60),
+    ).rejects.toBeInstanceOf(ServiceUnavailableException);
+    service.onModuleDestroy();
   });
 
   it('requires valid Redis connection settings', () => {
