@@ -224,3 +224,12 @@ Bu run tamamlanmadan CI PASS denmeyecek. Backend lint non-blocking kalmaya devam
 - `android/settings.gradle.kts` içinde Compose Compiler plugin ID'sini Kotlin'in `org.jetbrains.kotlin:compose-compiler-gradle-plugin:<requested.version>` modülüne eşleyen `pluginManagement.resolutionStrategy` eklendi. Bu, plugin marker artifact çözümlemesini atlayıp gerçek plugin modülünü Maven Central üzerinden bulmayı hedefler.
 - Kod değişikliği commit `7eacdf0a8de4e1ceee2c294d2cc3220289a3f66c` üzerinde. Bu düzeltmenin CI sonucu henüz yok; yeni bir PR workflow çalışması bekleniyor/doğrulanacak.
 - Run `45683129340` için frontend, backend ve ML job'ları başarılı; Android başarısız. Docker image build inceleme anında sürüyordu. Bu run'ın sonucu 5/5 değildir.
+
+
+## 25 Kasım 2026 — Android plugin çözümlemesi için yeniden CI
+
+- Önceki PR CI run [45683129340](https://github.com/busraknya/taskflow-ai-full-project/actions/runs/45683129340) tamamlandı: frontend, backend, ML ve Docker Compose job'ları başarılı; Android job başarısız.
+- Android job log'u doğrulandı: Gradle 9.3.1, `android/build.gradle.kts` satır 2'de `org.jetbrains.kotlin.plugin.compose:2.2.10` marker artifact'ını bulamadı. Unit testler başlamadı; APK ve instrumented testler atlandı.
+- Branch'te `android/settings.gradle.kts` için plugin ID → `org.jetbrains.kotlin:compose-compiler-gradle-plugin:<version>` modül eşlemesi bulunuyor. Bu düzeltme önceki run'ın checkout ettiği PR merge commit'inden sonra eklendi; henüz CI'da doğrulanmadı.
+- Workflow `push` olayında `fix/go-live-blockers` dalını da izliyor. Bu doküman güncellemesi yeni bir branch CI run'ı başlatmak için yapıldı; yeni run'ın Android job'ı özellikle izlenecek.
+- Başarılı Android CI gelmeden Android kabul kapısı geçilmiş sayılmayacak. Diğer P0/P1 kapıları, lisans/attribution ve gerçek E2E testleri açık olduğundan satış kararı **NO-GO**.
