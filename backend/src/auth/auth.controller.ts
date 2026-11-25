@@ -15,6 +15,7 @@ import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { AuthGuard } from '@nestjs/passport';
+import { AuthRateLimitGuard } from '../common/rate-limit/rate-limit.guard';
 
 type RefreshTokenRequest = Request & {
   cookies?: {
@@ -33,12 +34,14 @@ type AuthenticatedRequest = Request & {
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
+  @UseGuards(AuthRateLimitGuard)
   @Post('register')
   async register(@Body() dto: RegisterDto) {
     return this.authService.register(dto);
   }
 
   @HttpCode(HttpStatus.OK)
+  @UseGuards(AuthRateLimitGuard)
   @Post('login')
   async login(
     @Body() dto: LoginDto,
@@ -60,6 +63,7 @@ export class AuthController {
   }
 
   @HttpCode(HttpStatus.OK)
+  @UseGuards(AuthRateLimitGuard)
   @Post('refresh')
   async refresh(
     @Req() req: RefreshTokenRequest,
@@ -92,6 +96,7 @@ export class AuthController {
   // These endpoints return/accept the refresh token in the HTTPS request body;
   // the Android app must keep it in encrypted local storage.
   @HttpCode(HttpStatus.OK)
+  @UseGuards(AuthRateLimitGuard)
   @Post('mobile/login')
   async mobileLogin(@Body() dto: LoginDto) {
     const result = await this.authService.login(dto);
@@ -103,12 +108,14 @@ export class AuthController {
   }
 
   @HttpCode(HttpStatus.OK)
+  @UseGuards(AuthRateLimitGuard)
   @Post('mobile/refresh')
   async mobileRefresh(@Body() dto: RefreshTokenDto) {
     return this.authService.refreshTokens(dto.refreshToken);
   }
 
   @HttpCode(HttpStatus.OK)
+  @UseGuards(AuthRateLimitGuard)
   @Post('mobile/logout')
   async mobileLogout(@Body() dto: RefreshTokenDto) {
     return this.authService.logoutWithRefreshToken(dto.refreshToken);
