@@ -26,13 +26,12 @@ export class AuthRateLimitGuard implements CanActivate {
     const response = context.switchToHttp().getResponse<Response>();
     const route = request.route as unknown as { path?: string } | undefined;
     const routePath = route?.path;
-    const policy =
-      routePath === 'refresh' || routePath === 'mobile/refresh'
-        ? REFRESH_POLICY
-        : DEFAULT_POLICY;
+    const policy = routePath?.endsWith('refresh')
+      ? REFRESH_POLICY
+      : DEFAULT_POLICY;
 
-    // Use the direct socket-derived IP unless a trusted proxy is explicitly configured.
-    const clientIp = request.socket.remoteAddress || 'unknown';
+    // Express resolves request.ip using TRUST_PROXY_HOPS configured at bootstrap.
+    const clientIp = request.ip || request.socket.remoteAddress || 'unknown';
     const ipHash = createHash('sha256')
       .update(clientIp)
       .digest('hex')
