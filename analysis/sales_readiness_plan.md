@@ -216,3 +216,11 @@ Bu not statik kaynak kod incelemesidir; bu akışların çalıştırıldığı v
 - Android job yeniden çalıştırma isteği, workflow hâlâ çalıştığı için GitHub tarafından reddedildi. Run tamamlandıktan sonra yalnız başarısız job yeniden denenecek.
 
 Bu run tamamlanmadan CI PASS denmeyecek. Backend lint non-blocking kalmaya devam ediyor; lisans, E2E, SMTP, TLS, backup/restore ve release ZIP kapıları da açık.
+
+
+## 25 Kasım 2026 — Android Gradle plugin resolution düzeltmesi
+
+- Run `45683129340` Android job'ında `org.jetbrains.kotlin.plugin.compose:2.2.10` plugin marker çözümlemesi başarısız oldu; unit testler başlamadı.
+- `android/settings.gradle.kts` içinde Compose Compiler plugin ID'sini Kotlin'in `org.jetbrains.kotlin:compose-compiler-gradle-plugin:<requested.version>` modülüne eşleyen `pluginManagement.resolutionStrategy` eklendi. Bu, plugin marker artifact çözümlemesini atlayıp gerçek plugin modülünü Maven Central üzerinden bulmayı hedefler.
+- Kod değişikliği commit `7eacdf0a8de4e1ceee2c294d2cc3220289a3f66c` üzerinde. Bu düzeltmenin CI sonucu henüz yok; yeni bir PR workflow çalışması bekleniyor/doğrulanacak.
+- Run `45683129340` için frontend, backend ve ML job'ları başarılı; Android başarısız. Docker image build inceleme anında sürüyordu. Bu run'ın sonucu 5/5 değildir.
