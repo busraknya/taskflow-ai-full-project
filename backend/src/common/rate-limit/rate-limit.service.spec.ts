@@ -76,9 +76,7 @@ describe('RateLimitService', () => {
     const redis = latestRedisMock();
     redis.eval.mockResolvedValue([6, 12]);
 
-    await expect(
-      service.consume('rate-limit:test', 5, 60),
-    ).resolves.toMatchObject({
+    await expect(service.consume('rate-limit:test', 5, 60)).resolves.toMatchObject({
       allowed: false,
       remaining: 0,
     });
