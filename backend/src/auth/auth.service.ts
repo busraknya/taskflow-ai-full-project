@@ -1,4 +1,5 @@
 import { Injectable, ConflictException, UnauthorizedException } from '@nestjs/common';
+import { createHash } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
@@ -117,17 +118,10 @@ export class AuthService {
       throw this.invalidRefreshToken();
     }
 
-    const storedTokens = await this.prisma.refreshToken.findMany({
-      where: { userId: payload.sub },
-    });
-
-    let matchedToken: (typeof storedTokens)[number] | null = null;
-    for (const storedToken of storedTokens) {
-      if (await bcrypt.compare(refreshToken, storedToken.tokenHash)) {
-        matchedToken = storedToken;
-        break;
-      }
-    }
+    const matchedToken = await this.findStoredRefreshToken(
+      payload.sub,
+      refreshToken,
+    );
 
     if (!matchedToken || matchedToken.expiresAt <= new Date()) {
       throw this.invalidRefreshToken();
@@ -195,21 +189,20 @@ export class AuthService {
       throw this.invalidRefreshToken();
     }
 
-    const storedTokens = await this.prisma.refreshToken.findMany({
-      where: { userId: payload.sub },
-    });
+    const storedToken = await this.findStoredRefreshToken(
+      payload.sub,
+      refreshToken,
+    );
 
-    for (const storedToken of storedTokens) {
-      if (await bcrypt.compare(refreshToken, storedToken.tokenHash)) {
-        await this.prisma.refreshToken.updateMany({
-          where: { id: storedToken.id, userId: payload.sub, revokedAt: null },
-          data: { revokedAt: new Date() },
-        });
-        return { message: 'Başarıyla çıkış yapıldı.' };
-      }
+    if (!storedToken) {
+      throw this.invalidRefreshToken();
     }
 
-    throw this.invalidRefreshToken();
+    await this.prisma.refreshToken.updateMany({
+      where: { id: storedToken.id, userId: payload.sub, revokedAt: null },
+      data: { revokedAt: new Date() },
+    });
+    return { message: 'Başarıyla çıkış yapıldı.' };
   }
 
   async logout(userId: string) {
@@ -218,6 +211,35 @@ export class AuthService {
       data: { revokedAt: new Date() },
     });
     return { message: 'Başarıyla çıkış yapıldı.' };
+  }
+
+  private async findStoredRefreshToken(userId: string, refreshToken: string) {
+    // Refresh tokens are high-entropy signed values; SHA-256 enables an indexed
+    // lookup. Bcrypt scanning is retained only for sessions created by older
+    // releases, then naturally disappears as those sessions rotate or expire.
+    const tokenHash = createHash('sha256').update(refreshToken).digest('hex');
+    const indexedToken = await this.prisma.refreshToken.findUnique({
+      where: { tokenHash },
+    });
+
+    if (indexedToken) {
+      return indexedToken;
+    }
+
+    const legacyTokens = await this.prisma.refreshToken.findMany({
+      where: {
+        userId,
+        tokenHash: { startsWith: '$2' },
+      },
+    });
+
+    for (const legacyToken of legacyTokens) {
+      if (await bcrypt.compare(refreshToken, legacyToken.tokenHash)) {
+        return legacyToken;
+      }
+    }
+
+    return null;
   }
 
   private invalidRefreshToken() {
@@ -239,7 +261,7 @@ export class AuthService {
       { secret, expiresIn: '30d' },
     );
 
-    const tokenHash = await bcrypt.hash(refreshToken, 10);
+    const tokenHash = createHash('sha256').update(refreshToken).digest('hex');
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + 30);
 
