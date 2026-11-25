@@ -1,5 +1,4 @@
 import { ServiceUnavailableException } from '@nestjs/common';
-import type { ConfigService } from '@nestjs/config';
 import Redis from 'ioredis';
 import { RateLimitService } from './rate-limit.service';
 
@@ -28,7 +27,8 @@ const redisConstructor = Redis as unknown as jest.MockedFunction<
 >;
 
 function latestRedisMock(): RedisMock {
-  const result = redisConstructor.mock.results.at(-1);
+  const results = redisConstructor.mock.results;
+  const result = results[results.length - 1];
   if (!result || result.type !== 'return') {
     throw new Error('Redis mock instance was not created.');
   }
@@ -36,21 +36,24 @@ function latestRedisMock(): RedisMock {
 }
 
 describe('RateLimitService', () => {
-  const config = {
-    get: jest.fn((key: string) => {
-      const values: Record<string, string> = {
-        REDIS_HOST: 'redis',
-        REDIS_PORT: '6379',
-        REDIS_PASSWORD: 'secret',
-      };
-      return values[key];
-    }),
-  };
+  const originalEnv = process.env;
 
-  beforeEach(() => jest.clearAllMocks());
+  beforeEach(() => {
+    jest.clearAllMocks();
+    process.env = {
+      ...originalEnv,
+      REDIS_HOST: 'redis',
+      REDIS_PORT: '6379',
+      REDIS_PASSWORD: 'secret',
+    };
+  });
+
+  afterEach(() => {
+    process.env = originalEnv;
+  });
 
   it('uses an atomic Redis increment and returns the remaining quota', async () => {
-    const service = new RateLimitService(config as unknown as ConfigService);
+    const service = new RateLimitService();
     const redis = latestRedisMock();
     redis.eval.mockResolvedValue([3, 42]);
 
@@ -70,7 +73,7 @@ describe('RateLimitService', () => {
   });
 
   it('rejects requests above the configured limit', async () => {
-    const service = new RateLimitService(config as unknown as ConfigService);
+    const service = new RateLimitService();
     const redis = latestRedisMock();
     redis.eval.mockResolvedValue([6, 12]);
 
@@ -84,7 +87,7 @@ describe('RateLimitService', () => {
   });
 
   it('fails closed when Redis is unavailable', async () => {
-    const service = new RateLimitService(config as unknown as ConfigService);
+    const service = new RateLimitService();
     const redis = latestRedisMock();
     redis.eval.mockRejectedValue(new Error('Redis unavailable'));
 
@@ -95,12 +98,10 @@ describe('RateLimitService', () => {
   });
 
   it('requires valid Redis connection settings', () => {
-    const invalidConfig = {
-      get: (key: string) => (key === 'REDIS_HOST' ? '' : '6379'),
-    };
+    delete process.env.REDIS_HOST;
 
-    expect(
-      () => new RateLimitService(invalidConfig as unknown as ConfigService),
-    ).toThrow('valid REDIS_HOST and REDIS_PORT are required');
+    expect(() => new RateLimitService()).toThrow(
+      'valid REDIS_HOST and REDIS_PORT are required',
+    );
   });
 });
