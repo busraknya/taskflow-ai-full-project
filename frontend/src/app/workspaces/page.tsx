@@ -19,9 +19,9 @@ interface WorkspaceInvitation {
   id: string;
   workspaceId: string;
   role: string;
-  invitationExpiresAt: string;
+  invitationExpiresAt: string | null;
   workspace: Pick<Workspace, 'id' | 'name' | 'slug'>;
-  invitedBy: { fullName: string; email: string };
+  invitedBy: { fullName: string; email: string } | null;
 }
 
 export default function WorkspacesPage() {
@@ -138,10 +138,10 @@ export default function WorkspacesPage() {
                     {invitation.workspace.name}
                   </p>
                   <p className="text-xs text-zinc-400">
-                    Invited by {invitation.invitedBy.fullName} · {invitation.role}
+                    Invited by {invitation.invitedBy?.fullName ?? 'a workspace admin'} · {invitation.role}
                   </p>
                   <p className="text-xs text-zinc-500">
-                    Expires {new Date(invitation.invitationExpiresAt).toLocaleDateString()}
+                    Expires {invitation.invitationExpiresAt ? new Date(invitation.invitationExpiresAt).toLocaleDateString() : 'Soon'}
                   </p>
                 </div>
                 <div className="flex gap-2">
