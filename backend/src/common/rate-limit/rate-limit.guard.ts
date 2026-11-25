@@ -48,6 +48,35 @@ export class AuthRateLimitGuard implements CanActivate {
       policy.windowSeconds,
     );
 
+    // Add an account-level bucket to make rotating source IPs less useful
+    // against password guessing. Never store raw email addresses in Redis keys.
+    if (routePath === 'login' || routePath === 'mobile/login') {
+      const body = request.body as { email?: unknown } | undefined;
+      const email =
+        typeof body?.email === 'string' ? body.email.trim().toLowerCase() : '';
+      if (email) {
+        const accountHash = createHash('sha256')
+          .update(email)
+          .digest('hex')
+          .slice(0, 32);
+        const accountResult = await this.rateLimit.consume(
+          `rate-limit:auth:account:${accountHash}`,
+          5,
+          15 * 60,
+        );
+        if (!accountResult.allowed) {
+          response.setHeader(
+            'Retry-After',
+            String(accountResult.retryAfterSeconds),
+          );
+          throw new HttpException(
+            'Too many authentication attempts. Please try again later.',
+            HttpStatus.TOO_MANY_REQUESTS,
+          );
+        }
+      }
+    }
+
     response.setHeader('X-RateLimit-Limit', String(result.limit));
     response.setHeader('X-RateLimit-Remaining', String(result.remaining));
 
