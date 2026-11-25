@@ -441,3 +441,28 @@ Komutlar başarıyla çalışmadan “build başarılı”, “testler geçti”
 - CodeCanyon common rejection factors: https://help.author.envato.com/hc/en-us/articles/360000536823-Common-Rejection-Factors-for-Code-Items
 
 Pazaryeri kuralları değişebileceğinden gönderim gününde resmi seller/author dokümanlarını yeniden kontrol et.
+
+
+---
+
+# 25 Kasım 2026 — Sonraki remediation dalı için durum eki
+
+> Bu ek, 16 Kasım tarihli başlangıç denetimini silmez veya geriye dönük olarak değiştirmez. Aşağıdaki güncel durum `fix/go-live-blockers` dalındaki kaynak kod ve dokümanların incelenmesine dayanır; bu değişiklikler henüz `main` dalına birleştirilmiş değildir.
+
+## Güncel kod incelemesinde doğrulanan iyileştirmeler
+
+- Kök `.env` remediation dalında silinmiş; `.env.example` örnek/yer tutucu değerlerle yeniden düzenlenmiş ve `.gitignore` sırları, Python cache/bytecode, Android `.idea`, Gradle ve build artefact'larını dışlayacak şekilde eklenmiştir. Tarihsel git objelerinin tamamında secret scanner çalıştırıldığı doğrulanmamıştır. Eski bir gerçek sır kullanıldıysa rotasyon gerekir.
+- Workspace davetleri artık doğrudan ACTIVE üyelik vermek yerine PENDING durum, 7 günlük sona erme, kabul/ret ve kuyruk üzerinden e-posta akışı içeriyor. Token-link ile davetsiz kayıtlı olmayan kullanıcı onboarding'i ilk sürüm kapsamı değildir. SMTP teslimatı henüz gerçek hesapla kanıtlanmamıştır.
+- Auth ve workspace invitation endpoint'leri için Redis tabanlı rate limiting eklenmiştir. Redis erişilemiyorsa fail-closed davranış tasarlanmıştır; proxy hop ayarının gerçek reverse proxy zincirinde doğrulanması ve saldırı testi açık kalır.
+- Yeni refresh token kayıtları SHA-256 fingerprint ve unique index ile bulunur; eski bcrypt kayıtları için geriye dönük uyumluluk fallback'i korunur. Gerçek paralel refresh/reuse E2E ve eski kayıt temizliği politikası açık kalır.
+- Android istemcisinde login/refresh/logout API tanımları, encrypted token storage ve 401 sonrası refresh authenticator kodu bulunur. Bunlar statik kod bulgularıdır; gerçek API ve cihazla E2E kanıtı değildir.
+- Docker Compose artık PostgreSQL, Redis, ML, migration, backend ve frontend servislerini tanımlar. CI Compose config/image build ve healthcheck adımlarını çalıştırır; temiz müşteri makinesinde bağımsız kurulum kabulü ve production TLS/reverse proxy doğrulaması yerine geçmez.
+- README ürünün geliştirme/pre-release durumunu ve ML tahminlerinin deneysel olduğunu açıkça belirtir. README lisans vermemektedir; ticari dağıtım lisansı ve üçüncü taraf attribution envanteri çözülmemiştir.
+
+## Doğrulama ve karar
+
+- Remediation dalındaki 25 Kasım CI run'ları commit bazında değerlendirilmelidir. Run `45683129340`, commit `5849609ad0b6c36b7b40b91ee7fc6003c97c5b9f` için oluşturulmuş ve inceleme anında `pending` durumundadır; bu nedenle başarılı sayılmaz.
+- CI workflow'unda backend genel lint baseline adımı `continue-on-error: true` olduğundan yeşil job sonucu tüm backend lint borcunun kapandığını göstermez.
+- Henüz gerçek browser/Android E2E, SMTP teslimatı, backup/restore, production TLS, tam secret-history taraması, ticari lisans/attribution ve Codester ZIP kabulü tamamlanmamıştır.
+
+**Güncel karar: NO-GO.** Bu remediation değişiklikleri başlangıç denetimindeki bazı bulguları kapatmıştır; ancak `main` branch'e merge edilmemiştir ve marketplace release için gerekli operasyonel, E2E ve lisans kapıları açık kalır.
