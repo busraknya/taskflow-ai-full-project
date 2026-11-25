@@ -3,7 +3,6 @@ import {
   OnModuleDestroy,
   ServiceUnavailableException,
 } from '@nestjs/common';
-import type { ConfigService } from '@nestjs/config';
 import Redis from 'ioredis';
 
 export interface RateLimitResult {
@@ -26,9 +25,9 @@ return { current, ttl }
 export class RateLimitService implements OnModuleDestroy {
   private readonly redis: Redis;
 
-  constructor(config: ConfigService) {
-    const host = config.get<string>('REDIS_HOST');
-    const port = Number(config.get<string>('REDIS_PORT'));
+  constructor() {
+    const host = process.env.REDIS_HOST;
+    const port = Number(process.env.REDIS_PORT);
 
     if (!host || !Number.isInteger(port) || port < 1 || port > 65535) {
       throw new Error('FATAL: valid REDIS_HOST and REDIS_PORT are required.');
@@ -37,7 +36,7 @@ export class RateLimitService implements OnModuleDestroy {
     this.redis = new Redis({
       host,
       port,
-      password: config.get<string>('REDIS_PASSWORD') || undefined,
+      password: process.env.REDIS_PASSWORD || undefined,
       lazyConnect: true,
       enableOfflineQueue: false,
       maxRetriesPerRequest: 1,
