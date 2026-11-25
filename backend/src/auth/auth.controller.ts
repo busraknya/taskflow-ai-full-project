@@ -121,7 +121,7 @@ export class AuthController {
     return this.authService.logoutWithRefreshToken(dto.refreshToken);
   }
 
-  @UseGuards(AuthGuard('jwt'))
+  @UseGuards(AuthGuard('jwt'), AuthRateLimitGuard)
   @Post('logout')
   async logout(
     @Req() req: AuthenticatedRequest,
