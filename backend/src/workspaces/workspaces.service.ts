@@ -166,6 +166,8 @@ export class WorkspacesService {
     });
 
     this.eventEmitter.emit('workspace.member_invited', {
+      workspaceId,
+      userId: targetUser.id,
       email: targetUser.email,
       fullName: targetUser.fullName,
       workspaceName: workspace?.name || 'Workspace',
