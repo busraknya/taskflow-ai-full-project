@@ -59,6 +59,15 @@ export class WorkspacesService {
   }
 
   async getWorkspaceMembers(workspaceId: string) {
+    await this.prisma.workspaceMembership.updateMany({
+      where: {
+        workspaceId,
+        status: MembershipStatus.PENDING,
+        invitationExpiresAt: { lte: new Date() },
+      },
+      data: { status: MembershipStatus.EXPIRED },
+    });
+
     return this.prisma.workspaceMembership.findMany({
       where: {
         workspaceId,
@@ -127,11 +136,21 @@ export class WorkspacesService {
     if (existingMembership?.status === MembershipStatus.ACTIVE) {
       throw new ConflictException("Bu kullanıcı zaten bu workspace'in üyesi.");
     }
+    const now = new Date();
     if (existingMembership?.status === MembershipStatus.PENDING) {
-      throw new ConflictException('Bu kullanıcı için bekleyen bir davet zaten var.');
+      if (
+        existingMembership.invitationExpiresAt &&
+        existingMembership.invitationExpiresAt > now
+      ) {
+        throw new ConflictException('Bu kullanıcı için bekleyen bir davet zaten var.');
+      }
+      await this.prisma.workspaceMembership.update({
+        where: { id: existingMembership.id },
+        data: { status: MembershipStatus.EXPIRED },
+      });
     }
 
-    const now = new Date();
+
     const invitationExpiresAt = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
     const membershipData = {
       role,
@@ -178,6 +197,15 @@ export class WorkspacesService {
   }
 
   async getPendingInvitations(userId: string) {
+    await this.prisma.workspaceMembership.updateMany({
+      where: {
+        userId,
+        status: MembershipStatus.PENDING,
+        invitationExpiresAt: { lte: new Date() },
+      },
+      data: { status: MembershipStatus.EXPIRED },
+    });
+
     return this.prisma.workspaceMembership.findMany({
       where: { userId, status: MembershipStatus.PENDING },
       include: {
