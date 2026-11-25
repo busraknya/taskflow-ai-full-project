@@ -112,3 +112,13 @@ Her kapı için değişiklik → test → CI log incelemesi → bu belgedeki dur
 - ML timeout değişikliği unit/integration testinde ve çalışan Compose ortamında doğrulanmalıdır.
 
 **GO/NO-GO: NO-GO devam ediyor.** Bu değişiklikler güvenli varsayılanları ve servis dayanıklılığını iyileştirir; gerçek kurulum/E2E, tenant izolasyonu, rate limiting, production TLS, backup/restore, lisans ve Codester paket kabul kapılarını kapatmaz.
+
+
+## 25 Kasım 2026 — son CI doğrulaması
+
+- Branch HEAD commit'i `2a7f14c3606cdeabc32a225272f3b42bcd937e76` için GitHub Actions run [45466529888](https://github.com/busraknya/taskflow-ai-full-project/actions/runs/45466529888), ikinci denemede **5/5 job başarılı** tamamlandı.
+- Backend test/build, frontend lint/typecheck/build, ML API testleri, Docker Compose image build + servis healthcheck ve Android unit test/debug APK/Room instrumented test job'ları başarılı.
+- Android instrumented test job'ı ilk denemede hosted emulator/ADB başlatma ve instrumentation process crash nedeniyle başarısız olmuştu. Testi kaldırmadan aynı job yeniden çalıştırıldı ve ikinci deneme başarılı oldu.
+- Bu CI sonucu 24 Kasım güvenlik değişikliklerinin build/test hattından geçtiğini gösterir. Gerçek tarayıcı + fiziksel cihaz E2E, temiz müşteri makinesinde bağımsız kurulum, production TLS, backup/restore, SMTP teslimatı veya lisans uygunluğu kanıtı değildir.
+
+**Durum güncellemesi:** CI kabul kapısı bu commit için geçti. Satış kararı yine **NO-GO**; P0/P1 operasyon, mobil oturum E2E, rate limiting, lisans/attribution ve Codester teslim paketi açık.
