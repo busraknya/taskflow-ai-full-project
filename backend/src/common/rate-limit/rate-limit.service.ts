@@ -76,7 +76,7 @@ export class RateLimitService implements OnModuleDestroy {
     }
   }
 
-  async onModuleDestroy() {
+  onModuleDestroy(): void {
     this.redis.disconnect();
   }
 }
