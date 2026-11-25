@@ -4,7 +4,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 interface LogAuditParams {
   workspaceId: string;
   actorId: string;
-  entityType: 'WORKSPACE' | 'PROJECT' | 'TASK' | 'COMMENT';
+  entityType: 'WORKSPACE' | 'PROJECT' | 'TASK' | 'COMMENT' | 'MEMBERSHIP';
   entityId: string;
   action: string;
   metadata?: Record<string, any>;
