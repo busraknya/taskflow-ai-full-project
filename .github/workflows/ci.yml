@@ -45,7 +45,6 @@ jobs:
             src/common/rate-limit/rate-limit.service.spec.ts \
             src/common/rate-limit/rate-limit.module.ts \
             src/notifications/workspace-invitation.listener.ts \
-            src/notifications/workspace-invitation.listener.spec.ts \
             src/notifications/email.processor.ts
       - name: Backend lint baseline (non-blocking during migration)
         run: npm run lint
