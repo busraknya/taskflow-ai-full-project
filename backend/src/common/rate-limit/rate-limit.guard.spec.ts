@@ -1,6 +1,5 @@
 import {
   ExecutionContext,
-  HttpException,
   HttpStatus,
 } from '@nestjs/common';
 import { AuthRateLimitGuard } from './rate-limit.guard';
