@@ -17,6 +17,16 @@ async function bootstrap() {
     credentials: true,
   });
 
+  const trustProxyHops = Number(process.env.TRUST_PROXY_HOPS ?? 0);
+  if (
+    !Number.isInteger(trustProxyHops) ||
+    trustProxyHops < 0 ||
+    trustProxyHops > 10
+  ) {
+    throw new Error('TRUST_PROXY_HOPS must be an integer between 0 and 10.');
+  }
+  app.getHttpAdapter().getInstance().set('trust proxy', trustProxyHops);
+
   app.setGlobalPrefix('api/v1');
   app.useGlobalFilters(new HttpExceptionFilter());
   app.useGlobalPipes(
