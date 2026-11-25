@@ -78,7 +78,7 @@ export default function MembersPage() {
 
     try {
       await api.post(`/workspaces/${workspaceId}/members/invite`, { email, role });
-      setToastMsg('Member successfully added to workspace.');
+      setToastMsg('Invitation sent. The member must accept it before joining.');
       setToastType('success');
       fetchMembers(workspaceId);
     } catch (err: any) {
@@ -171,7 +171,8 @@ export default function MembersPage() {
           members={members} 
           onRoleChange={handleRoleChange} 
           onRemove={handleRemoveMember} 
-          isOwnerOrAdmin={isOwnerOrAdmin} 
+          isOwnerOrAdmin={isOwnerOrAdmin}
+          canChangeRoles={currentUserRole === 'OWNER'} 
         />
 
       </div>
