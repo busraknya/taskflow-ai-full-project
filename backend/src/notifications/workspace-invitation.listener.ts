@@ -17,9 +17,12 @@ export class WorkspaceInvitationListener {
   constructor(@InjectQueue('email') private readonly emailQueue: Queue) {}
 
   @OnEvent('workspace.member_invited')
-  async handleWorkspaceInvitation(payload: WorkspaceInvitationEvent): Promise<void> {
-    const frontendUrl = (process.env.FRONTEND_URL || 'http://localhost:3000')
-      .replace(/\/+$/, '');
+  async handleWorkspaceInvitation(
+    payload: WorkspaceInvitationEvent,
+  ): Promise<void> {
+    const frontendUrl = (
+      process.env.FRONTEND_URL || 'http://localhost:3000'
+    ).replace(/\/+$/, '');
     const acceptUrl = `${frontendUrl}/workspaces`;
 
     try {
@@ -41,7 +44,10 @@ export class WorkspaceInvitationListener {
         },
       );
     } catch (error) {
-      console.error('[Notification] Failed to enqueue workspace invitation email:', error);
+      console.error(
+        '[Notification] Failed to enqueue workspace invitation email:',
+        error,
+      );
     }
   }
 }
