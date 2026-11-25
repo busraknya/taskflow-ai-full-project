@@ -158,3 +158,15 @@ Bu not statik kaynak kod incelemesidir; bu akışların çalıştırıldığı v
 - Backend genel lint borcu hâlâ migration/non-blocking durumunda; tam dependency/SBOM ve güvenlik incelemesi, TLS, backup/restore, secret rotation, lisans ve üçüncü taraf attribution açık.
 
 **GO/NO-GO: NO-GO.** Otomatik CI kapıları geçilmiş olsa da gerçek müşteri kurulum/E2E, SMTP, audit, operasyon ve marketplace lisans kapıları tamamlanmadan Codester'a yükleme yapılmamalı.
+
+
+## 25 Kasım 2026 — mevcut HEAD için son doğrulama durumu
+
+- İnceleme anındaki PR HEAD: `fbb772b236baca3aa30dc91c7262addcc30453ec`.
+- GitHub Actions run [45682351429](https://github.com/busraknya/taskflow-ai-full-project/actions/runs/45682351429) bu HEAD için **devam ediyor**; henüz 5/5 başarılı sonucu yok.
+- İş durumu: ML API testleri ve `pip-audit` başarılı. Backend TypeScript kontrolü devam ediyor; test/build/npm audit henüz başlamamış. Frontend lint ve typecheck başarılı, build devam ediyor; npm audit bekliyor. Android unit testleri devam ediyor; APK ve instrumented test adımları bekliyor. Docker Compose config doğrulaması başarılı; image build devam ediyor; servis healthcheck henüz başlamamış.
+- CI workflow'unda backend genel lint adımı `continue-on-error: true`; dolayısıyla job başarılı olsa bile genel backend lint borcu kapanmış sayılmaz. Yeni güvenlik/davet modüllerine özel ESLint adımı blocking.
+- Kök README mevcut ve Docker kurulum/production uyarılarını içeriyor. Ancak lisans seçilmemiş; README de açıkça lisansın henüz verilmediğini belirtiyor. Bu nedenle Codester dağıtım izni varmış gibi davranılamaz.
+- PR değişiklik listesinde `.env` silinmiş; diff içeriğinde yalnızca örnek/değiştirilebilir parola değerleri görünüyor. Yine de geçmişte gerçek bir sır kullanıldıysa rotasyon gerekir. `.gitignore` artık `.env`, Python cache ve Android IDE dosyalarını dışlıyor; ilgili IDE/cache dosyaları PR'da silinmiş.
+
+**Bu aşamadaki karar: NO-GO.** CI tamamlanmadan test sonucu ilan edilmeyecek. CI yeşil olsa bile gerçek kullanıcı E2E, temiz kurulumun bağımsız kabulü, TLS/reverse proxy, backup/restore, gerçek SMTP, lisans/attribution ve release paketi ayrıca kapanmalı.
