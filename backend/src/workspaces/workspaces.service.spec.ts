@@ -8,6 +8,12 @@ import { MembershipStatus, WorkspaceRole } from '@prisma/client';
 import type { PrismaService } from '../prisma/prisma.service';
 import { WorkspacesService } from './workspaces.service';
 
+jest.mock('@nestjs/event-emitter', () => ({
+  EventEmitter2: class EventEmitter2 {
+    emit = jest.fn();
+  },
+}));
+
 describe('WorkspacesService invitations', () => {
   const prisma = {
     workspaceMembership: {
