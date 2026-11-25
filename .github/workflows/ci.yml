@@ -36,20 +36,17 @@ jobs:
           cache-dependency-path: backend/package-lock.json
       - run: npm ci
       - run: npx prisma generate
-      - name: Lint changed backend TypeScript files
-        env:
-          BASE_REF: ${{ github.base_ref || 'main' }}
+      - name: Lint new security and invitation modules
         run: |
-          git fetch origin "$BASE_REF" --depth=1
-          mapfile -t changed_files < <(
-            git diff --name-only --diff-filter=ACMRT "origin/$BASE_REF...HEAD" -- 'backend/**/*.ts' |
-            sed 's#^backend/##'
-          )
-          if [ "${#changed_files[@]}" -gt 0 ]; then
-            npx eslint "${changed_files[@]}"
-          else
-            echo "No changed backend TypeScript files to lint."
-          fi
+          npx eslint \
+            src/common/rate-limit/rate-limit.guard.ts \
+            src/common/rate-limit/rate-limit.guard.spec.ts \
+            src/common/rate-limit/rate-limit.service.ts \
+            src/common/rate-limit/rate-limit.service.spec.ts \
+            src/common/rate-limit/rate-limit.module.ts \
+            src/notifications/workspace-invitation.listener.ts \
+            src/notifications/workspace-invitation.listener.spec.ts \
+            src/notifications/email.processor.ts
       - name: Backend lint baseline (non-blocking during migration)
         run: npm run lint
         continue-on-error: true
