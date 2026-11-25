@@ -18,8 +18,8 @@ type RedisMock = {
 jest.mock('ioredis', () => ({
   __esModule: true,
   default: jest.fn().mockImplementation(() => ({
-    eval: jest.fn<RedisEval>(),
-    disconnect: jest.fn<() => void>(),
+    eval: jest.fn<ReturnType<RedisEval>, Parameters<RedisEval>>(),
+    disconnect: jest.fn<void, []>(),
   })),
 }));
 
