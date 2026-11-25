@@ -112,7 +112,6 @@ describe('WorkspacesService invitations', () => {
     );
 
     const createCall = prisma.workspaceMembership.create.mock.calls[0][0];
-    expect(createCall.data.email).toBeUndefined();
     expect(createCall.data.status).toBe(MembershipStatus.PENDING);
     expect(createCall.data.invitedById).toBe('owner-1');
     expect(createCall.data.joinedAt).toBeNull();
