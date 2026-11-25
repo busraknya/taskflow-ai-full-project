@@ -114,19 +114,19 @@ Bu yolculuğun tamamı henüz E2E kanıtıyla doğrulanmış değildir.
 
 ### WF-03 — Üye daveti, kabulü, rol değişimi ve çıkarılması
 
-**Hedeflenen akış:** OWNER/yetkili ADMIN e-posta ve rol girer → backend yetkiyi ve hedef rolü doğrular → süreli davet oluşturulur → davet gönderilir → hedef kullanıcı tek kullanımlı daveti kabul eder → üyelik ACTIVE olur → OWNER rol/üyelik yönetir → audit kaydı oluşur.
+**Uygulanan ilk sürüm akışı:** OWNER/yetkili ADMIN, TaskFlow'da kayıtlı kullanıcının e-posta adresi ve rolünü girer → backend yetkiyi ve hedef rolü doğrular → üyelik 7 gün süreli PENDING oluşturulur → BullMQ üzerinden kullanıcıya Workspaces ekranını açan e-posta kuyruğa alınır → yalnız davet edilen kullanıcı kendi hesabıyla giriş yapıp daveti kabul/ret eder → kabulde üyelik atomik olarak ACTIVE olur. OWNER/ADMIN bekleyen daveti üyelik listesinden kaldırarak iptal edebilir. Bu sürüm token-link ile yeni kullanıcı kaydı desteklemez.
 
-**Alternatifler:** Kullanıcı bulunamadı; zaten üye; davet süresi doldu/iptal edildi; token tekrar kullanıldı; ADMIN ayrıcalık yükseltmeye çalıştı; son OWNER çıkarılmaya çalışıldı.
+**Alternatifler:** Kullanıcı kayıtlı değil; zaten üye; bekleyen davet var; davet süresi doldu/iptal edildi; davetli olmayan kullanıcı kabul etmeye çalıştı; ADMIN ayrıcalık yükseltmeye çalıştı; son OWNER çıkarılmaya çalışıldı.
 
 **Gereksinimler**
-- **MEM-01:** Davet oluşturma/kabul/iptal/süre aşımı durum makinesi olmalı.
+- **MEM-01:** PENDING → ACTIVE / EXPIRED akışı atomik olmalı; reddetme ve yönetici tarafından iptal desteklenmeli.
 - **MEM-02:** OWNER normal davetle atanamamalı; sahiplik devri ayrı olmalı.
 - **MEM-03:** ADMIN'in rol atama sınırları backend'de uygulanmalı.
 - **MEM-04:** Son OWNER korunmalı.
 - **MEM-05:** Üyelik ve rol değişiklikleri audit'e yazılmalı.
-- **MEM-06:** Davet linkleri tahmin edilemez, tek kullanımlık ve süreli olmalı.
+- **MEM-06:** İlk sürümde davet mevcut TaskFlow hesabının userId değerine bağlanmalı; yalnız o hesap kabul edebilmeli ve davet 7 gün içinde kullanılmalı. Token-link ile kayıt akışı kapsam dışıdır.
 
-**Kod gözlemi:** Üye listeleme/davet/rol değiştirme/çıkarma servis kodu var. Davet kabulünün tam akışı ve e-posta job'larının çalışması doğrulanmalı; bu belge bunları tamamlanmış saymaz.
+**Kod gözlemi (25 Kasım 2026):** PENDING davet oluşturma, 7 günlük expiry, kullanıcının kendi Workspaces ekranından kabul/ret etmesi, atomik ACTIVE geçişi, süresi dolan davetin EXPIRED yapılması ve BullMQ e-posta kuyruğu kodda mevcut. Gerçek SMTP teslimatı ve browser E2E akışı henüz doğrulanmadı. Üyelik/davet olayları için audit kayıtları da tamamlanmalı.
 
 ### WF-04 — Proje yaşam döngüsü
 
@@ -278,7 +278,7 @@ Bu senaryolar otomasyon ve manuel test planının temelidir. CI build'i tek baş
 |---|---|---|---|
 | E2E-01 | Kayıt ve login | Güvenli oturum açılır | P0 |
 | E2E-02 | Workspace oluşturma | Workspace + OWNER üyeliği atomik oluşur | P0 |
-| E2E-03 | Üye daveti | Süreli, tek kullanımlı davet tamamlanır | P1 |
+| E2E-03 | Üye daveti | Kayıtlı kullanıcıya PENDING davet, kabul/ret, 7 günlük expiry ve iptal gerçek backend ile E2E doğrulanır | P1 |
 | E2E-04 | ADMIN OWNER atamaya çalışır | 403 | P0 |
 | E2E-05 | VIEWER task oluşturur | 403 | P0 |
 | E2E-06 | MEMBER task oluşturur | Doğru workspace/projeye kaydolur | P0 |
@@ -369,7 +369,7 @@ Bu diyagram mantıksal sorumlulukları gösterir; event bağlantıları gerçek 
 3. Tahmin ekranı: yüzde, faktörler, model güncelliği ve veri yetersizliği nasıl gösterilecek?
 4. Gerçek etiketli veri birikene kadar deneysel model nasıl etiketlenecek?
 5. MEMBER rolü hangi yönetim işlemlerini yapabilir?
-6. Davetli kullanıcı önceden kayıtlı olmak zorunda mı; kabul/süre sonu nasıl işler?
+6. İlk sürüm kararı: davetli kullanıcı önceden kayıtlı olmalı; davet 7 gün PENDING kalır, yalnız ilgili hesap kabul/ret edebilir. Token-link ile yeni kayıt sonraki sürüme bırakıldı.
 7. Task silme, arşivleme, yeniden açma ve due date değişimi nasıl davranır?
 8. Web/Android conflict çözümünde kullanıcıya hangi seçenekler sunulur?
 9. İlk sürüm bildirim kanalı e-posta mı, uygulama içi mi, push mı?
@@ -417,16 +417,16 @@ Her akışta şu sıra izlenir:
 
 Bu bölüm, ilk akış taslağının mevcut branch'teki gerçek kaynak kodla karşılaştırılmasından çıkan bulgulardır. Bunlar otomatik testle doğrulanmış sonuçlar değildir; ilgili dosyalar incelenmiştir.
 
-### 13.1 Üyelik daveti gerçekte kabul akışı değil
+### 13.1 Üyelik daveti — 17 Kasım tarihli bulgu (25 Kasım'da güncellendi)
 
 İncelenen kaynak: `backend/src/workspaces/workspaces.service.ts`, `backend/src/workspaces/workspaces.controller.ts`.
 
 - Davet edilen kullanıcının sistemde önceden kayıtlı olması gerekiyor.
-- Davet endpoint'i üyeliği doğrudan `ACTIVE` olarak oluşturuyor.
-- Davet token'ı, davet süresi, kabul/ret ve iptal durum makinesi görünmüyor.
-- Bu nedenle WF-03'teki gerçek davet-kabul yolculuğu mevcut haliyle **eksik**; var olan davranış daha çok kayıtlı kullanıcıyı doğrudan workspace'e eklemek.
+- 17 Kasım incelemesinde üyelik doğrudan `ACTIVE` oluşturuluyordu; bu bulgu 25 Kasım düzeltmesinden önceki kodu anlatır.
+- 25 Kasım itibarıyla davet `PENDING` oluşturuluyor, 7 günlük expiry saklanıyor, kullanıcı kendi hesabından kabul/ret edebiliyor ve davet e-postası BullMQ kuyruğuna alınıyor.
+- Token-link kullanılmıyor; davet mevcut kullanıcı hesabının userId değerine bağlı. Gerçek SMTP ve browser E2E doğrulaması hâlâ açık.
 
-**Gereksinim etkisi:** MEM-01 ve MEM-06 henüz karşılanmış değil. Ürün kararı: davetli kişi kayıtlı değilse ne olacak? İlk sürümde davet linkiyle kayıt + kabul mü, yoksa yalnız mevcut kullanıcıya ekleme mi?
+**Gereksinim etkisi:** MEM-01'in temel state machine'i kodda mevcut. MEM-06 ilk sürüm için hesap-bağlı davet olarak karşılanıyor; token-link ve yeni kullanıcı kaydı sonraki sürüm kapsamıdır.
 
 ### 13.2 Workspace rolü ve Web arayüzü aynı davranışı sunmuyor
 
@@ -561,13 +561,13 @@ Aşağıdaki notlar 13.3–13.8 bölümlerindeki tarihsel bulguları güncel bra
 
 İncelenen kaynaklar: `backend/src/workspaces/workspaces.controller.ts`, `backend/src/workspaces/workspaces.service.ts`, `backend/src/workspaces/dto/invite-member.dto.ts`, `backend/prisma/schema.prisma`, Web members sayfası.
 
-**Mevcut davranış:** OWNER/ADMIN davet endpoint'ine e-posta ve rol gönderir. E-posta sistemde kayıtlı değilse 404 döner. Kayıtlı kullanıcı varsa üyelik hemen `ACTIVE` olarak oluşturulur; davet e-postası yalnız bilgilendirme niteliğindedir. `MembershipStatus.PENDING` ve `EXPIRED` enum değerleri tanımlı olmasına rağmen davet kabul/ret durum makinesinde kullanılmıyor. Tekrarlı üyelik unique constraint nedeniyle conflict verir.
+**25 Kasım 2026 güncel davranışı:** OWNER/ADMIN davet endpoint'ine e-posta ve rol gönderir. İlk sürüm yalnız kayıtlı hesapları kabul eder. Üyelik `PENDING` ve 7 günlük `invitationExpiresAt` ile oluşturulur; BullMQ davet e-postası kuyruğa alınır. Davetli kullanıcı `/workspaces` ekranından kendi hesabıyla kabul/ret yapar. Kabul `updateMany` koşuluyla atomiktir; süresi dolmuş davet `EXPIRED` olur. OWNER/ADMIN bekleyen üyeliği kaldırarak daveti iptal edebilir. Davet oluşturma IP tabanlı rate limit kapsamındadır.
 
-**Ürün gereksinimi kararı:** Gerçek SaaS daveti için e-posta linki/token, token hash saklama, expiration, kabul/ret, davet iptali/yeniden gönderim, zaten üye/önceden davetli kullanıcı, yanlış workspace, token tekrar kullanımı ve davet rolünün kabul anındaki geçerliliği senaryoları tanımlanmalı. Davet kabul edilene kadar üyelik PENDING olmalı; workspace erişimi yalnız ACTIVE üyeliğe verilmeli. Davet linki token'ı loglara veya audit metadata'ya yazılmamalı. Kullanıcı zaten kayıtlı mı değil mi ayrıntısı gereksiz yere dışarı sızdırılmamalı.
+**Ürün kapsamı kararı:** İlk sürüm daveti kayıtlı kullanıcı hesabına bağlar; token-link ile yeni kayıt ve yeniden gönderim sonraki sürüme bırakılmıştır. PENDING davet workspace erişimi vermez; kabul yalnız JWT'den gelen userId ile yapılır. E-posta bağlantısı token taşımaz, yalnız Workspaces ekranını açar. Davet/kabul/ret/iptal olayları için audit kaydı eklenmesi ve SMTP teslimatının doğrulanması açık iş olarak kalır.
 
-**Kabul kriterleri:** (1) yalnız OWNER/ADMIN uygun roller için davet oluşturabilir; (2) OWNER rolü normal davetle verilemez; (3) ADMIN yalnız MEMBER/VIEWER davet edebilir; (4) davet token'ı tek kullanımlık ve süreli; (5) kabul işlemi atomik; (6) expired/revoked/used token reddedilir; (7) PENDING üyelik API/guard tarafından workspace erişimi alamaz; (8) davet ve kabul olayları audit edilir; (9) e-posta gönderimi dayanıklı kuyrukla yapılır.
+**Kabul kriterleri:** (1) yalnız OWNER/ADMIN uygun roller için davet oluşturabilir; (2) OWNER rolü normal davetle verilemez; (3) ADMIN yalnız MEMBER/VIEWER davet edebilir; (4) davet 7 gün sonra expire olur; (5) kabul işlemi atomiktir ve yalnız davet edilen userId kabul edebilir; (6) expired/revoked/already-accepted davet reddedilir; (7) PENDING üyelik workspace erişimi alamaz; (8) davet/kabul/ret/iptal audit edilir — henüz açık; (9) e-posta dayanıklı BullMQ kuyruğuna alınır, gerçek SMTP teslimatı test edilmelidir.
 
-**Öncelik:** P1 ürün kapsamı; mevcut otomatik ACTIVE ekleme davranışı demo için çalışabilir ancak gerçek davet kabul akışı olarak sunulmamalı.
+**Öncelik:** P1. Temel hesap-bağlı davet akışı uygulanmıştır; audit ve gerçek SMTP/browser E2E kanıtı olmadan satış onayı verilmemelidir.
 
 ### 13.14 18 Kasım — doğrulama durumu
 
@@ -613,11 +613,11 @@ Güncel kodda `TaskViewModel.queueStatusChange` pending status değişikliğini 
 - ProjectsService create/delete yalnız OWNER/ADMIN kabul ediyor.
 - WorkspacesService ADMIN'in OWNER veya ADMIN davet etmesini engelliyor; son OWNER'ın rolünü düşürme/üyeliğini silme kontrolü var.
 - MEMBER'ın task create/update yapabilmesi mevcut kod davranışı. Bu ürün politikası açık bir RBAC matrisiyle kesinleştirilmeli.
-- Üye daveti hâlâ kayıtlı kullanıcıya doğrudan ACTIVE üyelik oluşturuyor; davet tokenı, expiry, accept/reject/revoke state machine yok. `workspace.member_invited` event'inin listener'ı görünmüyor.
+- 25 Kasım güncellemesi: Üye daveti PENDING + 7 günlük expiry, accept/decline endpoint'leri, Workspaces inbox ve BullMQ e-posta listener'ı ile uygulanmıştır. İlk sürüm yalnız kayıtlı hesaplara yöneliktir; audit ve gerçek SMTP/browser E2E doğrulaması açık.
 
 ### Notifications, audit ve yan etkiler
 
-NotificationsModule AppModule'a dahil; TaskAssignedListener TasksModule provider'ı; email queue ve EmailProcessor kodda bağlı. E-posta HTML alanları escape ediliyor. Ancak queue add çağrısında attempts/backoff/retention ayarı görünmüyor ve SMTP gerçek teslimat testi yok. AuditService DB hatasını catch edip yuttuğu için domain write başarılıyken audit kaydı kaybolabilir. Transactional outbox bulunmuyor.
+NotificationsModule AppModule'a dahil; TaskAssignedListener ve WorkspaceInvitationListener provider'ları kayıtlı; email queue ve EmailProcessor kodda bağlı. E-posta HTML alanları escape ediliyor. Queue için 5 deneme, exponential backoff, completed/failed retention ayarları mevcut. SMTP gerçek teslimat testi hâlâ yok. AuditService DB hatasını catch edip yuttuğu için domain write başarılıyken audit kaydı kaybolabilir. Transactional outbox bulunmuyor.
 
 ### Task, ML ve API davranışı
 
