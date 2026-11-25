@@ -78,7 +78,7 @@ export default function MembersPage() {
 
     try {
       await api.post(`/workspaces/${workspaceId}/members/invite`, { email, role });
-      setToastMsg('Invitation sent. The member must accept it before joining.');
+      setToastMsg('Invitation created. The member can accept it from their Workspaces page.');
       setToastType('success');
       fetchMembers(workspaceId);
     } catch (err: any) {
