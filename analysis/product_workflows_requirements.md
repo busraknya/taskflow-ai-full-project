@@ -596,16 +596,16 @@ Bu ek, `fix/go-live-blockers` dalındaki kaynak kodun yeniden okunmasıyla hazı
 
 Güncel kodda `TaskViewModel.queueStatusChange` pending status değişikliğini Room'a yazar, `ownerUserId` ile hesap bazında ayırır ve `SyncScheduler` unique WorkManager işi başlatır. `SyncWorker` yalnızca mevcut oturum kullanıcısının kuyruğunu işler; Authorization header ile API'ye PATCH gönderir; 2xx sonrası siler. 401 BLOCKED_AUTH, 403 FAILED, 409 CONFLICT, 408/429/5xx ve exception retry olarak ayrılır. Login sonrası aynı kullanıcıya ait BLOCKED_AUTH kayıtları yeniden kuyruğa alınır.
 
-**Durum:** OFF hesap izolasyonu ve temel HTTP işleme kodda mevcut; Worker için 2xx/401/403/409/429/5xx/network/malformed payload test matrisi ve gerçek backend entegrasyon testi henüz yeterli kanıtlanmadı. Android refresh token akışı bulunmuyor; 401 sonrası yeniden giriş gerekebilir. Logout yerel session'ı temizliyor ancak backend logout/revoke çağrısı yapmıyor.
+**Durum (25 Kasım):** OFF hesap izolasyonu ve temel HTTP işleme kodda mevcut; Worker için 2xx/401/403/409/429/5xx/network/malformed payload test matrisi ve gerçek backend entegrasyon testi hâlâ gerekli. Android refresh token EncryptedSharedPreferences içinde saklanıyor; TokenAuthenticator 401 sonrasında ayrı refresh client ile token çiftini yeniliyor. Backend mobile login/refresh/logout uçları mevcut; gerçek API ile fiziksel cihaz E2E doğrulaması açık.
 
-### Backend auth/session — açık P0
+### Backend auth/session — kod tabanı güçlendirildi, E2E açık
 
-- Refresh token doğrulama, aktif tokenları listeleme, eşleşen tokenı revoke etme ve yeni token üretme ayrı DB işlemleri. Atomik compare-and-swap/transaction yok; aynı refresh token ile eşzamanlı istekler yarışabilir.
-- `refreshTokens` catch bloğu tüm hataları `INVALID_REFRESH_TOKEN` olarak dönüştürüyor; `TOKEN_THEFT_DETECTED` ayrımı kayboluyor.
-- Parola değişimi `passwordHash` güncelliyor; aktif refresh tokenları revoke etmiyor.
-- Android AuthApiService yalnız login içeriyor; refresh/logout ve cookie yönetimi bulunmuyor. Backend refresh tokenı HttpOnly cookie olarak sunuyor; Android istemcinin bu cookie akışına katıldığına dair kod yok.
+- Yeni refresh tokenlar SHA-256 fingerprint ile unique index üzerinden bulunuyor; eski bcrypt hash'li oturumlar için sınırlı legacy fallback korunuyor.
+- Refresh rotation Prisma transaction içinde compare-and-swap `updateMany` kullanıyor. Aynı tokenla yarışta yalnız bir istek başarılı olabiliyor; revoked token tekrar kullanılırsa kalan aktif oturumlar iptal ediliyor ve `TOKEN_REUSE_DETECTED` dönüyor.
+- Parola değiştirme parola hash'ini güncelliyor ve aktif refresh tokenları aynı Prisma transaction içinde revoke ediyor.
+- Web refresh tokenı HttpOnly/SameSite cookie ile kullanıyor. Android mobile login/refresh/logout body sözleşmesini kullanıyor; refresh token EncryptedSharedPreferences içinde saklanıyor ve OkHttp TokenAuthenticator yenileme yapıyor.
 
-**Kabul kriterleri:** Refresh rotation transaction/CAS; paralel refresh testi (tek başarılı rotasyon); token reuse davranışı ve güvenli audit; parola değişiminde tüm oturumların revoke edilmesi; Web ve Android logout/refresh davranışının açık ve test edilmiş sözleşmesi.
+**Kabul kriterleri:** Transaction/CAS, paralel refresh, token reuse, parola değişiminde revoke için unit testler mevcut. Gerçek Web/Android backend E2E, Android eşzamanlı 401 ve offline senaryoları, audit log kapsamı ve fiziksel cihaz doğrulaması hâlâ açık.
 
 ### RBAC ve üyelik
 
@@ -622,7 +622,7 @@ NotificationsModule AppModule'a dahil; TaskAssignedListener ve WorkspaceInvitati
 ### Task, ML ve API davranışı
 
 - Task version update tek koşullu `updateMany` compare-and-swap kullanıyor; unit test başarı ve yarışta 409 yolunu kapsıyor. Gerçek PostgreSQL concurrency integration testi yine gerekli.
-- Task create/update ML tahminini senkron bekliyor. AiService HTTP timeout tanımlamıyor; servis yanıt vermezse task API uzun süre bekleyebilir.
+- Task create/update ML tahminini senkron bekliyor. NestJS ML HttpModule için 3 saniye timeout ve redirect kapatma eklendi; bu sınırın gerçek Compose ortamında yük/latency testi ayrıca yapılmalı.
 - ML endpoint sabit risk_score üretmiyor; `risk_score: null`. Altı sentetik örnekli GradientBoosting sınıflandırıcısı yalnız deneysel LOW/MEDIUM/HIGH etiketi üretiyor. Model card gerçek dünya doğruluğu iddiası olmadığını belirtiyor.
 - Feature extraction'da due date olmayan görev için 7 gün varsayımı kullanılıyor; bu ürün/ML semantiği olarak açıkça onaylanmalı.
 - Task listelerinde pagination görünmüyor. Schema'da archivedAt/deletedAt var; TasksController'da archive/delete/restore endpoint'i görünmüyor.
