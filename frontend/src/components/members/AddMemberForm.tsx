@@ -14,7 +14,7 @@ export function AddMemberForm({ onAdd, adding }: AddMemberFormProps) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const confirmed = window.confirm(`Are you sure you want to add ${email} with role ${role}?`);
+    const confirmed = window.confirm(`Send a workspace invitation to ${email} with role ${role}?`);
     if (!confirmed) return;
 
     try {
@@ -27,7 +27,7 @@ export function AddMemberForm({ onAdd, adding }: AddMemberFormProps) {
 
   return (
     <div className={`${theme.colors.bg.secondary} border ${theme.colors.border.primary} rounded-lg p-5 space-y-4`}>
-      <h2 className="text-xs font-medium text-white uppercase tracking-wider">Add Team Member</h2>
+      <h2 className="text-xs font-medium text-white uppercase tracking-wider">Invite Team Member</h2>
       <form onSubmit={handleSubmit} className="flex gap-3">
         <input
           type="email"
@@ -51,7 +51,7 @@ export function AddMemberForm({ onAdd, adding }: AddMemberFormProps) {
           disabled={adding}
           className={`${theme.colors.accent.DEFAULT} text-xs font-medium px-4 py-2 rounded-md transition-colors disabled:opacity-50`}
         >
-          {adding ? 'Adding...' : 'Add Member'}
+          {adding ? 'Sending...' : 'Send Invitation'}
         </button>
       </form>
     </div>
