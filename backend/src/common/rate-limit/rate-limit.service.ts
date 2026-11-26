@@ -24,6 +24,7 @@ return { current, ttl }
 @Injectable()
 export class RateLimitService implements OnModuleDestroy {
   private readonly redis: Redis;
+  private connectPromise: Promise<void> | null = null;
 
   constructor() {
     const host = process.env.REDIS_HOST;
@@ -43,6 +44,46 @@ export class RateLimitService implements OnModuleDestroy {
       connectTimeout: 3000,
       retryStrategy: () => null,
     });
+
+    // ioredis emits connection errors independently of command promises.
+    // Keep an error listener attached; consume() still fails closed on errors.
+    this.redis.on('error', () => undefined);
+  }
+
+  private async ensureConnected(): Promise<void> {
+    if (this.redis.status === 'ready') {
+      return;
+    }
+
+    if (!this.connectPromise) {
+      this.connectPromise = new Promise<void>((resolve, reject) => {
+        const cleanup = () => {
+          this.redis.off('ready', onReady);
+          this.redis.off('error', onError);
+        };
+        const onReady = () => {
+          cleanup();
+          resolve();
+        };
+        const onError = (error: Error) => {
+          cleanup();
+          reject(error);
+        };
+
+        this.redis.once('ready', onReady);
+        this.redis.once('error', onError);
+
+        if (this.redis.status === 'wait' || this.redis.status === 'end') {
+          this.redis.connect().catch(onError);
+        }
+        // If another operation already started the connection, wait for
+        // its ready/error event rather than calling connect() twice.
+      }).finally(() => {
+        this.connectPromise = null;
+      });
+    }
+
+    await this.connectPromise;
   }
 
   async consume(
@@ -51,6 +92,10 @@ export class RateLimitService implements OnModuleDestroy {
     windowSeconds: number,
   ): Promise<RateLimitResult> {
     try {
+      // lazyConnect + enableOfflineQueue:false requires an explicit awaited
+      // connection before the first Redis command.
+      await this.ensureConnected();
+
       const result = (await this.redis.eval(
         FIXED_WINDOW_SCRIPT,
         1,
