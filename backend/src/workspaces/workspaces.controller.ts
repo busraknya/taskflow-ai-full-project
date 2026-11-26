@@ -17,6 +17,7 @@ import { UpdateMemberRoleDto } from './dto/update-member-role.dto';
 import { AuthGuard } from '@nestjs/passport';
 import { WorkspaceMemberGuard } from './guards/workspace-member.guard';
 import { AuthRateLimitGuard } from '../common/rate-limit/rate-limit.guard';
+import { SensitiveRateLimit } from '../common/rate-limit/rate-limit.policies';
 
 @Controller('workspaces')
 @UseGuards(AuthGuard('jwt'))
@@ -59,6 +60,8 @@ export class WorkspacesController {
 
   @Post(':workspaceId/members/invite')
   @UseGuards(WorkspaceMemberGuard, AuthRateLimitGuard)
+  // Per-user cap on invitation emails, independent of the client IP.
+  @SensitiveRateLimit('workspace-invite')
   async inviteMember(
     @Param('workspaceId') workspaceId: string,
     @Req() req: AuthenticatedRequest,

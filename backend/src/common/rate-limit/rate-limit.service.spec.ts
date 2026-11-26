@@ -119,6 +119,64 @@ describe('RateLimitService', () => {
     service.onModuleDestroy();
   });
 
+  // Regression (SEC-02): after a failed attempt ioredis may end the
+  // connection without emitting 'error' again; consume() must still fail
+  // fast instead of waiting forever.
+  it('fails closed when the connection ends without an error event', async () => {
+    const service = new RateLimitService();
+    const redis = latestRedisMock();
+    redis.status = 'end';
+    redis.connect.mockImplementation(() => new Promise<void>(() => undefined));
+    redis.once.mockImplementation(function (
+      this: RedisMock,
+      event: string,
+      listener: (...args: unknown[]) => void,
+    ) {
+      if (event === 'end') setImmediate(() => listener());
+      return this;
+    });
+
+    await expect(
+      service.consume('rate-limit:test', 5, 60),
+    ).rejects.toBeInstanceOf(ServiceUnavailableException);
+    expect(redis.eval).not.toHaveBeenCalled();
+    service.onModuleDestroy();
+  });
+
+  it('fails closed when no connection outcome arrives before the deadline', async () => {
+    jest.useFakeTimers();
+    try {
+      const service = new RateLimitService();
+      const redis = latestRedisMock();
+      redis.status = 'connecting'; // another caller started connecting
+      redis.once.mockReturnThis(); // neither 'ready', 'error' nor 'end' fires
+
+      const pending = service.consume('rate-limit:test', 5, 60);
+      const assertion = expect(pending).rejects.toBeInstanceOf(
+        ServiceUnavailableException,
+      );
+      await jest.advanceTimersByTimeAsync(3_500);
+      await assertion;
+      service.onModuleDestroy();
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('removes its connection listeners after a failed attempt', async () => {
+    const service = new RateLimitService();
+    const redis = latestRedisMock();
+    redis.status = 'wait';
+    redis.connect.mockRejectedValue(new Error('ECONNREFUSED'));
+
+    await expect(
+      service.consume('rate-limit:test', 5, 60),
+    ).rejects.toBeInstanceOf(ServiceUnavailableException);
+    const removed = redis.off.mock.calls.map((call) => call[0]);
+    expect(removed).toEqual(expect.arrayContaining(['ready', 'error', 'end']));
+    service.onModuleDestroy();
+  });
+
   it('requires valid Redis connection settings', () => {
     delete process.env.REDIS_HOST;
 

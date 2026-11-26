@@ -168,8 +168,11 @@ describe('Auth session security (SEC-01)', () => {
     return prisma.refreshTokens.filter((t) => t.revokedAt === null);
   }
 
-  async function until(condition: () => boolean) {
-    for (let i = 0; i < 10_000 && !condition(); i++) {
+  // Time-bounded (not iteration-bounded) so slow machines and parallel test
+  // workers, where bcrypt takes longer, cannot make it give up too early.
+  async function until(condition: () => boolean, timeoutMs = 5_000) {
+    const deadline = Date.now() + timeoutMs;
+    while (!condition() && Date.now() < deadline) {
       await new Promise((resolve) => setImmediate(resolve));
     }
     if (!condition()) throw new Error('condition not reached');
@@ -877,6 +880,62 @@ describe('Auth session security (SEC-01)', () => {
 
       await mobileRefresh(bob.refreshToken).expect(200);
       await mobileRefresh(alice.body.refreshToken).expect(401);
+    });
+  });
+
+  // ---------- SEC-02: per-user limits through the global interceptor ----------
+
+  describe('Password change rate limiting (SEC-02)', () => {
+    const wrongPasswordChange = (accessToken: string) =>
+      request(app.getHttpServer())
+        .patch('/api/v1/users/me/password')
+        .set('Authorization', `Bearer ${accessToken}`)
+        .send({
+          currentPassword: 'WrongPassword9',
+          newPassword: 'NewPassword456',
+        });
+
+    it('limits current-password guessing to 5 attempts per window', async () => {
+      const alice = (await mobileLogin().expect(200)).body as {
+        accessToken: string;
+      };
+
+      for (let i = 0; i < 5; i++) {
+        await wrongPasswordChange(alice.accessToken).expect(401);
+      }
+      // Even the correct password is refused once the limit is reached.
+      const blocked = await changePassword(alice.accessToken).expect(429);
+      expect(blocked.body.code).toBe('RATE_LIMITED');
+      expect(blocked.headers['retry-after']).toBeDefined();
+    });
+
+    it("one user's exhausted limit does not affect another user", async () => {
+      const alice = (await mobileLogin().expect(200)).body as {
+        accessToken: string;
+      };
+      prisma.addUser({
+        email: 'bob@example.test',
+        passwordHash: await bcrypt.hash(PASSWORD, 4),
+      });
+      const bob = (await mobileLogin('bob@example.test').expect(200)).body as {
+        accessToken: string;
+      };
+
+      for (let i = 0; i < 5; i++) {
+        await wrongPasswordChange(alice.accessToken).expect(401);
+      }
+      await wrongPasswordChange(alice.accessToken).expect(429);
+      await changePassword(bob.accessToken).expect(200);
+    });
+
+    it('other endpoints stay available while the password limit is exhausted', async () => {
+      const alice = (await mobileLogin().expect(200)).body as {
+        accessToken: string;
+      };
+      for (let i = 0; i < 6; i++) {
+        await wrongPasswordChange(alice.accessToken);
+      }
+      await callProtected(alice.accessToken).expect(200);
     });
   });
 });

@@ -16,7 +16,7 @@ import { PrismaService } from '../src/prisma/prisma.service';
  * SEC-05: workspace invitation lifecycle against real PostgreSQL and Redis
  * (full AppModule). Requires a migrated, disposable database (DATABASE_URL),
  * a disposable Redis (REDIS_HOST/REDIS_PORT) and JWT_SECRET (>= 32 bytes).
- * Only users/workspaces created by this suite and `rate-limit:auth:*` keys
+ * Only users/workspaces created by this suite and `rate-limit:*` keys
  * are touched. Point SMTP_HOST at an unused port so queued emails fail fast.
  */
 const describeWithInfra =
@@ -67,7 +67,7 @@ describeWithInfra('Workspace invitations against PostgreSQL (SEC-05)', () => {
 
   beforeEach(async () => {
     // All requests come from 127.0.0.1; keep the real limiter, reset counters.
-    const keys = await redis.keys('rate-limit:auth:*');
+    const keys = await redis.keys('rate-limit:*');
     if (keys.length > 0) await redis.del(...keys);
   });
 

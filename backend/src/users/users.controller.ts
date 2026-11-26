@@ -14,6 +14,7 @@ import { AuthGuard } from '@nestjs/passport';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { UpdateNotificationPreferenceDto } from './dto/update-notification-preference.dto';
 import { setRefreshCookie } from '../auth/refresh-cookie';
+import { SensitiveRateLimit } from '../common/rate-limit/rate-limit.policies';
 
 @Controller('users/me')
 @UseGuards(AuthGuard('jwt'))
@@ -38,6 +39,8 @@ export class UsersController {
   }
 
   @Patch('password')
+  // Limits brute force of the current password with a stolen access token.
+  @SensitiveRateLimit('password-change')
   async changePassword(
     @Req() req: AuthenticatedRequest,
     @Body() dto: ChangePasswordDto,

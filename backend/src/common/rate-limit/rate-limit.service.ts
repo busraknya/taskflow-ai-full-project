@@ -21,6 +21,9 @@ local ttl = redis.call('TTL', KEYS[1])
 return { current, ttl }
 `;
 
+/** Upper bound for establishing a connection (ioredis connectTimeout + margin). */
+const CONNECT_DEADLINE_MS = 3_500;
+
 @Injectable()
 export class RateLimitService implements OnModuleDestroy {
   private readonly redis: Redis;
@@ -57,9 +60,18 @@ export class RateLimitService implements OnModuleDestroy {
 
     if (!this.connectPromise) {
       this.connectPromise = new Promise<void>((resolve, reject) => {
+        // After a failed attempt ioredis can end the connection without
+        // emitting 'error' again; treat 'end' and a deadline as failures so
+        // callers always fail fast (503) instead of hanging.
+        const timer = setTimeout(
+          () => onError(new Error('Redis connection timed out')),
+          CONNECT_DEADLINE_MS,
+        );
         const cleanup = () => {
+          clearTimeout(timer);
           this.redis.off('ready', onReady);
           this.redis.off('error', onError);
+          this.redis.off('end', onEnd);
         };
         const onReady = () => {
           cleanup();
@@ -69,9 +81,11 @@ export class RateLimitService implements OnModuleDestroy {
           cleanup();
           reject(error);
         };
+        const onEnd = () => onError(new Error('Redis connection closed'));
 
         this.redis.once('ready', onReady);
         this.redis.once('error', onError);
+        this.redis.once('end', onEnd);
 
         if (this.redis.status === 'wait' || this.redis.status === 'end') {
           this.redis.connect().catch(onError);

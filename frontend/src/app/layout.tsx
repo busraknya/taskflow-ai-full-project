@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import { connection } from "next/server";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -17,11 +18,14 @@ export const metadata: Metadata = {
   description: "AI-Powered Project Management SaaS",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  // The nonce-based CSP (src/proxy.ts) requires request-time rendering:
+  // static pages are generated without a request, so no nonce could be set.
+  await connection();
   return (
     <html
       lang="en"

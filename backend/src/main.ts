@@ -2,10 +2,14 @@ import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
+import { applySecurityHeaders } from './common/security/security-headers';
 import cookieParser from 'cookie-parser';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+
+  // Registered first so every response, including errors, carries them.
+  applySecurityHeaders(app);
 
   const allowedOrigins = (process.env.CORS_ORIGINS || 'http://localhost:3000')
     .split(',')

@@ -13,6 +13,7 @@ import { AuthModule } from '../src/auth/auth.module';
 import { hashRefreshToken } from '../src/auth/refresh-token.util';
 import { HttpExceptionFilter } from '../src/common/filters/http-exception.filter';
 import { RateLimitModule } from '../src/common/rate-limit/rate-limit.module';
+import { applySecurityHeaders } from '../src/common/security/security-headers';
 import { PrismaModule } from '../src/prisma/prisma.module';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { UsersModule } from '../src/users/users.module';
@@ -23,7 +24,7 @@ import { UsersModule } from '../src/users/users.module';
  * Requires DATABASE_URL pointing at a migrated, disposable test database,
  * REDIS_HOST/REDIS_PORT of a disposable Redis, and JWT_SECRET (>= 32 bytes).
  * Only users created by this suite (and their cascading refresh tokens) and
- * `rate-limit:auth:*` keys are touched and removed.
+ * `rate-limit:*` keys are touched and removed.
  *
  *   DATABASE_URL=... npx prisma migrate deploy --config prisma.config.ts
  *   DATABASE_URL=... REDIS_HOST=... REDIS_PORT=... JWT_SECRET=... \
@@ -63,6 +64,7 @@ describeWithDb('Auth session security against PostgreSQL (SEC-01, R-1)', () => {
     }).compile();
 
     app = moduleRef.createNestApplication({ logger: false });
+    applySecurityHeaders(app);
     app.use(cookieParser());
     app.setGlobalPrefix('api/v1');
     app.useGlobalFilters(new HttpExceptionFilter());
@@ -86,7 +88,7 @@ describeWithDb('Auth session security against PostgreSQL (SEC-01, R-1)', () => {
   // Every request comes from 127.0.0.1, so reset the auth rate-limit
   // counters between tests (the limiter itself stays real).
   beforeEach(async () => {
-    const keys = await redis.keys('rate-limit:auth:*');
+    const keys = await redis.keys('rate-limit:*');
     if (keys.length > 0) await redis.del(...keys);
   });
 
@@ -464,5 +466,62 @@ describeWithDb('Auth session security against PostgreSQL (SEC-01, R-1)', () => {
       .expect(429);
     expect(blocked.headers['retry-after']).toBeDefined();
     expect(await redis.keys('rate-limit:auth:*')).not.toHaveLength(0);
+  });
+
+  // ---------- SEC-02 ----------
+
+  it('API responses carry the Helmet security headers', async () => {
+    const res = await request(app.getHttpServer()).get(
+      '/api/v1/users/me/notification-preferences',
+    );
+    expect(res.headers['content-security-policy']).toContain(
+      "default-src 'none'",
+    );
+    expect(res.headers['x-content-type-options']).toBe('nosniff');
+    expect(res.headers['x-frame-options']).toBe('DENY');
+    expect(res.headers['referrer-policy']).toBe('no-referrer');
+    expect(res.headers['x-powered-by']).toBeUndefined();
+  });
+
+  it('a spoofed X-Forwarded-For header does not bypass the IP limit', async () => {
+    const user = await createUser();
+    for (let i = 0; i < 10; i++) {
+      await request(app.getHttpServer())
+        .post('/api/v1/auth/login')
+        .set('X-Forwarded-For', `198.51.100.${i}`)
+        .send({ email: user.email, password: 'wrong-password1' })
+        .expect(401);
+    }
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/login')
+      .set('X-Forwarded-For', '198.51.100.250')
+      .send({ email: user.email, password: PASSWORD })
+      .expect(429);
+  });
+
+  it('password changes are limited per user through Redis', async () => {
+    const alice = await createUser();
+    const bob = await createUser();
+    const aliceSession = await login(alice.email);
+    const bobSession = await login(bob.email);
+    const wrongChange = (token: string) =>
+      request(app.getHttpServer())
+        .patch('/api/v1/users/me/password')
+        .set('Authorization', `Bearer ${token}`)
+        .send({ currentPassword: 'WrongPassword9', newPassword: NEW_PASSWORD });
+
+    for (let i = 0; i < 5; i++) {
+      await wrongChange(aliceSession.accessToken).expect(401);
+    }
+    const blocked = await wrongChange(aliceSession.accessToken).expect(429);
+    expect(blocked.body.code).toBe('RATE_LIMITED');
+    expect(Number(blocked.headers['retry-after'])).toBeGreaterThan(0);
+    expect(
+      await redis.keys(`rate-limit:user:${alice.id}:password-change`),
+    ).toHaveLength(1);
+
+    // Bob's quota is untouched, and Alice's other requests still work.
+    await wrongChange(bobSession.accessToken).expect(401);
+    await callProtected(aliceSession.accessToken).expect(200);
   });
 });
