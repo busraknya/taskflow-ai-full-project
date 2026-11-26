@@ -157,13 +157,13 @@ describe('TaskFlow AI Core Invariants (E2E)', () => {
     await request(app.getHttpServer())
       .get(`/api/v1/workspaces/${workspaceId}/projects`)
       .set('Authorization', `Bearer ${outsiderToken}`)
-      .expect(403);
+      .expect(404);
 
     await request(app.getHttpServer())
       .patch(`/api/v1/workspaces/${workspaceId}/tasks/${task.body.id}`)
       .set('Authorization', `Bearer ${outsiderToken}`)
       .send({ title: 'Unauthorized change' })
-      .expect(403);
+      .expect(404);
 
     // Logout revokes the current mobile refresh token.
     await request(app.getHttpServer())
