@@ -1,0 +1,48 @@
+# Build context: ./frontend (docker-compose service `frontend`).
+# Docker reads .dockerignore only from the context root, so the repository
+# root .dockerignore does NOT apply here.
+#
+# Required by the image and kept: package*.json, next.config.ts,
+# tsconfig.json, next-env.d.ts, postcss.config.mjs, eslint.config.mjs,
+# src/, public/.
+
+# Secrets and local environment files. `next build` would otherwise read
+# .env* and inline values into the bundle; public build-time configuration is
+# passed explicitly via the NEXT_PUBLIC_API_URL build argument.
+.env
+.env.*
+**/.env
+**/.env.*
+*.pem
+*.key
+*.p12
+*.pfx
+*.crt
+secrets/
+.npmrc
+
+# Dependencies and build output (installed/generated inside the image)
+node_modules/
+.next/
+out/
+build/
+coverage/
+*.tsbuildinfo
+.vercel/
+
+# Documentation (not needed to build or run the app)
+README.md
+
+# VCS, editor, OS and Docker metadata
+.git
+.gitignore
+.dockerignore
+Dockerfile*
+.idea/
+.vscode/
+*.swp
+.DS_Store
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*

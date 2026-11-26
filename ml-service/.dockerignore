@@ -1,0 +1,44 @@
+# Build context: ./ml-service (docker-compose service `ml-service`).
+# Docker reads .dockerignore only from the context root, so the repository
+# root .dockerignore does NOT apply here.
+#
+# Required by the image and kept: requirements.txt, main.py, models/
+# (including models/*.joblib).
+
+# Secrets and local environment files
+.env
+.env.*
+**/.env
+**/.env.*
+*.pem
+*.key
+secrets/
+
+# Local virtual environments and Python caches
+venv/
+.venv/
+env/
+__pycache__/
+**/__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Training and test code (not used at runtime)
+train.py
+test_*.py
+MODEL_CARD.md
+
+# VCS, editor, OS and Docker metadata
+.git
+.gitignore
+.dockerignore
+Dockerfile*
+.idea/
+.vscode/
+*.swp
+.DS_Store
+*.log

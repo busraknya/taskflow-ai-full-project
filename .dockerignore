@@ -1,7 +1,15 @@
+# Applies only to builds that use the repository root as context. The compose
+# services build from ./backend, ./frontend and ./ml-service, which have
+# their own .dockerignore files.
 .git
 .env
 .env.*
+**/.env
+**/.env.*
 !.env.example
+**/*.pem
+**/*.key
+**/venv
 **/node_modules
 **/.next
 **/dist
