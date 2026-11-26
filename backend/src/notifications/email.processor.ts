@@ -1,7 +1,11 @@
 import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { Job } from 'bullmq';
 import * as nodemailer from 'nodemailer';
-import { escapeHtml } from './email-template.util';
+import {
+  escapeHtml,
+  safeHttpUrl,
+  sanitizeHeaderText,
+} from './email-template.util';
 
 type TaskAssignedTemplateData = {
   type?: 'task-assigned';
@@ -42,16 +46,23 @@ export class EmailProcessor extends WorkerHost {
 
     if (templateData.type === 'workspace-invitation') {
       const expiresAt = new Date(templateData.expiresAt).toLocaleString();
+      // URLs are validated (http/https only) before HTML-escaping; escaping
+      // alone would still allow e.g. javascript: links.
+      const acceptUrl = safeHttpUrl(templateData.acceptUrl);
       text = [
         `Hello ${templateData.fullName},`,
         `You were invited to join ${templateData.workspaceName} on TaskFlow AI.`,
-        `Sign in to accept the invitation: ${templateData.acceptUrl}`,
+        acceptUrl
+          ? `Sign in to accept the invitation: ${acceptUrl}`
+          : 'Sign in to TaskFlow AI to accept the invitation.',
         `This invitation expires on ${expiresAt}.`,
       ].join('\n\n');
       html = [
         `<p>Hello <b>${escapeHtml(templateData.fullName)}</b>,</p>`,
         `<p>You were invited to join <b>${escapeHtml(templateData.workspaceName)}</b> on TaskFlow AI.</p>`,
-        `<p><a href="${escapeHtml(templateData.acceptUrl)}">Sign in to accept the invitation</a></p>`,
+        acceptUrl
+          ? `<p><a href="${escapeHtml(acceptUrl)}">Sign in to accept the invitation</a></p>`
+          : '<p>Sign in to TaskFlow AI to accept the invitation.</p>',
         `<p>This invitation expires on ${escapeHtml(expiresAt)}.</p>`,
       ].join('');
     } else {
@@ -63,7 +74,8 @@ export class EmailProcessor extends WorkerHost {
       await transporter.sendMail({
         from: process.env.SMTP_FROM || 'noreply@taskflow.local',
         to: recipient,
-        subject,
+        // Subjects embed user-controlled names (workspace, task title).
+        subject: sanitizeHeaderText(subject),
         text,
         html,
       });

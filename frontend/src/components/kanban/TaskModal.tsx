@@ -4,7 +4,8 @@ import { useState } from 'react';
 import { theme } from '@/lib/theme';
 
 interface Member {
-  user: { id: string; fullName: string; email: string };
+  status?: string;
+  user: { id: string; fullName: string | null; email: string };
 }
 
 interface TaskModalProps {
@@ -99,7 +100,8 @@ export function TaskModal({ isOpen, onClose, onSubmit, members }: TaskModalProps
               className={`w-full ${theme.colors.bg.primary} border ${theme.colors.border.primary} rounded-md px-3 py-2 text-sm text-white focus:outline-none`}
             >
               <option value="">Unassigned</option>
-              {members.map((m) => (
+              {/* Pending invitees cannot be assigned until they accept. */}
+              {members.filter((m) => m.status !== 'PENDING').map((m) => (
                 <option key={m.user.id} value={m.user.id}>{m.user.fullName} ({m.user.email})</option>
               ))}
             </select>

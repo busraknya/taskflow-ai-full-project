@@ -1,8 +1,17 @@
 import { Injectable, ConflictException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateWorkspaceDto } from './dto/create-workspace.dto';
-import { WorkspaceRole, MembershipStatus } from '@prisma/client';
+import { WorkspaceRole, MembershipStatus, Prisma } from '@prisma/client';
 import { EventEmitter2 } from '@nestjs/event-emitter';
+
+const INVITATION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
+function isUniqueConstraintViolation(error: unknown): boolean {
+  return (
+    error instanceof Prisma.PrismaClientKnownRequestError &&
+    error.code === 'P2002'
+  );
+}
 
 @Injectable()
 export class WorkspacesService {
@@ -68,7 +77,7 @@ export class WorkspacesService {
       data: { status: MembershipStatus.EXPIRED },
     });
 
-    return this.prisma.workspaceMembership.findMany({
+    const memberships = await this.prisma.workspaceMembership.findMany({
       where: {
         workspaceId,
         status: { in: [MembershipStatus.ACTIVE, MembershipStatus.PENDING] },
@@ -79,6 +88,22 @@ export class WorkspacesService {
         },
       },
     });
+
+    // Until an invitation is accepted, only the address the inviter typed is
+    // shown; the invitee's profile (name, avatar) is not disclosed.
+    return memberships.map((membership) =>
+      membership.status === MembershipStatus.PENDING
+        ? {
+            ...membership,
+            user: {
+              id: membership.user.id,
+              email: membership.user.email,
+              fullName: null,
+              avatarUrl: null,
+            },
+          }
+        : membership,
+    );
   }
 
   async inviteMember(
@@ -114,44 +139,51 @@ export class WorkspacesService {
     }
 
     const normalizedEmail = email.trim().toLowerCase();
+    const now = new Date();
+    const invitationExpiresAt = new Date(now.getTime() + INVITATION_TTL_MS);
+
+    // Identical response whether or not the address belongs to an account, so
+    // the endpoint cannot be used to enumerate users or harvest profile data.
+    const response = {
+      message: 'Davet oluşturuldu.',
+      email: normalizedEmail,
+      role,
+      invitationExpiresAt,
+    };
+
     const targetUser = await this.prisma.user.findUnique({
       where: { email: normalizedEmail },
     });
-    if (!targetUser) {
-      throw new NotFoundException(
-        'Bu e-posta adresine sahip bir kullanıcı sistemde bulunamadı.',
-      );
+    if (!targetUser || targetUser.deletedAt || targetUser.disabledAt) {
+      // No membership is created and no email is sent.
+      return response;
     }
 
     if (targetUser.id === inviterUserId) {
       throw new ConflictException('Kendinizi workspace davet edemezsiniz.');
     }
 
-    const existingMembership = await this.prisma.workspaceMembership.findUnique({
-      where: {
-        workspaceId_userId: { workspaceId, userId: targetUser.id },
+    const existingMembership = await this.prisma.workspaceMembership.findUnique(
+      {
+        where: {
+          workspaceId_userId: { workspaceId, userId: targetUser.id },
+        },
       },
-    });
+    );
 
     if (existingMembership?.status === MembershipStatus.ACTIVE) {
       throw new ConflictException("Bu kullanıcı zaten bu workspace'in üyesi.");
     }
-    const now = new Date();
-    if (existingMembership?.status === MembershipStatus.PENDING) {
-      if (
-        existingMembership.invitationExpiresAt &&
-        existingMembership.invitationExpiresAt > now
-      ) {
-        throw new ConflictException('Bu kullanıcı için bekleyen bir davet zaten var.');
-      }
-      await this.prisma.workspaceMembership.update({
-        where: { id: existingMembership.id },
-        data: { status: MembershipStatus.EXPIRED },
-      });
+    if (
+      existingMembership?.status === MembershipStatus.PENDING &&
+      existingMembership.invitationExpiresAt &&
+      existingMembership.invitationExpiresAt > now
+    ) {
+      throw new ConflictException(
+        'Bu kullanıcı için bekleyen bir davet zaten var.',
+      );
     }
 
-
-    const invitationExpiresAt = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
     const membershipData = {
       role,
       status: MembershipStatus.PENDING,
@@ -161,24 +193,47 @@ export class WorkspacesService {
       joinedAt: null,
     };
 
-    const membership = existingMembership
-      ? await this.prisma.workspaceMembership.update({
-          where: { id: existingMembership.id },
-          data: membershipData,
-          include: {
-            user: { select: { id: true, fullName: true, email: true } },
-          },
-        })
-      : await this.prisma.workspaceMembership.create({
-          data: {
-            workspaceId,
-            userId: targetUser.id,
-            ...membershipData,
-          },
-          include: {
-            user: { select: { id: true, fullName: true, email: true } },
-          },
+    if (existingMembership) {
+      // Re-invite only from an expired/stale invitation. The conditional
+      // write re-checks the state atomically, so a concurrent accept or a
+      // parallel re-invite can never be overwritten (an ACTIVE membership is
+      // never turned back into an invitation).
+      const reinvited = await this.prisma.workspaceMembership.updateMany({
+        where: {
+          id: existingMembership.id,
+          OR: [
+            { status: MembershipStatus.EXPIRED },
+            {
+              status: MembershipStatus.PENDING,
+              OR: [
+                { invitationExpiresAt: null },
+                { invitationExpiresAt: { lte: now } },
+              ],
+            },
+          ],
+        },
+        data: membershipData,
+      });
+      if (reinvited.count !== 1) {
+        throw new ConflictException(
+          'Davet durumu değişti. Lütfen üye listesini yenileyin.',
+        );
+      }
+    } else {
+      try {
+        await this.prisma.workspaceMembership.create({
+          data: { workspaceId, userId: targetUser.id, ...membershipData },
         });
+      } catch (error) {
+        // A parallel request created the invitation first.
+        if (isUniqueConstraintViolation(error)) {
+          throw new ConflictException(
+            'Bu kullanıcı için bekleyen bir davet zaten var.',
+          );
+        }
+        throw error;
+      }
+    }
 
     const workspace = await this.prisma.workspace.findUnique({
       where: { id: workspaceId },
@@ -193,7 +248,7 @@ export class WorkspacesService {
       expiresAt: invitationExpiresAt,
     });
 
-    return membership;
+    return response;
   }
 
   async getPendingInvitations(userId: string) {
@@ -207,7 +262,11 @@ export class WorkspacesService {
     });
 
     return this.prisma.workspaceMembership.findMany({
-      where: { userId, status: MembershipStatus.PENDING },
+      where: {
+        userId,
+        status: MembershipStatus.PENDING,
+        workspace: { deletedAt: null },
+      },
       include: {
         workspace: {
           select: { id: true, name: true, slug: true },
@@ -220,6 +279,13 @@ export class WorkspacesService {
     });
   }
 
+  /**
+   * Single-use, atomic acceptance: one conditional UPDATE consumes the
+   * invitation only if it belongs to the caller, is still PENDING, has not
+   * expired and its workspace still exists. Concurrent accepts therefore have
+   * exactly one winner; (workspaceId, userId) is unique, so no duplicate
+   * membership can be created.
+   */
   async acceptInvitation(workspaceId: string, userId: string) {
     const now = new Date();
     const result = await this.prisma.workspaceMembership.updateMany({
@@ -228,6 +294,9 @@ export class WorkspacesService {
         userId,
         status: MembershipStatus.PENDING,
         invitationExpiresAt: { gt: now },
+        // Defence in depth: ownership is never granted through an invitation.
+        role: { not: WorkspaceRole.OWNER },
+        workspace: { deletedAt: null },
       },
       data: {
         status: MembershipStatus.ACTIVE,

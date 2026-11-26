@@ -14,7 +14,7 @@ import { CreateProjectModal } from '@/components/projects/CreateProjectModal';
 import { useAuthStore } from '@/store/useAuthStore';
 
 interface Project { id: string; name: string; }
-interface Member { user: { id: string; fullName: string; email: string; }; }
+interface Member { status?: string; user: { id: string; fullName: string | null; email: string; }; }
 interface Task { id: string; title: string; description: string; status: 'TODO' | 'IN_PROGRESS' | 'IN_REVIEW' | 'DONE'; priority: number; version: number; assignee?: { id: string; fullName: string }; riskAssessments?: Array<{ riskLevel: string }>; }
 
 const COLUMNS = [

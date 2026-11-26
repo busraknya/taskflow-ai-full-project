@@ -6,7 +6,8 @@ interface Member {
   status: string;
   user: {
     id: string;
-    fullName: string;
+    // null for pending invitations: the invitee's profile is hidden until accepted.
+    fullName: string | null;
     email: string;
   };
 }
@@ -35,7 +36,9 @@ export function MemberListTable({ members, onRoleChange, onRemove, isOwnerOrAdmi
         <tbody className="divide-y divide-zinc-800">
           {members.map((m) => (
             <tr key={m.id} className="hover:bg-zinc-900/30 transition-colors">
-              <td className="p-3 font-medium text-white">{m.user.fullName}</td>
+              <td className="p-3 font-medium text-white">
+                {m.user.fullName ?? <span className="text-zinc-500 italic">Invitation pending</span>}
+              </td>
               <td className="p-3 text-zinc-400">{m.user.email}</td>
               <td className="p-3">
                 {canChangeRoles ? (
