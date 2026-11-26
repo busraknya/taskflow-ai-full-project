@@ -125,6 +125,7 @@ Bu yolculuğun tamamı henüz E2E kanıtıyla doğrulanmış değildir.
 - **MEM-04:** Son OWNER korunmalı.
 - **MEM-05:** Üyelik ve rol değişiklikleri audit'e yazılmalı.
 - **MEM-06:** Davet linkleri tahmin edilemez, tek kullanımlık ve süreli olmalı.
+- **MEM-07:** Davet yanıtı hesabın varlığını ve profilini ifşa etmemeli; bekleyen davetlerde ad-soyad gösterilmemeli.
 
 **Kod gözlemi:** Üye listeleme/davet/rol değiştirme/çıkarma servis kodu var. Davet kabulünün tam akışı ve e-posta job'larının çalışması doğrulanmalı; bu belge bunları tamamlanmış saymaz.
 
@@ -349,7 +350,7 @@ Bu diyagram mantıksal sorumlulukları gösterir; event bağlantıları gerçek 
 |---|---|---|---|
 | Auth/session | AUTH-01…07 | P0 | Backend auth tests + Web/Android E2E |
 | Workspace/RBAC | AUTHZ-01…07, WS-01…05 | P0 | API integration + cross-tenant tests |
-| Üyelik/davet | MEM-01…06 | P1 | Invite state-machine tests |
+| Üyelik/davet | MEM-01…07 | P1 | Invite state-machine tests |
 | Proje | PROJ-01…04 | P1 | API + UI flow |
 | Task | TASK-01…09 | P0 | Concurrency + validation + E2E |
 | ML | ML-01…11 | P0 | Dataset audit + offline evaluation + API contract |
@@ -374,6 +375,12 @@ Bu diyagram mantıksal sorumlulukları gösterir; event bağlantıları gerçek 
 8. Web/Android conflict çözümünde kullanıcıya hangi seçenekler sunulur?
 9. İlk sürüm bildirim kanalı e-posta mı, uygulama içi mi, push mı?
 10. Abonelik, entegrasyon ve gelişmiş raporlama ilk satış sürümünde var mı?
+11. Hesap başına login limiti nasıl olmalı? Mevcut 20 deneme / 15 dk politikası başkası tarafından tüketilebildiği için hedefli hesap engellemeye açık; (IP, hesap) bazlı limit ve yalnız başarısız denemeleri sayan genel üst sınır alternatifi değerlendirilmeli.
+12. Redis erişilemezken logout ve parola değişimi reddedilmeli mi (mevcut: `503`), yoksa izin verilmeli mi? Redis için yüksek erişilebilirlik gerekiyor mu?
+13. Hedef deployment topolojisi nedir (doğrudan, tek reverse proxy, CDN + load balancer)? `TRUST_PROXY_HOPS` değeri ve Web/API'nin aynı site altında yayınlanması buna göre sabitlenmeli.
+14. Başka workspace'e erişimde 403 mü 404 mü dönülmeli (E2E-20)? **Karar verildi (26 Kasım 2026): 404 Not Found.** Üye olmayan kullanıcıdan workspace'in varlığı gizlenir. `main`'deki `WorkspaceMemberGuard` da bu durumda 404 döndürür; `fix/go-live-blockers` dalındaki E2E testi `01005bc` ile bu karara uyarlandı.
+15. Refresh token ailelerine mutlak bir oturum ömrü konulacak mı? Ömür yoksa düzenli kullanılan bir oturum logout veya parola değişimine kadar geçerli kalır (go_live M-3); ömür konulursa kullanıcılar, özellikle Android'de, periyodik olarak yeniden giriş yapar.
+16. 30 saniyelik refresh reuse grace penceresi kısaltılacak mı? Kısa pencere çalınmış token tespitini güçlendirir (go_live M-4, R-2), ancak çok sekmeli veya yavaş ağdaki meşru eşzamanlı refresh isteklerinin `REFRESH_TOKEN_ROTATED` alıp oturumun düşmesine yol açabilir.
 
 ## 11. Analizden uygulamaya geçiş
 
@@ -663,3 +670,64 @@ CI run #44262570835 tüm beş job'ı geçmiştir (Android unit + instrumented Ro
 - Workflow genel backend lint adımını `continue-on-error: true` ile çalıştırır. Bu nedenle CI job'ının yeşil olması, tüm backend lint borcunun kapandığı anlamına gelmez.
 
 **Güncel kabul kararı: NO-GO.** PR #1 draft kalmalıdır. Öncelik Android plugin resolution/build hatasını yeniden üretip ayırmak, bu run'daki backend/Docker sonuçlarını almak, sonra E2E/SMTP/operasyon/lisans kapılarını kapatmaktır.
+
+
+---
+
+# 26 Kasım 2026 — `fix/go-live-blockers` dalındaki gereksinim durumu (`main`'e merge edilmedi)
+
+> **Kapsam:** Bu bölüm `fix/go-live-blockers` dalındaki (`01005bc`) analizden yalnızca doküman olarak aktarılmıştır. Aşağıdaki "Kodda var", "kapatıldı" ve "doğrulandı" ifadeleri **dalın kodu** için geçerlidir; dal henüz `main`'e merge edilmediği için bu davranışlar **`main`'in kodunda (`b5b4fb4`) mevcut değildir**. `main` için yukarıdaki tarihsel bulgular (ör. §13.1'deki doğrudan ACTIVE davet) geçerliliğini korur. Bu bölüm önceki bölümleri değiştirmez. Dal ile `main` arasındaki farkın özeti `go_live.md` içindeki "Dal ve `main` durumu" tablosundadır. Bu bölümdeki README atıfları dalın README'sine aittir.
+
+## Dalda yapılan gereksinim tanımı değişiklikleri
+
+Dalda aşağıdaki tanımlar ilk sürüm kapsamı olarak yeniden yazıldı. `main`'deki özgün metinler yukarıda korunur; bu sürümler dal merge edildiğinde onların yerine geçecek önerilerdir.
+
+- MEM-06 (dal tanımı): İlk sürümde davet mevcut TaskFlow hesabının userId değerine bağlanmalı; yalnız o hesap kabul edebilmeli ve davet 7 gün içinde kullanılmalı. Token-link ile kayıt akışı kapsam dışıdır.
+- §10 madde 6 (dal kararı): İlk sürüm kararı: davetli kullanıcı önceden kayıtlı olmalı; davet 7 gün PENDING kalır, yalnız ilgili hesap kabul/ret edebilir. Token-link ile yeni kayıt sonraki sürüme bırakıldı.
+- E2E-03 (dal kabul ölçütü): Kayıtlı kullanıcıya PENDING davet, kabul/ret, 7 günlük expiry ve iptal gerçek backend ile E2E doğrulanır
+- MEM-07 dalda eklendi; bu belgeye de WF-03 altına eklendi. Durumu aşağıdaki tabloda **Kısmi**.
+
+## Dal kod gözlemleri (25–26 Kasım 2026)
+
+**WF-01 (AUTH):** WF-01 kod gözlemindeki yarış koşulu ve hata ayrıştırması bulgusu dalda commit `675246a` ile kapatıldı; AUTH-02, AUTH-03 ve AUTH-04 kodda var ve yerel backend PostgreSQL E2E ile doğrulandı. AUTH-05 ve AUTH-06 kısmidir. Gereksinim bazında durum ve kanıt için belgenin sonundaki 26 Kasım çapraz kontrol bölümüne bakın.
+
+**WF-03 (MEM), 25 Kasım:** PENDING davet oluşturma, 7 günlük expiry, kullanıcının kendi Workspaces ekranından kabul/ret etmesi, atomik ACTIVE geçişi, süresi dolan davetin EXPIRED yapılması ve BullMQ e-posta kuyruğu kodda mevcut. Gerçek SMTP teslimatı ve browser E2E akışı henüz doğrulanmadı. Üyelik/davet olayları için audit kayıtları da tamamlanmalı.
+
+**WF-03 (MEM), 26 Kasım:** Commit `2b30009` ile davet yanıtı kayıtlı/kayıtsız adres için aynı hale getirildi, bekleyen davetlerde ad-soyad ve avatar gizlendi, yeniden davet koşullu yazma ile yapılıyor, eşzamanlı davet çakışması 409 dönüyor ve silinmiş workspace daveti kabul edilemiyor. MEM-06 ve MEM-01'in kabul, expiry ve iptal kısımları yerel backend PostgreSQL E2E ile doğrulandı; başarılı ret akışı E2E ile doğrulanmadı. MEM-07 kısmidir: bekleyen davet satırı üye listesinde yalnız kayıtlı hesaplar için oluşuyor ve yanıt süresi farkı da hesabın var olup olmadığını ele verebilir; bu nedenle kısmi hesap tespiti mümkün. Browser E2E, gerçek SMTP ve davet audit kayıtları hâlâ açık.
+
+**WF-09 (NOTIF):** NOTIF-05 için e-posta HTML'i kaçışlanıyor, davet bağlantısı yalnız mutlak `http`/`https` URL ise basılıyor ve konu satırından CR/LF temizleniyor (commit `2b30009`, unit testler). E-posta kuyruğu `attempts: 5` ve exponential backoff ile tanımlı (NOTIF-03 kodda var, doğrulanmadı). Gerçek SMTP teslimatı doğrulanmadı.
+
+**WF-12 (OPS):** OPS-02 kısmidir: build context'leri `.env` ve anahtar dosyalarını imajlara almıyor (commit `761f03a`), ancak `.env.example` içindeki `JWT_SECRET` yer tutucusu kod tarafından tespit edilmiyor. OPS-05 kısmidir: CORS allowlist, Helmet header'ları ve nonce tabanlı CSP kodda var (commit `20ecec7`); repoda HTTPS/reverse proxy yapılandırması yok. Deployment gereksinimleri README.md "Production deployment notes" bölümünde tutulur.
+
+## Dal E2E kanıt notu
+
+**Kanıt notu (26 Kasım 2026, yerel koşu, tek kullanımlık PostgreSQL 16 + Redis 7):** Aşağıdakiler yalnızca **backend API seviyesinde** PostgreSQL E2E kanıtıdır; tarayıcı (Web UI) ve Android istemci E2E doğrulaması değildir ve CI sonucu bu ortamda doğrulanamamıştır.
+- E2E-01: web ve mobil login, token ayrımı `test/auth-session.e2e-spec.ts` ile doğrulandı. Kayıt adımları `test/taskflow.e2e-spec.ts` içinde yer alıyor; ancak bu test bütün olarak (E2E-20 assertion'ı nedeniyle) başarısız olduğundan kayıt kısmı E2E ile bağımsız olarak doğrulanmış sayılmamalı.
+- E2E-03: davet, başarılı kabul, 7 günlük expiry, iptal, tek kullanımlık kabul, eşzamanlı kabul ve davetin alıcıya bağlı olması `test/workspace-invitations.e2e-spec.ts` ile doğrulandı (10/10). Başarılı ret akışı E2E ile **doğrulanmadı**; ret yalnızca yanlış kullanıcının reddinin 404 aldığı negatif senaryoda test ediliyor (`test/workspace-invitations.e2e-spec.ts:270-273`). Gerçek SMTP ve Web UI akışı açık.
+- E2E-16: web logout (eşzamanlı refresh dahil) ve mobil logout sonrası oturumun iptali `test/auth-session.e2e-spec.ts` ile doğrulandı. Android istemcide doğrulanmadı.
+- E2E-20: backend üye olmayan kullanıcıya 404 döndürüyor ve veri sızdırmıyor (`test/workspace-invitations.e2e-spec.ts`). `test/taskflow.e2e-spec.ts` aynı durumda 403 beklediği için başarısız; beklenen kod için karar gerekli (bkz. §10).
+- Web UI ve Android için hiçbir E2E senaryosu bu turda doğrulanmadı.
+
+**Kanıt güncellemesi (26 Kasım 2026, sonraki tur):** 14. karar (404) sonrasında dalda `test/taskflow.e2e-spec.ts` içindeki iki eski 403 beklentisi `01005bc` ile 404 olarak düzeltildi. Yerel PostgreSQL 16 + Redis 7 koşusunda bu test 2/2, bütün backend E2E suite'i 5/5 suite ve 32/32 test geçti; böylece E2E-20 ve E2E-01'in kayıt adımları dalda **backend API seviyesinde** yerel olarak doğrulandı. GitHub Actions'ta `01005bc` için Backend job'u başarılı; Android job'u bu kayıt yazılırken bekleniyordu. Web UI ve Android istemci E2E doğrulaması hâlâ yok. `main`'de bu testler ve CI workflow'u yok.
+
+## Dal gereksinim çapraz kontrolü
+
+Durum ve doğrulama sütunları `fix/go-live-blockers` dalı için geçerlidir; `main` için bu gereksinimlerin dal kapsamındaki uygulaması eksiktir.
+
+| Gereksinim | Durum | Doğrulama | Not |
+|---|---|---|---|
+| AUTH-02 | Kodda var | Backend PostgreSQL E2E | Opak refresh token, rotasyon, token ailesi ve reuse iptali |
+| AUTH-03 | Kodda var | Backend PostgreSQL E2E | Kullanıcı satırı kilidi; kilitsiz anomali negatif kontrolle gösterildi |
+| AUTH-04 | Kodda var | Backend PostgreSQL E2E | Parola değişiminde tüm oturumlar iptal; eski access token'lar reddediliyor |
+| AUTH-05 | Kısmi | Backend PostgreSQL E2E (rate limit) | Rate limit var; beklenmeyen hatalarda iç mesaj istemciye dönüyor (SEC-06) |
+| AUTH-06 | Kısmi | Backend PostgreSQL E2E | Web ve mobil logout aynı oturum ailesini iptal ediyor; Android istemcide doğrulanmadı |
+| AUTH-07 | Kodda var | Kod incelemesi | Token/parola loglanmıyor; e-posta adresleri loglanıyor (ayrı gizlilik konusu) |
+| MEM-01 | Kodda var | Backend PostgreSQL E2E (ret hariç) | Tek kullanımlık ve atomik kabul, expiry, iptal, silinmiş workspace kontrolü; ret yalnız negatif E2E senaryosunda (yanlış kullanıcı) test edildi, başarılı ret akışı doğrulanmadı |
+| MEM-06 | Kodda var | Backend PostgreSQL E2E | Davet yalnız ilgili hesap tarafından kabul/ret edilebiliyor |
+| MEM-07 | Kısmi | Backend PostgreSQL E2E | Yanıt gövdesi tek tip, bekleyen davette profil gizli; bekleyen satırın yalnız kayıtlı hesaplar için oluşması ve yanıt süresi farkı kısmi hesap tespitine izin veriyor |
+| NOTIF-03 | Kodda var | Doğrulanmadı | `attempts: 5`, exponential backoff |
+| NOTIF-05 | Kodda var | Unit test | HTML kaçışlama, URL doğrulama, konu satırı temizliği; gerçek SMTP doğrulanmadı |
+| OPS-02 | Kısmi | İmaj içerik taraması | `.env` imajlara girmiyor; `JWT_SECRET` yer tutucusu kodda tespit edilmiyor |
+| OPS-05 | Kısmi | Unit test, tarayıcı kontrolü | CORS allowlist, Helmet ve nonce tabanlı CSP var; HTTPS/reverse proxy yok |
+
+Yeni ürün kararları §10'a (madde 11–16) eklendi; 14. madde karara bağlandı (404), diğerleri açıktır.

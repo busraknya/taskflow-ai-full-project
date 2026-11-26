@@ -1,3 +1,74 @@
+> **`main` kapsam notu — 26 Kasım 2026:** Bu belge, `fix/go-live-blockers` dalındaki analiz belgesinin `main`'e yalnızca doküman olarak aktarılmış kopyasıdır (dal commit'i `01005bc`). 16–26 Kasım tarihli bölümlerde "düzeltildi", "kapandı", "kodda var" veya "doğrulandı" denen değişiklikler **`fix/go-live-blockers` dalında** uygulanmış ve test edilmiştir; dal henüz `main`'e merge edilmediği için bu düzeltmeler **`main`'in kodunda (`b5b4fb4`) mevcut değildir**. Bu tarihli bölümlerdeki README atıfları da dalın README'sine aittir; `main`'deki README bu bölümleri içermez. `main` için geçerli durum, belgenin sonundaki "Dal ve `main` durumu" tablosunda özetlenmiştir. İlk denetim bölümleri `main`'in mevcut koduna büyük ölçüde hâlâ uygundur.
+
+> **Güncel durum notu — 26 Kasım 2026:** Bu sayfanın başındaki 18 Kasım bloğu ve sonraki tarihli bölümler tarihsel kayıttır; orada "açık" görünen bazı bulgular (refresh yarışı, parola sonrası oturum iptali, doğrudan ACTIVE davet, rate limit ve Helmet/CSP eksikliği) sonradan `fix/go-live-blockers` dalında kapatılmıştır; bu düzeltmeler henüz `main`'de değildir. En güncel değerlendirme ve kanıtlar için belgenin sonundaki **"26 Kasım 2026 — Güvenlik uygulamaları sonrası değerlendirme"** bölümüne bakın. Güncel karar: **NO-GO**.
+
+> **Kaynak kod yeniden kontrolü — 18 Kasım 2026 (latest branch):**
+>
+> Bu ek, yukarıdaki tarihsel ilk denetim notlarının yerine geçmez; ancak aşağıdaki noktaları güncel branch için düzeltir:
+>
+> **Düzeltildi / artık mevcut:**
+> - Android offline status değişikliği `TaskViewModel.queueStatusChange` ile `PendingOperationEntity` olarak Room'a yazılıyor; işlem `ownerUserId` ile hesaba bağlanıyor ve `SyncScheduler` unique WorkManager işi başlatıyor.
+> - `SyncWorker` yalnızca aktif oturumun kullanıcısına ait işlemleri alıyor, açık Authorization header ile PATCH gönderiyor; 2xx sonrası kuyruğu siliyor. 401 `BLOCKED_AUTH`, 403 `FAILED`, 409 `CONFLICT`, 408/429/5xx ve exception retry olarak ayrılıyor.
+> - Android login başarılı olunca token + userId kaydediliyor ve o hesaba ait BLOCKED_AUTH işlemleri yeniden kuyruğa alınıyor. Logout yerel token/userId'yi temizliyor.
+> - Android API URL artık `BuildConfig.API_BASE_URL` üzerinden; Authorization/Cookie log header'ları redacted.
+> - Backend task version güncellemesi `updateMany` koşullu compare-and-swap kullanıyor; stale yarışta 409 dönüyor. İlgili unit testler mevcut.
+> - Task detay endpoint'i workspace kapsamıyla tek kayıt getiriyor; frontend modal bunu kullanıyor.
+> - VIEWER task create/update ve comment create işlemlerinden controller'da engelleniyor. Project create/delete OWNER/ADMIN ile sınırlandırılmış.
+> - ADMIN'in OWNER veya ADMIN rolü davet etmesi engellenmiş; son OWNER'ın rolünü düşürme/üyeliğini silme koruması mevcut.
+> - NotificationsModule AppModule'a bağlı; TaskAssignedListener TasksModule provider'ı; email queue ve EmailProcessor kod bağlantısı mevcut. HTML e-posta alanları escape ediliyor.
+> - ML API artık sahte sabit `risk_score` üretmiyor; `null` döndürüyor. Model card altı sentetik örnekle eğitildiğini ve deneysel olduğunu açıkça belirtiyor. UI bunu yüzde olasılık diye göstermiyor.
+>
+> **Hâlâ açık / test kanıtı yetersiz:**
+> - AuthService refresh rotasyonu token'ı önce okuyup sonra ayrı update ile revoke ediyor; transaction/CAS yok. Hata catch'i `TOKEN_THEFT_DETECTED` dahil tüm hataları `INVALID_REFRESH_TOKEN` olarak maskeliyor.
+> - Parola değişimi yalnız passwordHash güncelliyor; kullanıcının aktif refresh token'ları revoke edilmiyor.
+> - Android yalnız access token alıyor; AuthApiService'de refresh/logout çağrısı veya refresh-cookie yönetimi yok. Access token 15 dakika sonra expire olduğunda Android yenileme yapamıyor. Android logout yalnızca yerel tokenı siliyor; backend refresh token kayıtlarını revoke etmiyor.
+> - Android offline kuyruğunda 401 `BLOCKED_AUTH` olur; login sonrası requeue var, fakat access token yenileme mekanizması yok. Uzun süren oturumda kullanıcı tekrar login olmak zorunda kalabilir.
+> - Bildirim listener'ı ve processor bağlanmış olsa da `emailQueue.add` çağrısında attempts/backoff/retention ayarı verilmemiş; BullMQ varsayılanı ile başarısız teslimatın otomatik retry garantisi yok. Gerçek SMTP teslimatı doğrulanmadı; transporter her job'da oluşturuluyor.
+> - Workspace daveti hâlâ önceden kayıtlı kullanıcıyı doğrudan ACTIVE yapıyor; token/expiry/accept/revoke akışı yok. `workspace.member_invited` event'inin karşılayan listener'ı görünmüyor.
+> - AuditService yazma hatasını yakalayıp yutuyor; task/comment ana işlemi başarılı olsa bile audit kaydı kaybolabilir. Transactional outbox yok.
+> - Task oluşturma/güncelleme ML çağrısını senkron bekliyor; AiService HTTP timeout tanımlamıyor. ML erişilemezse UNAVAILABLE sonucu saklanabiliyor; fakat yavaş/askıda servis API yanıtını bekletebilir.
+> - Frontend'de 401 refresh mekanizması var ancak refresh token rotasyonu eşzamanlı sekmeler/istemciler açısından backend tarafında atomik değil. Login state yalnız Zustand belleğinde tutuluyor; sayfa yenilemesinde state'in nasıl geri kurulduğu ayrıca test edilmeli.
+> - Task/project listelerinde pagination görünmüyor. Task archive/delete schema alanları var fakat TasksController'da archive/delete/restore endpoint'i görünmüyor.
+> - Backend testleri task CAS ve workspace guard/rol kurallarının bazılarını kapsıyor; AuthService refresh paralelliği, parola sonrası revoke, notification retry/delivery, cross-tenant uçtan uca senaryolar ve Android Worker HTTP hata matrisi için özel test kanıtı eksik.
+>
+> **Güncel teknik öncelik önerisi:** Önce auth/session yaşam döngüsü (özellikle refresh CAS + password revoke + Android refresh/logout sözleşmesi), ardından event/audit/notification güvenilirliği ve ML timeout davranışı. Bunlar tamamlanmadan yeni UI özelliklerine geçmeyelim.
+>
+> ---
+>
+> **Güncel doğrulama — 18 Kasım 2026:** Aşağıdaki ilk denetim bölümleri tarihsel başlangıç durumunu ve o tarihteki bulguları korur. Branch'te yapılan sonraki düzeltmeler için en güncel kanıt:
+> - Branch: `fix/go-live-blockers`
+> - Doğrulanan commit: `b7063ad86e7a0ccb744ed46bd1f50716abcccd6e`
+> - GitHub Actions run: [#44262570835](https://github.com/busraknya/taskflow-ai-full-project/actions/runs/44262570835)
+> - **5/5 job başarılı:** Android unit tests + debug build + instrumented Room queue tests; frontend lint/typecheck/build/audit; Docker Compose validation + tüm servis image build'leri; ML pytest + pip-audit; backend TypeScript/Jest/build/audit.
+> - Android instrumented test adımı artık `google_atd` Android Test Device imajıyla başarılı. Önceki `device offline`, emulator shell timeout ve `Unknown API Level` hataları test assertion hatası değil, CI emulator/ADB ortamı sorunlarıydı.
+> - Backend'in yeni authorization testleri için lint blocking. Mevcut backend lint baseline non-blocking kaldığından tüm backend lint borcu kapanmış değildir.
+> - Bu run test/build/image build kanıtıdır; temiz makinede Compose runtime, migration, gerçek Web/Android kullanıcı yolculukları, release signing, production deployment, backup/restore veya ML model kalitesini kanıtlamaz.
+>
+> **Güncel karar: NO-GO devam ediyor.** CI yeşil olsa da ürün kabul kriterleri ve operasyonel kontroller tamamlanmış değildir. Bu belgedeki “ilk denetim” bölümlerini güncel branch durumuyla karıştırmayın; bir bulgu branch'te düzeltildiyse aşağıdaki güncel doğrulama ve ilgili commit/test kanıtı esas alınmalıdır.
+>
+> ---
+>
+> **Durum güncellemesi — 16 Kasım 2026:** İlk denetim bulguları aşağıda, denetlenen başlangıç commit'i main / 31e8554faef5b0fa6a2c3418966226ae94efc9a1 esas alınarak korunmuştur. Düzeltmeler fix/go-live-blockers dalında yapılmıştır; bu dal henüz main dalına birleştirilmemiştir.
+>
+> **CI doğrulaması — run #69, commit ae95093bd70136c2f5f39fe81a096a8dc9ccad33:**
+> - Backend: npm ci, Prisma generate, targeted authorization lint, TypeScript, Jest, build ve production audit başarılı. Genel backend lint borcu (169 error / 21 warning) hâlâ geçici non-blocking; kapatılmış değildir.
+> - Frontend: npm ci, lint, typecheck, production build ve production audit başarılı.
+> - ML: pytest (3 passed) ve pip-audit başarılı.
+> - Docker: Compose config doğrulaması ve tüm servis image build'leri başarılı.
+> - Android: unit testler, assembleDebug ve connectedDebugAndroidTest başarılı. Instrumented testler 4/4 geçti; önceki başarısızlık ExampleInstrumentedTest.kt:22 içindeki eski package assertion'ıydı. Assertion, commit 219aa0559ec3d0f5457279974e4d40f9d50c7947 ile düzeltildi. Emulator loglarında ADB/izin uyarıları görüldü ancak test adımı başarılı tamamlandı.
+> - CI run #69 tüm 5 işi başarıyla tamamladı. Bu, branch üzerindeki build/test kapısının geçtiğini gösterir; production deployment, gerçek kullanıcı akışları, release signing ve operasyonel hazırlık doğrulaması değildir.
+>
+> **İlk turda yapılan başlıca düzeltmeler:** ADMIN'in OWNER/ADMIN rolü ataması engellendi; invite/role DTO validation eklendi; VIEWER task write işlemlerinden engellendi; root .env repodan kaldırıldı ve ignore dosyaları eklendi; backend/frontend/ML Dockerfile ve Compose servisleri, healthcheck ve migration job eklendi; Redis password bağlantısı ve CORS allowlist yapılandırıldı; Android API URL/cleartext ayrımı ve offline worker hata durumları iyileştirildi; dependency lockfile'lar güncellendi.
+>
+> **GO/NO-GO kararı hâlâ NO-GO.** Başarılı CI, tek başına satılabilir ürün veya production deployment kanıtı değildir. Android instrumented test sonucu, release APK build/signing, temiz makinede docker compose up sonrası gerçek DB migration ve login→task→ML→notification smoke testi, yedekleme/geri yükleme, dış erişim/HTTPS ve alıcı dokümantasyonu ayrıca doğrulanmalıdır. Offline queue'ya kayıt ekleme ve WorkManager enqueue akışı uçtan uca doğrulanmış değildir. ML modeli yalnızca az sayıda sentetik örnekle eğitilmiştir ve risk_score hâlâ sabit eşlemeyle üretilmektedir; satışta gerçek tahmin doğruluğu iddiası yapılmamalıdır.
+>
+> **Sırlar:** .env geçmişte public Git geçmişinde bulunmuştu. Değerlerin gerçek ortamda kullanılmış olma ihtimali varsa hemen rotate edilmeli; geçmişi temizlemek için ayrıca history rewrite ve tüm contributor klonlarının yenilenmesi gerekir.
+>
+> **Dal durumu:** Bu değişiklikler fix/go-live-blockers dalında. main'e merge edilmeden ve yukarıdaki kalan kontroller tamamlanmadan satış paketini yayımlama.
+>
+> ---
+>
+
 # TaskFlow — Yayına Çıkış ve Teslim Rehberi
 
 **Son Güncelleme:** 16 Kasım 2026  
@@ -445,6 +516,130 @@ Pazaryeri kuralları değişebileceğinden gönderim gününde resmi seller/auth
 
 ---
 
+## 16 Kasım 2026 — ikinci denetim turu (fix/go-live-blockers)
+
+Bu bölüm, yukarıdaki ilk denetim raporunu silmez; branch üzerinde sonradan yapılan düzeltmeleri ve doğrulama durumunu ayrı kaydeder.
+
+### Bu turda yapılan değişiklikler
+
+- **Backend task concurrency:** Görev güncellemesindeki read-then-write version kontrolü, `updateMany` üzerinde `id + workspaceId + deletedAt + version` koşullu atomik compare-and-swap işlemine çevrildi. Etkilenen satır sayısı 1 değilse güncel sürüm okunuyor ve `STALE_VERSION` 409 Conflict dönüyor.
+- **DTO validation:** `UpdateTaskDto.version` artık negatif olmayan tam sayı olarak doğrulanıyor (`IsInt`, `Min(0)`).
+- **Backend regression tests:** Başarılı CAS, yarışta stale-version conflict ve güncelleme sırasında kaybolan kayıt için testler eklendi.
+- **ML startup davranışı:** ML servisi model artifact'i yoksa sentetik veriden sessizce model üretmiyor; açık bir hata ile başlamayı reddediyor. Model eğitimi ayrı `train.py` adımında kalıyor.
+- **ML regression test:** Artifact eksik olduğunda loader'ın hata verdiği test eklendi.
+- **Model card:** `ml-service/MODEL_CARD.md` eklendi. v1'in altı sentetik örnekten oluştuğu, ölçülmüş doğruluk/kalibrasyon bulunmadığı ve API'deki 0.2/0.5/0.85 değerlerinin olasılık olmadığı açıkça belgelendi.
+
+### Doğrulama durumu
+
+- Önceki Android hesap izolasyonu commit'i `dcbb25428cb0682fbc4698668691a09c440e12ab` için CI run #95 (`43918642822`) beş işin tamamında başarılı oldu: Backend, Frontend, ML, Android ve Docker. [Run #95](https://github.com/busraknya/taskflow-ai-full-project/actions/runs/43918642822)
+- Bu bölümdeki yeni backend/ML değişikliklerinin CI doğrulaması henüz tamamlanmış sayılmıyor. Ara commit'lere ait Actions çalışmaları yeni push'larla iptal edildi; son branch commit'i: `ebfb5bf2d6555381a613e0a0dd36e6c23f16d8aa`. Bu commit için yeni CI sonucunu bekle.
+- **GO/NO-GO: NO-GO devam ediyor.** Backend CAS ve ML startup düzeltmeleri, gerçek deployment/E2E, ML model validasyonu, Android sync Worker HTTP senaryoları ve release/backup doğrulamasının yerine geçmez.
+
+
+---
+
+## 17 Kasım 2026 — Son branch denetimi ve devam eden düzeltmeler
+
+> Bu bölüm önceki denetim tarihçesini silmez; 17 Kasım'daki kaynak incelemesi ve branch değişikliklerinin güncel notudur.
+
+### Kodda doğrulanan ek bulgular
+- RiskFeatureService assignee aktif görev sayımını workspaceId ile sınırlandırıyor ve yorum sayısını yalnız deletedAt:null kayıtlarından count sorgusuyla alıyor.
+- Task create aktif olmayan/silinmiş proje ilişkisini reddediyor.
+- Task update yalnız assignee gerçekten değiştiğinde assignment event yayımlıyor.
+- ML risk paneli sabit 0.20/0.50/0.85 değerlerini yüzde gibi göstermiyor; deneysel risk sınıfı olarak etiketleniyor.
+- E-posta HTML gövdesinde kullanıcı adı ve görev başlığı escape ediliyor; escape helper için unit test eklendi.
+- Atama e-posta kuyruğuna taskId + taskVersion bazlı jobId veriliyor; aynı task version event'inin yinelenmesi engelleniyor. Bu tek başına DB transaction ile event/outbox garantisi sağlamaz.
+- Workspace-scoped task detail GET endpoint'i eklendi; silinmiş/başka workspace task'ı 404 döner.
+- Web task detail modal artık bütün task listesini indirip task aramak yerine tekil endpoint kullanıyor.
+- VIEWER için Kanban durum ilerletme, task create ve comment create UI aksiyonları gizlendi. Backend write guard'ları korunuyor; yorum silme UI yalnız yazar veya OWNER/ADMIN için gösteriliyor.
+
+### Henüz kanıtlanmamış / açık kalanlar
+- 17 Kasım'daki en son commitler için CI tamamlanmış ve yeşil olarak doğrulanmadı.
+- Backend genel lint borcu hâlâ ayrı bir kalite işi; yalnızca ilgili yeni dosyalarda hedefli lint/format uygulanmalı.
+- Atama event'i halen in-process EventEmitter üzerinden; DB commit sonrası process crash event kaybına yol açabilir. Transactional outbox veya eşdeğer dayanıklı event aktarımı gerekir.
+- Email processor retry davranışı BullMQ yapılandırmasına bağlı; queue attempts/backoff/retention ve failed job operasyonu gerçek Redis ile test edilmedi.
+- Task CRUD halen ML servisini senkron await ediyor; timeout ve asenkron tahmin durum makinesi tamamlanmadı.
+- Task detail endpoint'i ve VIEWER akışları için backend controller integration + gerçek Web E2E testleri eksik.
+- Üye daveti henüz süreli token ve kabul durum makinesi değil; kayıtlı kullanıcıyı doğrudan ACTIVE üyeliğe ekleme davranışı mevcut.
+- ML veri kümesi altı sentetik örnek; gerçek gecikme olasılığı, calibration veya üretim doğruluğu iddiası yok.
+
+### Güncel GO/NO-GO
+**NO-GO devam ediyor.** Kod düzeltmeleri ve unit testler ürünün üretim hazır olduğunu kanıtlamaz. CI, gerçek DB/Redis/ML entegrasyonu, rol bazlı E2E, temiz Docker kurulumu, backup/restore ve alıcı dokümantasyonu tamamlanmadan yayın/satış kararı verilmemeli.
+
+### Devam eden branch
+fix/go-live-blockers — main üzerinde yalnız ürün gereksinim belgesi güncellendi. Kod değişiklikleri bu branch'te tutuluyor ve merge edilmedi.
+
+
+### ML skor sözleşmesi güncellemesi — 17 Kasım 2026
+- FastAPI artık sınıf etiketinden 0.20/0.50/0.85 sabit risk_score üretmiyor; risk_score null döndürüyor.
+- NestJS RiskPredictionResult alanı number | null olarak güncellendi; ML servisi erişilemediğinde de null dönüyor.
+- ML API testi risk_score değerinin null olmasını bekliyor; model card eski sabit eşlemelerin kaldırıldığını açıklıyor.
+- Bu değişiklik olasılık tahmini sağlamaz; yalnızca yanıltıcı skorun API ve DB'ye aktarılmasını önler. Gerçek olasılık modeli ve calibration hâlâ P0 kapsamındadır.
+
+
+---
+
+## 18 Kasım 2026 — CI hata analizi ve workspace üyelik akışı
+
+### CI run 44136596994 (commit ee6f622)
+- Android unit tests/debug build: PASS.
+- ML API tests: PASS.
+- Docker Compose validation/image build: PASS.
+- Backend: FAIL — yeni `comments.controller.spec.ts`, controller'ın `@nestjs/passport` ESM modülünü CommonJS Jest içinde yüklemesi nedeniyle suite başlamadı. Ayrıca lint raporu 183 error / 23 warning içeriyordu.
+- Frontend: FAIL — `TaskDetailModal` effect içinde senkron setState nedeniyle `react-hooks/set-state-in-effect`; lint toplam 1 error / 35 warning.
+
+### Düzeltmeler (branch `fix/go-live-blockers`)
+- Comment controller request tipi tanımlandı; `req.user` ve membership erişimleri artık `any` değil.
+- Comment controller unit testinde Passport AuthGuard ve WorkspaceMemberGuard test-double ile izole edildi; gerçek HTTP guard davranışı ayrı integration test gerektirir.
+- TaskDetailModal task + comments yüklemesini async effect içinde başlatıyor; yükleniyor durumu seçili taskId ile yüklenen taskId karşılaştırılarak türetiliyor. Eski task verisi yeni task seçiliyken gösterilmiyor.
+- TaskDetailModal API response tipi tanımlandı; kullanılmayan `onTaskUpdated` prop'u kaldırıldı.
+- WorkspaceMemberGuard request tipi tanımlandı; body bulunmayabileceği için `request.body?.workspaceId` kullanılıyor; kullanılmayan ForbiddenException import kaldırıldı.
+
+### Workspace daveti mevcut durum
+- Invite endpoint yalnız kayıtlı e-postaları kabul ediyor; kayıtlı kullanıcıya üyelik anında ACTIVE oluşturuluyor ve e-posta bilgilendirme olarak gönderiliyor.
+- PENDING/EXPIRED enumları var fakat token, kabul, ret, iptal ve expiration akışı yok. Bu nedenle gerçek davet kabul ürünü tamamlanmış değil.
+- Gerçek davet token/state machine P1 ürün gereksinimi olarak `analysis/product_workflows_requirements.md` içinde tanımlandı.
+
+### CI durumu
+- 18 Kasım düzeltmeleri art arda commit edildiğinden bazı Actions run'ları yeni commitler tarafından iptal edildi. Son commit `36c5401f074bf0646addf9125df7c8a784877871` için CI sonucu ayrıca doğrulanmalı.
+- Backend lint borcu devam ediyor; CI lint script'i tüm backend dosyalarını taradığı için yalnız yeni dosyaları düzeltmek yeşil CI sağlamayabilir. Kalan lint hataları sınıflandırılmalı ve sistematik biçimde ele alınmalı.
+
+
+### 18 Kasım 2026 — CI run 44247578789 son inceleme
+
+Run sonucu: **FAILURE**. Başarısız tek job Android instrumented Room queue tests; backend, frontend, ML ve Docker job'ları SUCCESS.
+
+Android log incelemesi:
+- `testDebugUnitTest` ve `assembleDebug` adımları başarısız değil.
+- `connectedDebugAndroidTest` aşamasında emulator başlatılıyor; emulator boot sırasında ADB tekrar tekrar `device offline` döndürüyor ve sonunda exit code 224 ile kapanıyor.
+- Bu log, Room test assertion failure kanıtı değil; CI emulator/ADB provisioning sorunu.
+
+CI düzeltmesi:
+- Android job `ubuntu-latest` (run anında Ubuntu 26.04.1) yerine `ubuntu-24.04` olarak sabitlendi.
+- Emulator `-no-window -gpu swiftshader_indirect -noaudio -no-boot-anim` ile başlatılacak ve animasyonlar kapatılacak.
+- Commit: `1b24947888d8ab5da26fee6f90e531b55713c5cb`.
+- Bu değişiklik henüz yeniden CI ile doğrulanmadı. Android emulator testleri geçmeden Android entegrasyon testleri PASS sayılmayacak.
+
+
+### 18 Kasım 2026 — CI run 44259059256: ikinci emulator denemesi
+
+Run sonucu yine FAILURE; yalnız Android job başarısız. Backend, frontend, ML ve Docker job'ları SUCCESS.
+
+Log incelemesi:
+- Runner Ubuntu 24.04 olarak doğru seçilmiş.
+- API 35 emulator boot tamamlandı (`Emulator booted.`).
+- Ardından emulator console başlatılamadı; `ShellCommandUnresponsiveException` oluştu.
+- Gradle cihazı `Unknown API Level` olarak atladı; `No compatible devices connected` ile instrumented test başlatılamadı.
+- Unit test ve debug APK assemble adımları başarılı.
+- Bu sonuç Room test assertion hatası değil, CI emulator imajı/ADB shell erişilebilirliği sorunudur.
+
+İkinci CI denemesi düzeltmesi:
+- `google_atd` (Android Test Device) sistem imajına geçildi.
+- Emulator RAM 2048 MB / heap 512 MB, boot timeout 600 sn, `-no-snapshot -wipe-data` ile temiz başlangıç ayarlandı.
+- Commit: `a719a7577ee19afdda9fa57ef18d58f7d8489635`.
+- Henüz CI sonucu yok. Sonuç gelmeden Android instrumented test PASS denmeyecek.
+
+
 # 25 Kasım 2026 — Sonraki remediation dalı için durum eki
 
 > Bu ek, 16 Kasım tarihli başlangıç denetimini silmez veya geriye dönük olarak değiştirmez. Aşağıdaki güncel durum `fix/go-live-blockers` dalındaki kaynak kod ve dokümanların incelenmesine dayanır; bu değişiklikler henüz `main` dalına birleştirilmiş değildir.
@@ -486,3 +681,95 @@ Bu run tamamlanmadan CI PASS denmeyecek. Backend lint non-blocking kalmaya devam
 - `android/settings.gradle.kts` içinde Compose Compiler plugin ID'sini Kotlin'in `org.jetbrains.kotlin:compose-compiler-gradle-plugin:<requested.version>` modülüne eşleyen `pluginManagement.resolutionStrategy` eklendi. Bu, plugin marker artifact çözümlemesini atlayıp gerçek plugin modülünü Maven Central üzerinden bulmayı hedefler.
 - Kod değişikliği commit `7eacdf0a8de4e1ceee2c294d2cc3220289a3f66c` üzerinde. Bu düzeltmenin CI sonucu henüz yok; yeni bir PR workflow çalışması bekleniyor/doğrulanacak.
 - Run `45683129340` için frontend, backend ve ML job'ları başarılı; Android başarısız. Docker image build inceleme anında sürüyordu. Bu run'ın sonucu 5/5 değildir.
+
+
+---
+
+# 26 Kasım 2026 — Güvenlik uygulamaları sonrası değerlendirme
+
+> Bu bölüm önceki tarihli bölümleri silmez veya değiştirmez. Dal: `fix/go-live-blockers`. Teknik ayrıntılar (politika değerleri, yapılandırma, API sözleşmesi) bu belgede tekrarlanmaz; `fix/go-live-blockers` dalındaki README.md içindeki "Production deployment notes", "Security controls" ve "Authentication API contract" bölümlerinde tutulur. Bu bölümler henüz `main`'deki README'de yoktur.
+
+## Bu turda dala eklenen değişiklikler
+
+| Commit | Kapsam |
+|---|---|
+| `675246a` | SEC-01 ve R-1: opak refresh token (SHA-256), `tokenType` doğrulaması, atomik rotasyon, token ailesi ve reuse iptali, parola değişiminde tüm oturumların iptali, devre dışı/silinmiş hesap reddi, kullanıcı satırı kilidi (`SELECT ... FOR UPDATE`), migration `20261126120000_session_security` |
+| `761f03a` | SEC-04-A: `backend/`, `frontend/`, `ml-service/` build context'leri için `.dockerignore` |
+| `2b30009` | SEC-05: tek tip davet yanıtı, bekleyen davetlerde profil gizleme, koşullu yeniden davet, eşzamanlı davet çakışmasında 409, silinmiş workspace kontrolü, e-posta URL doğrulama ve konu satırı temizliği |
+| `20ecec7` | SEC-02: global IP / kullanıcı / hassas işlem rate limitleri, hesap başına login limiti, limiter kesintisinde askıda kalma düzeltmesi, Helmet, nonce tabanlı frontend CSP |
+
+## Önceki bulguların güncel durumu
+
+| Tarihsel bulgu | Güncel durum | Kanıt |
+|---|---|---|
+| Refresh token rotasyonu yarış koşuluna açık (§2.2, 18 Kasım bloğu) | Kapandı | `675246a`; PostgreSQL E2E eşzamanlı refresh ve kilit sırası testleri |
+| Parola değişiminde refresh token'lar iptal edilmiyor (§2.2) | Kapandı | `675246a`; unit ve PostgreSQL E2E |
+| `TOKEN_THEFT_DETECTED` kodu maskeleniyor (§2.2) | Yerini ayrı hata kodları aldı (`REFRESH_TOKEN_REUSED`, `REFRESH_TOKEN_ROTATED`, `REFRESH_TOKEN_EXPIRED`) | `675246a` |
+| JWT modülünde bilinen fallback secret (§2.2) | Kapandı; secret ConfigService'ten alınıyor ve en az 32 byte olmalı | `675246a` |
+| Eski bcrypt refresh kayıtları için geriye dönük doğrulama (25 Kasım notu) | Kaldırıldı; eski kayıtlar migration ile iptal ediliyor, kullanıcılar bir kez yeniden giriş yapar | `675246a`, migration `20261126120000_session_security` |
+| Davet doğrudan ACTIVE üyelik veriyor (18 Kasım bloğu) | Kapandı (PENDING akışı önceki remediation commit'lerinde); gizlilik kuralları eklendi | `2b30009`; PostgreSQL E2E |
+| Rate limiting yok (§2.5) | Kapandı (kodda var, yerel E2E ile doğrulandı) | Önceki remediation + `20ecec7` |
+| Helmet/CSP/security headers yok (§2.5) | Kapandı (kodda var, tarayıcıda doğrulandı) | `20ecec7` |
+| Exception filter beklenmeyen `Error.message` değerini döndürüyor (§2.5) | **Açık** | `backend/src/common/filters/http-exception.filter.ts:47-48` |
+| Docker build context'ine yerel `.env` giriyor (SEC-04 denetim bulgusu; bu belgede daha önce bulgu olarak kayıtlı değildi) | Kapandı | `761f03a`; imaj içerik taraması |
+| ML Dockerfile tek aşamalı ve root çalışıyor (tarihsel bulgu) | Yalnız `.dockerignore` kısmı karşılandı; multi-stage build, non-root çalışma ve bind mount konuları yeniden değerlendirilmedi ve **kapanmış sayılmamalı** | `761f03a` (`ml-service/.dockerignore`) |
+
+Android cleartext/logging, audit hata yutma, ML senkron çağrı ve pagination bulguları bu turda yeniden değerlendirilmedi.
+
+## Doğrulama kanıtı
+
+Aşağıdaki sonuçlar **yerel koşulardır**. Bu ortamda `gh` olmadığı için ilgili commit'lerin GitHub Actions sonuçları doğrulanamadı.
+
+- Backend unit: 18 suite, 157/157 başarılı.
+- Backend E2E, tek kullanımlık PostgreSQL 16 + Redis 7 (32 test, 31 başarılı): `auth-session` 16/16, `workspace-invitations` 10/10, `rate-limit-outage` 3/3, `app` 1/1, `taskflow` 1/2. Başarısız test, `test/taskflow.e2e-spec.ts` içinde 403 beklerken 404 alan ve bu turdan önce de var olan kontroldür; `WorkspaceMemberGuard` üye olmayanlara bilinçli olarak 404 döndürür.
+- R-1 negatif kontrolü (PostgreSQL): kullanıcı kilidi olmadan, eşzamanlı rotasyonla oluşan yeni token parola değişimi sonrasında aktif kaldı; kilitle iptal edildi.
+- Docker: dört servis imajı build edildi; imajlarda `.env` veya anahtar dosyası yok; migrate imajı `prisma.config.ts` yüklüyor; geçici ağda migrate → backend → kayıt/login (HttpOnly cookie) → ML health → frontend smoke testi başarılı.
+- CSP: production build'de sayfadaki 11 script etiketinin tamamı istek başına üretilen nonce'u taşıyor; headless Chrome'da production (`/login`, `/register`, `/workspaces`) ve geliştirme modunda 0 CSP ihlali, istemci JavaScript'i çalışıyor.
+- Mutasyon kontrolleri, kilit, rate limit, `tokenType` ve limiter askıda kalma düzeltmelerinin testlerce yakalandığını gösterdi.
+
+Bu kanıtlar gerçek tarayıcı ve Android kullanıcı yolculuklarını, SMTP teslimatını, TLS'li production ortamını veya backup/restore'u doğrulamaz.
+
+## Açık bulgular (26 Kasım hazırlık değerlendirmesi)
+
+| ID | Önem | Bulgu | Durum |
+|---|---|---|---|
+| C-1 | Critical (yapılandırmaya bağlı) | `.env.example` içindeki `JWT_SECRET` yer tutucusu 32 byte kontrolünü geçiyor; değiştirilmezse access token sahteciliği mümkün. Dalın README'si uyarıyor, kod tespit etmiyor. `main`'de durum daha ağır: AuthModule'de sabit fallback secret hâlâ var. | Açık |
+| H-1 | High | CI E2E adımı `taskflow.e2e-spec.ts` 403/404 uyuşmazlığı nedeniyle büyük olasılıkla başarısız (yerelde doğrulandı, CI'da doğrulanamadı). | Açık |
+| H-2 | High | Repoda TLS/reverse proxy yok; production'da refresh cookie `Secure` olduğundan HTTP üzerinden web oturumu yenilenemez. | Açık |
+| H-3 | High (yapılandırmaya bağlı) | `TRUST_PROXY_HOPS` yanlış ayarlanırsa veya backend portu proxy dışında erişilebilir kalırsa IP sahteciliği ya da paylaşılan auth limitleri. | Açık |
+| H-4 | High | Hesap başına login limiti (20 / 15 dk) başkası tarafından tüketilebilir; hedef hesabın girişi sürekli engellenebilir. | Açık, karar gerekli |
+| M-1 | Medium | Redis kesintisinde refresh/logout/parola değişimi `503`; oturum kapatılamaz, erişim token'ları dolunca web oturumu sürmez. | Açık |
+| M-2 | Medium (teorik) | Redis'e paketlerin düştüğü kesintide istek başına yaklaşık 3,5 sn ek gecikme. | Test edilmedi |
+| M-3 | Medium | Refresh token ailelerinin mutlak ömrü yok. | Açık |
+| M-4 | Medium | 30 sn grace penceresi theft detection'ı daraltıyor (R-2). | Açık |
+| M-5 | Medium | Exception filter iç hata mesajını döndürüyor (SEC-06). | Açık |
+| M-6 | Medium (yapılandırmaya bağlı) | `REDIS_PASSWORD` varsayılanı boş. | Açık |
+| M-7 | Medium | Ortak IP (NAT/CGNAT) arkasındaki kullanıcılar IP başına auth limitlerini paylaşır. | Açık |
+| M-8 | Medium | CI `prisma migrate deploy` komutunu `--config` olmadan çalıştırıyor. Yerel gözleme göre CLI bu durumda kullanılmayan `prisma7.config.ts` dosyasını yüklüyor; CI'da aynı davranış olası, ancak bağımsız olarak doğrulanmadı. | Açık |
+
+**H-1 durum güncellemesi (26 Kasım 2026, sonraki tur):** Başka workspace'e erişimde **404 Not Found** dönülmesine ürün sahibi karar verdi (`product_workflows_requirements.md` §10, karar 14); workspace'in varlığı yetkisiz kullanıcıdan gizlenir. `fix/go-live-blockers` dalında `test/taskflow.e2e-spec.ts` içindeki iki eski 403 beklentisi `01005bc` ile 404 olarak düzeltildi; guard davranışı değişmedi. Yerel PostgreSQL 16 + Redis 7 koşusunda backend E2E 5/5 suite, 32/32 test geçti. GitHub Actions'ta `01005bc` için Backend, Frontend, ML ve Docker job'ları başarılı; **Android job'u bu kayıt yazılırken hâlâ çalışıyordu (sonuç bekleniyor)**. H-1, gerekli bütün CI check'leri başarıyla tamamlanana kadar **açık** kalır. Bu düzeltme yalnızca dalda; `main`'de CI workflow'u yok.
+
+Düşük önemli açıklar: davetlerde kısmi hesap tespiti (bekleyen satır ve yanıt süresi), Redis dönüşünden sonraki ilk auth isteğinin 503 alması, loglarda e-posta adresleri, SMTP için `requireTLS` bulunmaması, `FRONTEND_URL` varsayılanının localhost olması, CSP ihlal raporlamasının olmaması, `RefreshToken` tablosunun temizlenmemesi.
+
+## Dal ve `main` durumu
+
+`fix/go-live-blockers` dalı `main`'e merge edilmedi. Aşağıdaki tablo, dalda yapılanlarla `main`'in mevcut kodunu (`b5b4fb4`) ayırır. `main` sütunu `origin/main` üzerindeki dosyalar incelenerek yazıldı.
+
+| Konu | `fix/go-live-blockers` (`01005bc`) | `main` (`b5b4fb4`) |
+|---|---|---|
+| Refresh token güvenliği (SEC-01, R-1) | Uygulandı, yerel unit + PostgreSQL E2E ile test edildi (`675246a`) | Yok: bcrypt hash'li refresh token, eski rotasyon akışı |
+| JWT fallback secret | Kaldırıldı, `JWT_SECRET` en az 32 byte zorunlu (`675246a`) | AuthModule'de sabit fallback secret hâlâ var |
+| Rate limiting ve Helmet/CSP (SEC-02) | Uygulandı, yerel E2E ve tarayıcı kontrolü (`20ecec7`) | Yok |
+| Workspace daveti | PENDING davet akışı (`b5a2ef3`) ve gizlilik düzeltmeleri (`2b30009`), yerel E2E | Davet kullanıcıyı doğrudan ACTIVE üye yapıyor |
+| Docker build context (SEC-04-A) | Servis başına `.dockerignore` (`761f03a`) | Servis `.dockerignore` dosyaları yok |
+| İzlenen `.env` ve `android/.idea` | Git'ten kaldırıldı | Hâlâ izleniyor; geçmişteki değerler için rotation değerlendirilmeli |
+| E-posta retry/backoff | Kodda var (`06de170`), doğrulanmadı | Yok |
+| CI | Workflow var; `01005bc` için Backend/Frontend/ML/Docker başarılı, Android bekleniyor | `.github/workflows` yok |
+
+**Kalan blocker'lar ve kararlar (dalın durumuna göre):** C-1, H-1 (CI tamamlanana kadar), H-2, H-3 ve M-5 açık; H-4 ve M-1 ürün sahibi kararını bekliyor (karar 11 ve 12); karar 13, 15 ve 16 açık; karar 14 verildi (404). H-3, H-4, M-1 ve M-7 dalda eklenen rate limit davranışıyla ilgilidir; `main`'de rate limit hiç yoktur. `main` için ayrıca bu tablodaki bütün dal düzeltmeleri, dal merge edilene kadar eksik kabul edilmelidir.
+
+## Karar
+
+**Güncel karar: NO-GO.** Kimlik, oturum, davet, rate limit ve header kontrolleri `fix/go-live-blockers` dalının kodunda mevcut ve yerel testlerle doğrulandı; bu kod henüz `main`'de değildir. C-1, H-1, H-2, H-3 ve M-5 go-live engelleyicisidir; bunlar kapatılmadan ve TLS'li, doğru proxy topolojisine sahip bir ortamda gerçek kullanıcı akışları doğrulanmadan ticari production dağıtımı yapılmamalı. Karar, yalnız bu onaylı engelleyicilere dayanarak da NO-GO'dur.
+
+H-4 (hesap başına login limiti politikası) ve M-1 (Redis kesintisinde logout ve parola değişimi davranışı) ürün sahibi kararını bekliyor (`product_workflows_requirements.md` §10, karar 11 ve 12). Ürün sahibi bunları go-live kapısı olarak onaylarsa P0 engelleyici olarak kalırlar; onaylamazsa P1'e taşınmaları önerilir. Bu belge iki karardan hiçbirini vermez; aynı koşul `sales_readiness_plan.md` içinde de geçerlidir.
