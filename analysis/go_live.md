@@ -1,3 +1,5 @@
+> **Güncel durum notu — 26 Kasım 2026:** Bu sayfanın başındaki 18 Kasım bloğu ve sonraki tarihli bölümler tarihsel kayıttır; orada "açık" görünen bazı bulgular (refresh yarışı, parola sonrası oturum iptali, doğrudan ACTIVE davet, rate limit ve Helmet/CSP eksikliği) sonradan kapatılmıştır. En güncel değerlendirme ve kanıtlar için belgenin sonundaki **"26 Kasım 2026 — Güvenlik uygulamaları sonrası değerlendirme"** bölümüne bakın. Güncel karar: **NO-GO**.
+
 > **Kaynak kod yeniden kontrolü — 18 Kasım 2026 (latest branch):**
 >
 > Bu ek, yukarıdaki tarihsel ilk denetim notlarının yerine geçmez; ancak aşağıdaki noktaları güncel branch için düzeltir:
@@ -54,7 +56,7 @@
 > - Android: unit testler, assembleDebug ve connectedDebugAndroidTest başarılı. Instrumented testler 4/4 geçti; önceki başarısızlık ExampleInstrumentedTest.kt:22 içindeki eski package assertion'ıydı. Assertion, commit 219aa0559ec3d0f5457279974e4d40f9d50c7947 ile düzeltildi. Emulator loglarında ADB/izin uyarıları görüldü ancak test adımı başarılı tamamlandı.
 > - CI run #69 tüm 5 işi başarıyla tamamladı. Bu, branch üzerindeki build/test kapısının geçtiğini gösterir; production deployment, gerçek kullanıcı akışları, release signing ve operasyonel hazırlık doğrulaması değildir.
 >
-> **İlk turda yapılan başlıca düzeltmeler:**> **İlk turda yapılan başlıca düzeltmeler:**> **İlk turda yapılan başlıca düzeltmeler:** ADMIN'in OWNER/ADMIN rolü ataması engellendi; invite/role DTO validation eklendi; VIEWER task write işlemlerinden engellendi; root .env repodan kaldırıldı ve ignore dosyaları eklendi; backend/frontend/ML Dockerfile ve Compose servisleri, healthcheck ve migration job eklendi; Redis password bağlantısı ve CORS allowlist yapılandırıldı; Android API URL/cleartext ayrımı ve offline worker hata durumları iyileştirildi; dependency lockfile'lar güncellendi.
+> **İlk turda yapılan başlıca düzeltmeler:** ADMIN'in OWNER/ADMIN rolü ataması engellendi; invite/role DTO validation eklendi; VIEWER task write işlemlerinden engellendi; root .env repodan kaldırıldı ve ignore dosyaları eklendi; backend/frontend/ML Dockerfile ve Compose servisleri, healthcheck ve migration job eklendi; Redis password bağlantısı ve CORS allowlist yapılandırıldı; Android API URL/cleartext ayrımı ve offline worker hata durumları iyileştirildi; dependency lockfile'lar güncellendi.
 >
 > **GO/NO-GO kararı hâlâ NO-GO.** Başarılı CI, tek başına satılabilir ürün veya production deployment kanıtı değildir. Android instrumented test sonucu, release APK build/signing, temiz makinede docker compose up sonrası gerçek DB migration ve login→task→ML→notification smoke testi, yedekleme/geri yükleme, dış erişim/HTTPS ve alıcı dokümantasyonu ayrıca doğrulanmalıdır. Offline queue'ya kayıt ekleme ve WorkManager enqueue akışı uçtan uca doğrulanmış değildir. ML modeli yalnızca az sayıda sentetik örnekle eğitilmiştir ve risk_score hâlâ sabit eşlemeyle üretilmektedir; satışta gerçek tahmin doğruluğu iddiası yapılmamalıdır.
 >
@@ -677,3 +679,76 @@ Bu run tamamlanmadan CI PASS denmeyecek. Backend lint non-blocking kalmaya devam
 - `android/settings.gradle.kts` içinde Compose Compiler plugin ID'sini Kotlin'in `org.jetbrains.kotlin:compose-compiler-gradle-plugin:<requested.version>` modülüne eşleyen `pluginManagement.resolutionStrategy` eklendi. Bu, plugin marker artifact çözümlemesini atlayıp gerçek plugin modülünü Maven Central üzerinden bulmayı hedefler.
 - Kod değişikliği commit `7eacdf0a8de4e1ceee2c294d2cc3220289a3f66c` üzerinde. Bu düzeltmenin CI sonucu henüz yok; yeni bir PR workflow çalışması bekleniyor/doğrulanacak.
 - Run `45683129340` için frontend, backend ve ML job'ları başarılı; Android başarısız. Docker image build inceleme anında sürüyordu. Bu run'ın sonucu 5/5 değildir.
+
+
+---
+
+# 26 Kasım 2026 — Güvenlik uygulamaları sonrası değerlendirme
+
+> Bu bölüm önceki tarihli bölümleri silmez veya değiştirmez. Dal: `fix/go-live-blockers`. Teknik ayrıntılar (politika değerleri, yapılandırma, API sözleşmesi) bu belgede tekrarlanmaz; README.md içindeki "Production deployment notes", "Security controls" ve "Authentication API contract" bölümlerinde tutulur.
+
+## Bu turda dala eklenen değişiklikler
+
+| Commit | Kapsam |
+|---|---|
+| `675246a` | SEC-01 ve R-1: opak refresh token (SHA-256), `tokenType` doğrulaması, atomik rotasyon, token ailesi ve reuse iptali, parola değişiminde tüm oturumların iptali, devre dışı/silinmiş hesap reddi, kullanıcı satırı kilidi (`SELECT ... FOR UPDATE`), migration `20261126120000_session_security` |
+| `761f03a` | SEC-04-A: `backend/`, `frontend/`, `ml-service/` build context'leri için `.dockerignore` |
+| `2b30009` | SEC-05: tek tip davet yanıtı, bekleyen davetlerde profil gizleme, koşullu yeniden davet, eşzamanlı davet çakışmasında 409, silinmiş workspace kontrolü, e-posta URL doğrulama ve konu satırı temizliği |
+| `20ecec7` | SEC-02: global IP / kullanıcı / hassas işlem rate limitleri, hesap başına login limiti, limiter kesintisinde askıda kalma düzeltmesi, Helmet, nonce tabanlı frontend CSP |
+
+## Önceki bulguların güncel durumu
+
+| Tarihsel bulgu | Güncel durum | Kanıt |
+|---|---|---|
+| Refresh token rotasyonu yarış koşuluna açık (§2.2, 18 Kasım bloğu) | Kapandı | `675246a`; PostgreSQL E2E eşzamanlı refresh ve kilit sırası testleri |
+| Parola değişiminde refresh token'lar iptal edilmiyor (§2.2) | Kapandı | `675246a`; unit ve PostgreSQL E2E |
+| `TOKEN_THEFT_DETECTED` kodu maskeleniyor (§2.2) | Yerini ayrı hata kodları aldı (`REFRESH_TOKEN_REUSED`, `REFRESH_TOKEN_ROTATED`, `REFRESH_TOKEN_EXPIRED`) | `675246a` |
+| JWT modülünde bilinen fallback secret (§2.2) | Kapandı; secret ConfigService'ten alınıyor ve en az 32 byte olmalı | `675246a` |
+| Eski bcrypt refresh kayıtları için geriye dönük doğrulama (25 Kasım notu) | Kaldırıldı; eski kayıtlar migration ile iptal ediliyor, kullanıcılar bir kez yeniden giriş yapar | `675246a`, migration `20261126120000_session_security` |
+| Davet doğrudan ACTIVE üyelik veriyor (18 Kasım bloğu) | Kapandı (PENDING akışı önceki remediation commit'lerinde); gizlilik kuralları eklendi | `2b30009`; PostgreSQL E2E |
+| Rate limiting yok (§2.5) | Kapandı (kodda var, yerel E2E ile doğrulandı) | Önceki remediation + `20ecec7` |
+| Helmet/CSP/security headers yok (§2.5) | Kapandı (kodda var, tarayıcıda doğrulandı) | `20ecec7` |
+| Exception filter beklenmeyen `Error.message` değerini döndürüyor (§2.5) | **Açık** | `backend/src/common/filters/http-exception.filter.ts:47-48` |
+| Docker build context'ine yerel `.env` giriyor (SEC-04 denetim bulgusu; bu belgede daha önce bulgu olarak kayıtlı değildi) | Kapandı | `761f03a`; imaj içerik taraması |
+| ML Dockerfile tek aşamalı ve root çalışıyor (tarihsel bulgu) | Yalnız `.dockerignore` kısmı karşılandı; multi-stage build, non-root çalışma ve bind mount konuları yeniden değerlendirilmedi ve **kapanmış sayılmamalı** | `761f03a` (`ml-service/.dockerignore`) |
+
+Android cleartext/logging, audit hata yutma, ML senkron çağrı ve pagination bulguları bu turda yeniden değerlendirilmedi.
+
+## Doğrulama kanıtı
+
+Aşağıdaki sonuçlar **yerel koşulardır**. Bu ortamda `gh` olmadığı için ilgili commit'lerin GitHub Actions sonuçları doğrulanamadı.
+
+- Backend unit: 18 suite, 157/157 başarılı.
+- Backend E2E, tek kullanımlık PostgreSQL 16 + Redis 7 (32 test, 31 başarılı): `auth-session` 16/16, `workspace-invitations` 10/10, `rate-limit-outage` 3/3, `app` 1/1, `taskflow` 1/2. Başarısız test, `test/taskflow.e2e-spec.ts` içinde 403 beklerken 404 alan ve bu turdan önce de var olan kontroldür; `WorkspaceMemberGuard` üye olmayanlara bilinçli olarak 404 döndürür.
+- R-1 negatif kontrolü (PostgreSQL): kullanıcı kilidi olmadan, eşzamanlı rotasyonla oluşan yeni token parola değişimi sonrasında aktif kaldı; kilitle iptal edildi.
+- Docker: dört servis imajı build edildi; imajlarda `.env` veya anahtar dosyası yok; migrate imajı `prisma.config.ts` yüklüyor; geçici ağda migrate → backend → kayıt/login (HttpOnly cookie) → ML health → frontend smoke testi başarılı.
+- CSP: production build'de sayfadaki 11 script etiketinin tamamı istek başına üretilen nonce'u taşıyor; headless Chrome'da production (`/login`, `/register`, `/workspaces`) ve geliştirme modunda 0 CSP ihlali, istemci JavaScript'i çalışıyor.
+- Mutasyon kontrolleri, kilit, rate limit, `tokenType` ve limiter askıda kalma düzeltmelerinin testlerce yakalandığını gösterdi.
+
+Bu kanıtlar gerçek tarayıcı ve Android kullanıcı yolculuklarını, SMTP teslimatını, TLS'li production ortamını veya backup/restore'u doğrulamaz.
+
+## Açık bulgular (26 Kasım hazırlık değerlendirmesi)
+
+| ID | Önem | Bulgu | Durum |
+|---|---|---|---|
+| C-1 | Critical (yapılandırmaya bağlı) | `.env.example` içindeki `JWT_SECRET` yer tutucusu 32 byte kontrolünü geçiyor; değiştirilmezse access token sahteciliği mümkün. README uyarıyor, kod tespit etmiyor. | Açık |
+| H-1 | High | CI E2E adımı `taskflow.e2e-spec.ts` 403/404 uyuşmazlığı nedeniyle büyük olasılıkla başarısız (yerelde doğrulandı, CI'da doğrulanamadı). | Açık |
+| H-2 | High | Repoda TLS/reverse proxy yok; production'da refresh cookie `Secure` olduğundan HTTP üzerinden web oturumu yenilenemez. | Açık |
+| H-3 | High (yapılandırmaya bağlı) | `TRUST_PROXY_HOPS` yanlış ayarlanırsa veya backend portu proxy dışında erişilebilir kalırsa IP sahteciliği ya da paylaşılan auth limitleri. | Açık |
+| H-4 | High | Hesap başına login limiti (20 / 15 dk) başkası tarafından tüketilebilir; hedef hesabın girişi sürekli engellenebilir. | Açık, karar gerekli |
+| M-1 | Medium | Redis kesintisinde refresh/logout/parola değişimi `503`; oturum kapatılamaz, erişim token'ları dolunca web oturumu sürmez. | Açık |
+| M-2 | Medium (teorik) | Redis'e paketlerin düştüğü kesintide istek başına yaklaşık 3,5 sn ek gecikme. | Test edilmedi |
+| M-3 | Medium | Refresh token ailelerinin mutlak ömrü yok. | Açık |
+| M-4 | Medium | 30 sn grace penceresi theft detection'ı daraltıyor (R-2). | Açık |
+| M-5 | Medium | Exception filter iç hata mesajını döndürüyor (SEC-06). | Açık |
+| M-6 | Medium (yapılandırmaya bağlı) | `REDIS_PASSWORD` varsayılanı boş. | Açık |
+| M-7 | Medium | Ortak IP (NAT/CGNAT) arkasındaki kullanıcılar IP başına auth limitlerini paylaşır. | Açık |
+| M-8 | Medium | CI `prisma migrate deploy` komutunu `--config` olmadan çalıştırıyor. Yerel gözleme göre CLI bu durumda kullanılmayan `prisma7.config.ts` dosyasını yüklüyor; CI'da aynı davranış olası, ancak bağımsız olarak doğrulanmadı. | Açık |
+
+Düşük önemli açıklar: davetlerde kısmi hesap tespiti (bekleyen satır ve yanıt süresi), Redis dönüşünden sonraki ilk auth isteğinin 503 alması, loglarda e-posta adresleri, SMTP için `requireTLS` bulunmaması, `FRONTEND_URL` varsayılanının localhost olması, CSP ihlal raporlamasının olmaması, `RefreshToken` tablosunun temizlenmemesi.
+
+## Karar
+
+**Güncel karar: NO-GO.** Uygulama kodundaki kimlik, oturum, davet, rate limit ve header kontrolleri kodda mevcut ve yerel testlerle doğrulandı. C-1, H-1, H-2, H-3 ve M-5 go-live engelleyicisidir; bunlar kapatılmadan ve TLS'li, doğru proxy topolojisine sahip bir ortamda gerçek kullanıcı akışları doğrulanmadan ticari production dağıtımı yapılmamalı. Karar, yalnız bu onaylı engelleyicilere dayanarak da NO-GO'dur.
+
+H-4 (hesap başına login limiti politikası) ve M-1 (Redis kesintisinde logout ve parola değişimi davranışı) ürün sahibi kararını bekliyor (`product_workflows_requirements.md` §10, karar 11 ve 12). Ürün sahibi bunları go-live kapısı olarak onaylarsa P0 engelleyici olarak kalırlar; onaylamazsa P1'e taşınmaları önerilir. Bu belge iki karardan hiçbirini vermez; aynı koşul `sales_readiness_plan.md` içinde de geçerlidir.

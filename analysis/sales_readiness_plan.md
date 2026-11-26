@@ -17,16 +17,21 @@ Alıcı kaynak kodu, kurulum dosyalarını ve dokümantasyonu satın alır; kend
 ### P0 — satış öncesi engelleyiciler
 
 - [ ] **Android oturum yenileme E2E doğrulaması:** Kodda /auth/mobile/login, /auth/mobile/refresh, /auth/mobile/logout uçları mevcut. Android tarafında refresh token EncryptedSharedPreferences içinde saklanıyor; TokenAuthenticator 401 sonrasında refresh yapıp dönen access/refresh token çiftini kaydediyor. Bu akışın gerçek backend ile fiziksel cihaz/emülatörde; access token süresi dolması, eşzamanlı 401, refresh token rotation, logout sonrası eski token reddi ve ağ hatası senaryolarıyla E2E doğrulanması hâlâ gerekiyor.
-- [ ] **Üretim sırları ve yapılandırma:** `AuthModule` içinde `JWT_SECRET` yoksa kullanılabilecek sabit bir fallback secret bulunuyor. JWT stratejisi ayrıca secret zorunlu tutsa da satış paketinde sabit fallback kabul edilemez; tüm servislerde güvenli fail-fast yapılandırma doğrulanmalı.
+- [ ] **Üretim sırları ve yapılandırma:** `AuthModule` içinde `JWT_SECRET` yoksa kullanılabilecek sabit bir fallback secret bulunuyor. JWT stratejisi ayrıca secret zorunlu tutsa da satış paketinde sabit fallback kabul edilemez; tüm servislerde güvenli fail-fast yapılandırma doğrulanmalı. *26 Kasım: sabit fallback `675246a` ile kaldırıldı, `JWT_SECRET` en az 32 byte zorunlu. `.env.example` yer tutucusunun tespiti ve diğer servislerin fail-fast doğrulaması açık.*
 - [ ] **Temiz kurulum / gerçek çalışma:** Son CI Docker Compose yapılandırmasını doğrulayıp image'ları build ediyor; temiz makinede servisleri başlatma, migration, kayıt/giriş, görev akışı ve servisler arası gerçek bağlantıyı tek uçtan uca senaryo ile kanıtlamıyor.
 - [ ] **Lisans ve ürün teslimi:** Depoda kök seviyede alıcıya yönelik README ve lisans dosyası bulunmuyor. Backend ve frontend README dosyaları hâlâ framework başlangıç şablonları.
-- [ ] **Production ağ sınırı:** Compose backend ve frontend portlarını doğrudan host'a yayımlıyor; HTTPS/reverse proxy/sertifika ve güvenli dış erişim kurulum rehberi teslimatın parçası değil.
+- [ ] **Production ağ sınırı:** Compose backend ve frontend portlarını doğrudan host'a yayımlıyor; HTTPS/reverse proxy/sertifika ve güvenli dış erişim kurulum rehberi teslimatın parçası değil. *26 Kasım: README artık `TRUST_PROXY_HOPS`, HTTPS/cookie ve aynı site gereksinimlerini belgeliyor; çalışan bir reverse proxy/TLS yapılandırması hâlâ yok (go_live H-2, H-3).*
+- [ ] **JWT secret yer tutucusu:** `.env.example` içindeki `JWT_SECRET` örnek değeri 32 byte kontrolünü geçiyor; değiştirilmezse token sahteciliği mümkün. Açılışta bilinen yer tutucular reddedilmeli (go_live C-1).
+- [ ] **CI kapısı:** `test/taskflow.e2e-spec.ts` başka workspace erişiminde 403 beklerken backend 404 döndürüyor; CI E2E adımı büyük olasılıkla başarısız. 403/404 kararı verilip test ve guard uyumlu hale getirilmeli (go_live H-1).
+- [ ] **Login hesap kilitleme politikası (karar bekliyor):** Hesap başına login limiti başkası tarafından tüketilebiliyor (go_live H-4). Önce ürün/güvenlik kararı verilmeli ([product_workflows_requirements.md](product_workflows_requirements.md) §10, karar 11), uygulama bu karara göre yapılmalı. Herhangi bir politika değişikliği henüz onaylanmadı. *P0 durumu, ürün sahibinin bunu go-live kapısı olarak onaylamasına bağlıdır; onaylanmazsa P1'e taşınması önerilir.*
+- [ ] **Redis kesintisinde logout ve parola değişimi (karar bekliyor):** Redis erişilemezken logout ve parola değişimi `503` dönüyor; kesinti sırasında oturum iptal edilemiyor (go_live M-1). Önce ürün/güvenlik kararı verilmeli (§10, karar 12), uygulama bu karara göre yapılmalı; mevcut davranışın değiştirilmesi henüz onaylanmadı. *go_live önemi Medium; go-live kapısı olarak önerildiği için P0'da. Bu P0 durumu ürün sahibinin onayına bağlıdır; onaylanmazsa P1'e taşınması önerilir.*
+- [ ] **Hata mesajı sızıntısı:** Exception filter beklenmeyen hatalarda iç mesajı istemciye döndürüyor (go_live M-5, SEC-06). *go_live önemi Medium; go_live.md 26 Kasım kararında go-live kapısı olarak sayıldığı için P0'da.*
 
 ### P1 — ürün güvenilirliği ve tamamlanmamış akışlar
 
-- [ ] Workspace daveti, davet token'ı ve kabul/iptal/süre sonu akışı yerine kayıtlı kullanıcıyı doğrudan ACTIVE üye yapıyor.
+- [x] Workspace daveti, davet token'ı ve kabul/iptal/süre sonu akışı yerine kayıtlı kullanıcıyı doğrudan ACTIVE üye yapıyor. *Kapandı: PENDING davet ve kabul/ret/expiry akışı `b5a2ef3`; gizlilik ve eşzamanlılık düzeltmeleri `2b30009`; backend PostgreSQL E2E ile doğrulandı. Gerçek SMTP ve Web UI akışı ayrıca açık.*
 - [ ] Audit yazma hatası yakalanıp loglanıyor fakat ana işlem devam ediyor; kritik işlemlerde audit kaydının kaybolması ve işlemle atomik olmaması değerlendirilmeli.
-- [ ] E-posta kuyruğunda retry/backoff/retention politikası ve gerçek SMTP teslimat testi doğrulanmalı.
+- [ ] E-posta kuyruğunda retry/backoff/retention politikası ve gerçek SMTP teslimat testi doğrulanmalı. *26 Kasım: retry/backoff/retention kodda var (`06de170`); gerçek SMTP teslimatı doğrulanmadı.*
 - [ ] ML modeli sentetik ve çok küçük veriyle eğitilmiş. Gerçek iş verisiyle doğruluk/kalibrasyon kanıtı yok; bu nedenle ürün pazarlamasında tahmin doğruluğu veya yüzde olasılık iddiası yapılmamalı. Deneysel özellik olarak sunulmalı veya varsayılan olarak kapatılmalı.
 - [ ] Task/project listeleme için pagination ve büyük veri performansı ölçülmeli.
 - [ ] Android offline sync hata matrisi, token yenileme ve gerçek cihaz ağ koşulları uçtan uca test edilmeli.
@@ -35,7 +40,7 @@ Alıcı kaynak kodu, kurulum dosyalarını ve dokümantasyonu satın alır; kend
 
 - [ ] Backend genel lint borcu sıfırlanmalı; CI'da non-blocking lint adımı blocking hale getirilmeli.
 - [ ] Unit/integration/e2e test kapsamı, coverage raporu ve kritik tenant izolasyonu testleri genişletilmeli.
-- [ ] Root README, kurulum, yapılandırma referansı, mimari, API, troubleshooting, upgrade, backup/restore ve release notları hazırlanmalı.
+- [ ] Root README, kurulum, yapılandırma referansı, mimari, API, troubleshooting, upgrade, backup/restore ve release notları hazırlanmalı. *26 Kasım: README'ye deployment gereksinimleri, güvenlik kontrolleri, auth API sözleşmesi ve yükseltme notu eklendi; mimari, troubleshooting, backup/restore ve release notları açık.*
 - [ ] Lisans, üçüncü taraf lisans/attribution envanteri, destek politikası ve sürümleme hazırlanmalı.
 - [ ] Release artefact'ları (web/backend/ML container'ları, Android release APK/AAB gerekiyorsa) tekrarlanabilir şekilde üretilip kontrol edilmeli.
 - [ ] Demo verisi ve demo hesapları güvenli, isteğe bağlı ve production sırlarından ayrı olmalı.
@@ -266,3 +271,12 @@ Bu run tamamlanmadan CI PASS denmeyecek. Backend lint non-blocking kalmaya devam
 - Prettier'ın bildirdiği 6 format hatası düzeltildi. Commit `c8c92a468cf3348bf5d4264632a9e9d21d9212ea`; yeni CI run [45793136142](https://github.com/busraknya/taskflow-ai-full-project/actions/runs/45793136142) queued durumunda. Sonuç alınmadan backend E2E veya Android düzeltmesi başarılı sayılmayacak.
 
 **Durum:** E2E doğrulaması açık; Android plugin resolution tekrarlanabilir değil; backend genel lint non-blocking ayarı ve dependency audit bulguları da açık. Production/sales readiness **NO-GO**.
+
+
+## 26 Kasım 2026 — Güvenlik uygulamaları ilerleme notu
+
+- `fix/go-live-blockers` dalına SEC-01/R-1 (`675246a`), SEC-04-A (`761f03a`), SEC-05 (`2b30009`) ve SEC-02 (`20ecec7`) eklendi ve `main` dalındaki doküman commit'leri dala birleştirildi.
+- Kapanan ve kısmen ilerleyen maddeler yukarıdaki listede commit referanslarıyla işaretlendi; yeni P0 engelleyiciler (JWT yer tutucusu, CI kapısı, login hesap kilitleme politikası, Redis kesintisinde logout/parola değişimi, hata mesajı sızıntısı) eklendi. M-1 ve M-5 go_live.md'de Medium önemdedir. M-5, go_live.md 26 Kasım kararında go-live engelleyicisi sayıldığı için P0'dadır. H-4 ve M-1 ise ürün sahibi kararını bekliyor (§10, karar 11 ve 12): go-live kapısı olarak onaylanırlarsa P0'da kalır, onaylanmazlarsa P1'e taşınmaları önerilir.
+- Doğrulama kanıtları ve açık bulguların ayrıntısı [go_live.md](go_live.md) içindeki "26 Kasım 2026 — Güvenlik uygulamaları sonrası değerlendirme" bölümündedir; deployment ve yapılandırma gereksinimleri [README.md](../README.md) içindedir.
+
+**Durum:** Production/sales readiness **NO-GO**.
