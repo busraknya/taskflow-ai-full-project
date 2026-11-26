@@ -244,3 +244,14 @@ Bu run tamamlanmadan CI PASS denmeyecek. Backend lint non-blocking kalmaya devam
 - Backend genel lint adımı hâlâ non-blocking. Ayrıca mevcut E2E testleri kapsam bakımından sınırlı; yeni adımın çalışması gerçek ürün kabul testlerinin tamamlandığı anlamına gelmeyecek.
 
 **Durum:** Android/Compose derleme ve mevcut otomatik CI kapıları geçti. Yeni PostgreSQL/Redis destekli E2E CI adımı doğrulanmayı bekliyor. Gerçek kullanıcı senaryoları, SMTP, TLS/reverse proxy, backup/restore, secret-history scan, lisans/third-party notices ve release ZIP incelemesi açık. **NO-GO**.
+
+
+## 26 Kasım 2026 — Backend E2E genişletmesi eklendi (CI bekliyor)
+
+- Run [45762301250](https://github.com/busraknya/taskflow-ai-full-project/actions/runs/45762301250) commit `23c84c405f1020ca564cf6596bde29eb54e74034` için 5/5 job başarılı. Backend job'ında PostgreSQL 16 ve Redis 7 servisleri healthy oldu; Prisma migration deploy başarılı; 13 unit-test suite / 46 test ve 2 E2E suite / 3 test geçti; build ve production dependency audit başarılı.
+- Önemli sınır: bu CI run'ındaki mevcut `taskflow.e2e-spec.ts` yalnızca unauthenticated access ve geçersiz bearer token kontrollerini yapıyordu. Gerçek kayıt/giriş/refresh/workspace/project/task ve tenant sınırı akışlarını kapsamıyordu.
+- `backend/test/taskflow.e2e-spec.ts` şimdi genişletildi: register + duplicate/DTO validation, mobile login + invalid credentials, refresh rotation + old-token reuse, workspace/project/task oluşturma, farklı kullanıcıyla workspace listeleme ve cross-tenant project/task erişim engeli, mobile logout sonrası refresh reddi senaryoları eklendi.
+- Test dosyası commit'i `fb035134b171558feaa6259c91bba29ffe1e855b`. Bu yeni testler henüz CI'da çalıştırılmadı; başarılı sayılmıyor. GitHub Actions push run listesinde bu commit için yeni run görünmüyor.
+- Backend lint baseline hâlâ `continue-on-error: true`; lint adımının workflow'da tamamlanması temiz lint sonucu olarak yorumlanmamalı.
+
+**Durum:** Önceki CI yeşil; yeni geniş E2E senaryoları kodlandı fakat doğrulanmayı bekliyor. Gerçek UI E2E, Android API E2E, davet/e-posta, tam tenant/rol matrisi, TLS/proxy, backup/restore, secret-history scan, lisans/attribution ve release ZIP kapıları açık. **NO-GO**.
