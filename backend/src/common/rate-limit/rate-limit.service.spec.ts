@@ -24,10 +24,10 @@ jest.mock('ioredis', () => ({
   default: jest.fn().mockImplementation(() => ({
     status: 'ready',
     eval: jest.fn<ReturnType<RedisEval>, Parameters<RedisEval>>(),
-    connect: jest.fn<() => Promise<void>>().mockResolvedValue(undefined),
-    on: jest.fn().mockReturnThis(),
-    once: jest.fn().mockReturnThis(),
-    off: jest.fn().mockReturnThis(),
+    connect: jest.fn<Promise<void>, []>().mockResolvedValue(undefined),
+    on: jest.fn<RedisMock, [string, (...args: unknown[]) => void]>().mockReturnThis(),
+    once: jest.fn<RedisMock, [string, (...args: unknown[]) => void]>().mockReturnThis(),
+    off: jest.fn<RedisMock, [string, (...args: unknown[]) => void]>().mockReturnThis(),
     disconnect: jest.fn<void, []>(),
   })),
 }));
