@@ -17,6 +17,29 @@ jobs:
   backend:
     name: Backend tests and build
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: taskflow
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ci -d taskflow"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     defaults:
       run:
         working-directory: backend
@@ -36,6 +59,8 @@ jobs:
           cache-dependency-path: backend/package-lock.json
       - run: npm ci
       - run: npx prisma generate
+      - name: Apply database migrations for integration tests
+        run: npx prisma migrate deploy
       - name: Lint new security and invitation modules
         run: |
           npx eslint \
@@ -51,6 +76,8 @@ jobs:
         continue-on-error: true
       - run: npx tsc --noEmit
       - run: npm test -- --runInBand
+      - name: Run backend integration tests against PostgreSQL and Redis
+        run: npm run test:e2e -- --runInBand
       - run: npm run build
       - run: npm audit --omit=dev --audit-level=high
 
