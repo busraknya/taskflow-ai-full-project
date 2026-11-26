@@ -233,3 +233,14 @@ Bu run tamamlanmadan CI PASS denmeyecek. Backend lint non-blocking kalmaya devam
 - Branch'te `android/settings.gradle.kts` için plugin ID → `org.jetbrains.kotlin:compose-compiler-gradle-plugin:<version>` modül eşlemesi bulunuyor. Bu düzeltme önceki run'ın checkout ettiği PR merge commit'inden sonra eklendi; henüz CI'da doğrulanmadı.
 - Workflow `push` olayında `fix/go-live-blockers` dalını da izliyor. Bu doküman güncellemesi yeni bir branch CI run'ı başlatmak için yapıldı; yeni run'ın Android job'ı özellikle izlenecek.
 - Başarılı Android CI gelmeden Android kabul kapısı geçilmiş sayılmayacak. Diğer P0/P1 kapıları, lisans/attribution ve gerçek E2E testleri açık olduğundan satış kararı **NO-GO**.
+
+
+## 26 Kasım 2026 — CI kapsamı genişletildi
+
+- Run [45684356306](https://github.com/busraknya/taskflow-ai-full-project/actions/runs/45684356306) commit `8acfa430f804d5988fb2efd728da26285bc1c5bc` için **5/5 job başarılı**: backend TypeScript/Jest/build/audit, frontend lint/typecheck/build/audit, ML pytest/pip-audit, Android unit test + debug APK + Room instrumented testleri ve Docker Compose image build + servis healthcheck.
+- Bu run Android Compose plugin çözümleme düzeltmesini içeren branch HEAD üzerinde başarılıdır. Dolayısıyla önceki Gradle plugin resolution blokajı kapanmıştır.
+- İnceleme sırasında backend E2E test dosyalarının CI workflow'unda çalıştırılmadığı tespit edildi. Var olan iki E2E testi yalnızca health/root ve auth gerektiren workspace endpoint'inin 401 dönmesini kontrol ediyordu; kayıt, login, workspace daveti, task CRUD ve gerçek tenant izolasyonu akışlarını kapsamıyordu.
+- Bu boşluğu kapatmak için CI workflow'una PostgreSQL 16 ve Redis 7 servis container'ları, migration deploy ve `npm run test:e2e` adımı eklendi. Commit: `cd693593289a322aa5cdf0560f825fd6331de7a7`. Bu yeni CI değişikliği henüz çalıştırılıp doğrulanmadı.
+- Backend genel lint adımı hâlâ non-blocking. Ayrıca mevcut E2E testleri kapsam bakımından sınırlı; yeni adımın çalışması gerçek ürün kabul testlerinin tamamlandığı anlamına gelmeyecek.
+
+**Durum:** Android/Compose derleme ve mevcut otomatik CI kapıları geçti. Yeni PostgreSQL/Redis destekli E2E CI adımı doğrulanmayı bekliyor. Gerçek kullanıcı senaryoları, SMTP, TLS/reverse proxy, backup/restore, secret-history scan, lisans/third-party notices ve release ZIP incelemesi açık. **NO-GO**.
