@@ -1,42 +1,72 @@
-import { Injectable, ConflictException, UnauthorizedException } from '@nestjs/common';
-import { createHash } from 'crypto';
+import {
+  Injectable,
+  ConflictException,
+  Logger,
+  UnauthorizedException,
+} from '@nestjs/common';
+import { Prisma, RefreshToken } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import * as bcrypt from 'bcrypt';
 import { JwtService } from '@nestjs/jwt';
-import { ConfigService } from '@nestjs/config';
+import { randomUUID } from 'crypto';
+import {
+  REFRESH_REUSE_GRACE_MS,
+  REFRESH_TOKEN_TTL_MS,
+  generateRefreshToken,
+  hashRefreshToken,
+} from './refresh-token.util';
+import { ACCESS_TOKEN_TTL, ACCESS_TOKEN_TYPE } from './jwt-config';
 
-interface TokenPayload {
+export interface AccessTokenPayload {
   sub: string;
   email: string;
-  tokenType?: 'access' | 'refresh';
+  tokenType: typeof ACCESS_TOKEN_TYPE;
 }
 
-interface TokenPair {
+export interface IssuedTokens {
   accessToken: string;
   refreshToken: string;
-  tokenHash: string;
-  expiresAt: Date;
 }
 
+/** User state read while holding the per-user session lock. */
+export interface LockedUser {
+  id: string;
+  email: string;
+  passwordHash: string;
+  blocked: boolean;
+}
+
+type PrismaTx = Prisma.TransactionClient;
+
+type RefreshOutcome =
+  | { kind: 'rotated'; userId: string; email: string }
+  | { kind: 'invalid' }
+  | { kind: 'expired' }
+  | { kind: 'rotatedRecently' }
+  | { kind: 'reused'; userId: string; familyId: string };
+
+/*
+ * Session lock discipline (R-1)
+ * -----------------------------
+ * Every operation that creates, rotates or revokes refresh tokens of a user
+ * runs in one transaction that first takes `SELECT ... FOR UPDATE` on that
+ * user's row, and only then reads/writes RefreshToken rows. Under READ
+ * COMMITTED this serializes refresh, logout, reuse revocation, login and
+ * password change per user: a revoking statement can no longer miss a token
+ * inserted by a concurrent, not-yet-committed rotation. Each operation locks
+ * exactly one User row and always before any RefreshToken row, so the lock
+ * order is identical everywhere and cannot deadlock.
+ */
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     private prisma: PrismaService,
     private jwtService: JwtService,
-    private configService: ConfigService,
   ) {}
-
-  private getJwtSecret(): string {
-    const secret = this.configService.get<string>('JWT_SECRET');
-    if (!secret || Buffer.byteLength(secret, 'utf8') < 32) {
-      throw new Error(
-        'FATAL: JWT_SECRET must contain at least 32 bytes of high-entropy secret material.',
-      );
-    }
-    return secret;
-  }
 
   async register(dto: RegisterDto) {
     const existingUser = await this.prisma.user.findUnique({
@@ -77,14 +107,35 @@ export class AuthService {
       where: { email: dto.email },
     });
 
-    if (!user || !(await bcrypt.compare(dto.password, user.passwordHash))) {
-      throw new UnauthorizedException({
-        code: 'INVALID_CREDENTIALS',
-        message: 'E-posta veya şifre hatalı.',
-      });
+    // Deleted/disabled accounts get the same response as wrong credentials
+    // so the endpoint does not reveal account state.
+    if (
+      !user ||
+      !(await bcrypt.compare(dto.password, user.passwordHash)) ||
+      user.deletedAt ||
+      user.disabledAt
+    ) {
+      throw this.invalidCredentials();
     }
 
-    const tokens = await this.generateTokens(user.id, user.email);
+    // The password was verified outside the lock (bcrypt is slow). Re-check
+    // under the lock that it has not been changed meanwhile, otherwise a login
+    // racing a password change could create a session with the old password.
+    const tokens = await this.prisma.$transaction(async (tx) => {
+      const locked = await this.lockUser(tx, user.id);
+      if (
+        !locked ||
+        locked.blocked ||
+        locked.passwordHash !== user.passwordHash
+      ) {
+        return null;
+      }
+      return this.issueSession(tx, locked.id, locked.email);
+    });
+
+    if (!tokens) {
+      throw this.invalidCredentials();
+    }
 
     return {
       accessToken: tokens.accessToken,
@@ -97,149 +148,284 @@ export class AuthService {
     };
   }
 
-  async refreshTokens(refreshToken: string) {
-    let payload: TokenPayload;
-    try {
-      payload = this.jwtService.verify<TokenPayload>(refreshToken, {
-        secret: this.getJwtSecret(),
-      });
-      if (payload.tokenType !== 'refresh') {
-        throw new Error('Expected a refresh token.');
-      }
-    } catch {
+  /**
+   * Rotates an opaque refresh token. The initial lookup only discovers which
+   * user to lock; every decision is made on state re-read under the lock.
+   * Errors are returned from the transaction (not thrown inside it) so that
+   * revocations performed while rejecting a token are committed.
+   */
+  async refreshTokens(rawToken: string | undefined): Promise<IssuedTokens> {
+    if (typeof rawToken !== 'string' || rawToken.length === 0) {
       throw this.invalidRefreshToken();
     }
 
-    const user = await this.prisma.user.findUnique({
-      where: { id: payload.sub },
-      select: { id: true, deletedAt: true },
+    const tokenHash = hashRefreshToken(rawToken);
+
+    // Preliminary, unlocked lookup: used only to find the user to lock.
+    const candidate = await this.prisma.refreshToken.findUnique({
+      where: { tokenHash },
+      select: { userId: true },
     });
-    if (!user || user.deletedAt) {
+
+    // Unknown value: random string, legacy JWT refresh token, or an access token.
+    if (!candidate) {
       throw this.invalidRefreshToken();
     }
 
-    const matchedToken = await this.findStoredRefreshToken(
-      payload.sub,
-      refreshToken,
+    const nextRawToken = generateRefreshToken();
+
+    const outcome = await this.prisma.$transaction(
+      async (tx): Promise<RefreshOutcome> => {
+        const user = await this.lockUser(tx, candidate.userId);
+        if (!user) {
+          return { kind: 'invalid' };
+        }
+
+        // Authoritative token state, read after the user lock was acquired.
+        const token = await tx.refreshToken.findUnique({
+          where: { tokenHash },
+        });
+        if (!token || token.userId !== user.id) {
+          return { kind: 'invalid' };
+        }
+
+        if (user.blocked) {
+          await this.revokeAllForUser(user.id, tx);
+          return { kind: 'invalid' };
+        }
+
+        const now = new Date();
+
+        if (token.revokedAt) {
+          // A password change, logout or earlier rotation revoked this token.
+          // Password changes revoke every token under this same lock, so a
+          // token that predates one can never be observed as active here.
+          const rotatedRecently =
+            token.replacedByTokenId !== null &&
+            now.getTime() - token.revokedAt.getTime() <= REFRESH_REUSE_GRACE_MS;
+          if (rotatedRecently) {
+            return { kind: 'rotatedRecently' };
+          }
+
+          await this.revokeFamily(tx, token);
+          return {
+            kind: 'reused',
+            userId: user.id,
+            familyId: token.familyId ?? token.id,
+          };
+        }
+
+        if (token.expiresAt <= now) {
+          return { kind: 'expired' };
+        }
+
+        // Conditional consume kept as a second line of defence.
+        const consumed = await tx.refreshToken.updateMany({
+          where: { id: token.id, revokedAt: null, expiresAt: { gt: now } },
+          data: { revokedAt: now },
+        });
+        if (consumed.count !== 1) {
+          return { kind: 'invalid' };
+        }
+
+        const next = await this.createRefreshToken(tx, {
+          userId: user.id,
+          familyId: token.familyId ?? token.id,
+          rawToken: nextRawToken,
+          now,
+        });
+        await tx.refreshToken.update({
+          where: { id: token.id },
+          data: { replacedByTokenId: next.id },
+        });
+
+        return { kind: 'rotated', userId: user.id, email: user.email };
+      },
     );
 
-    if (!matchedToken || matchedToken.expiresAt <= new Date()) {
-      throw this.invalidRefreshToken();
-    }
-
-    if (matchedToken.revokedAt) {
-      // A previously rotated token is being reused. Revoke the remaining
-      // sessions for this user, but do not treat a concurrent CAS loser as reuse.
-      await this.prisma.refreshToken.updateMany({
-        where: { userId: payload.sub, revokedAt: null },
-        data: { revokedAt: new Date() },
-      });
-      throw new UnauthorizedException({
-        code: 'TOKEN_REUSE_DETECTED',
-        message: 'Bu oturum anahtarı daha önce kullanılmış. Lütfen tekrar giriş yapın.',
-      });
-    }
-
-    const matchedTokenId = matchedToken.id;
-    const nextTokens = await this.createTokenPair(payload.sub, payload.email);
-
-    return this.prisma.$transaction(async (tx) => {
-      const rotation = await tx.refreshToken.updateMany({
-        where: {
-          id: matchedTokenId,
-          userId: payload.sub,
-          revokedAt: null,
-          expiresAt: { gt: new Date() },
-        },
-        data: { revokedAt: new Date() },
-      });
-
-      if (rotation.count !== 1) {
+    switch (outcome.kind) {
+      case 'rotated':
+        return {
+          accessToken: this.signAccessToken(outcome.userId, outcome.email),
+          refreshToken: nextRawToken,
+        };
+      case 'expired':
         throw new UnauthorizedException({
-          code: 'REFRESH_TOKEN_ALREADY_USED',
-          message: 'Oturum anahtarı artık geçerli değil. Lütfen tekrar giriş yapın.',
+          code: 'REFRESH_TOKEN_EXPIRED',
+          message: 'Oturum süresi doldu. Lütfen tekrar giriş yapın.',
         });
-      }
-
-      await tx.refreshToken.create({
-        data: {
-          userId: payload.sub,
-          tokenHash: nextTokens.tokenHash,
-          expiresAt: nextTokens.expiresAt,
-        },
-      });
-
-      return {
-        accessToken: nextTokens.accessToken,
-        refreshToken: nextTokens.refreshToken,
-      };
-    });
+      case 'rotatedRecently':
+        // Benign race (e.g. two tabs). The winner's new session stays intact.
+        throw new UnauthorizedException({
+          code: 'REFRESH_TOKEN_ROTATED',
+          message: 'Oturum başka bir istekte yenilendi.',
+        });
+      case 'reused':
+        this.logger.warn(
+          `Refresh token reuse detected; revoked session family (user=${outcome.userId}, family=${outcome.familyId}).`,
+        );
+        throw new UnauthorizedException({
+          code: 'REFRESH_TOKEN_REUSED',
+          message: 'Güvenlik ihlali tespit edildi. Lütfen tekrar giriş yapın.',
+        });
+      default:
+        throw this.invalidRefreshToken();
+    }
   }
 
-  async logoutWithRefreshToken(refreshToken: string) {
-    let payload: TokenPayload;
-    try {
-      payload = this.jwtService.verify<TokenPayload>(refreshToken, {
-        secret: this.getJwtSecret(),
-      });
-    } catch {
-      throw this.invalidRefreshToken();
-    }
-    if (payload.tokenType !== 'refresh') {
-      throw this.invalidRefreshToken();
-    }
+  /**
+   * Ends the session the refresh cookie belongs to. Without a usable cookie
+   * (or with another user's cookie) every session of the user is revoked,
+   * which is the safe default. Only the caller's own tokens are ever touched.
+   */
+  async logout(userId: string, rawToken?: string) {
+    const tokenHash =
+      typeof rawToken === 'string' && rawToken.length > 0
+        ? hashRefreshToken(rawToken)
+        : null;
 
-    const storedToken = await this.findStoredRefreshToken(
-      payload.sub,
-      refreshToken,
-    );
+    await this.prisma.$transaction(async (tx) => {
+      await this.lockUser(tx, userId);
 
-    if (!storedToken) {
-      throw this.invalidRefreshToken();
-    }
+      const token = tokenHash
+        ? await tx.refreshToken.findUnique({ where: { tokenHash } })
+        : null;
 
-    await this.prisma.refreshToken.updateMany({
-      where: { id: storedToken.id, userId: payload.sub, revokedAt: null },
-      data: { revokedAt: new Date() },
+      if (token && token.userId === userId) {
+        await this.revokeFamily(tx, token);
+      } else {
+        await this.revokeAllForUser(userId, tx);
+      }
     });
+
     return { message: 'Başarıyla çıkış yapıldı.' };
   }
 
-  async logout(userId: string) {
-    await this.prisma.refreshToken.updateMany({
+  /**
+   * Mobile logout: the request carries only the refresh token (no access
+   * token), so possession of a known token identifies the session. Ends that
+   * token's family under the same per-user lock as every other operation.
+   */
+  async logoutWithRefreshToken(rawToken: string) {
+    if (typeof rawToken !== 'string' || rawToken.length === 0) {
+      throw this.invalidRefreshToken();
+    }
+    const tokenHash = hashRefreshToken(rawToken);
+
+    // Preliminary, unlocked lookup: used only to find the user to lock.
+    const candidate = await this.prisma.refreshToken.findUnique({
+      where: { tokenHash },
+      select: { userId: true },
+    });
+    if (!candidate) {
+      throw this.invalidRefreshToken();
+    }
+
+    const found = await this.prisma.$transaction(async (tx) => {
+      await this.lockUser(tx, candidate.userId);
+      const token = await tx.refreshToken.findUnique({ where: { tokenHash } });
+      if (!token || token.userId !== candidate.userId) {
+        return false;
+      }
+      await this.revokeFamily(tx, token);
+      return true;
+    });
+
+    if (!found) {
+      throw this.invalidRefreshToken();
+    }
+    return { message: 'Başarıyla çıkış yapıldı.' };
+  }
+
+  /**
+   * Starts a new session (token family). Must run inside a transaction that
+   * already holds the user's session lock (see lockUser).
+   */
+  async issueSession(
+    tx: PrismaTx,
+    userId: string,
+    email: string,
+  ): Promise<IssuedTokens> {
+    const rawToken = generateRefreshToken();
+    await this.createRefreshToken(tx, {
+      userId,
+      familyId: randomUUID(),
+      rawToken,
+      now: new Date(),
+    });
+
+    return {
+      accessToken: this.signAccessToken(userId, email),
+      refreshToken: rawToken,
+    };
+  }
+
+  /** Revokes every active refresh token of the user (all devices). */
+  async revokeAllForUser(
+    userId: string,
+    client: PrismaTx | PrismaService = this.prisma,
+  ) {
+    await client.refreshToken.updateMany({
       where: { userId, revokedAt: null },
       data: { revokedAt: new Date() },
     });
-    return { message: 'Başarıyla çıkış yapıldı.' };
   }
 
-  private async findStoredRefreshToken(userId: string, refreshToken: string) {
-    // Refresh tokens are high-entropy signed values; SHA-256 enables an indexed
-    // lookup. Bcrypt scanning is retained only for sessions created by older
-    // releases, then naturally disappears as those sessions rotate or expire.
-    const tokenHash = createHash('sha256').update(refreshToken).digest('hex');
-    const indexedToken = await this.prisma.refreshToken.findUnique({
-      where: { tokenHash },
-    });
+  /**
+   * Takes the per-user session lock (row lock on "User", held until the
+   * transaction ends) and returns the user's current state.
+   */
+  async lockUser(tx: PrismaTx, userId: string): Promise<LockedUser | null> {
+    const rows = await tx.$queryRaw<LockedUser[]>`
+      SELECT "id", "email", "passwordHash",
+             ("deletedAt" IS NOT NULL OR "disabledAt" IS NOT NULL) AS "blocked"
+      FROM "User"
+      WHERE "id" = ${userId}
+      FOR UPDATE`;
+    return rows[0] ?? null;
+  }
 
-    if (indexedToken) {
-      return indexedToken;
-    }
+  private signAccessToken(userId: string, email: string): string {
+    const payload: AccessTokenPayload = {
+      sub: userId,
+      email,
+      tokenType: ACCESS_TOKEN_TYPE,
+    };
+    return this.jwtService.sign(payload, { expiresIn: ACCESS_TOKEN_TTL });
+  }
 
-    const legacyTokens = await this.prisma.refreshToken.findMany({
-      where: {
-        userId,
-        tokenHash: { startsWith: '$2' },
+  private createRefreshToken(
+    client: PrismaTx,
+    params: { userId: string; familyId: string; rawToken: string; now: Date },
+  ) {
+    return client.refreshToken.create({
+      data: {
+        userId: params.userId,
+        familyId: params.familyId,
+        tokenHash: hashRefreshToken(params.rawToken),
+        expiresAt: new Date(params.now.getTime() + REFRESH_TOKEN_TTL_MS),
       },
     });
+  }
 
-    for (const legacyToken of legacyTokens) {
-      if (await bcrypt.compare(refreshToken, legacyToken.tokenHash)) {
-        return legacyToken;
-      }
-    }
+  /** Revokes the token family; legacy rows without a family are revoked alone. */
+  private async revokeFamily(
+    client: PrismaTx,
+    token: Pick<RefreshToken, 'id' | 'familyId'>,
+  ) {
+    await client.refreshToken.updateMany({
+      where: token.familyId
+        ? { familyId: token.familyId, revokedAt: null }
+        : { id: token.id, revokedAt: null },
+      data: { revokedAt: new Date() },
+    });
+  }
 
-    return null;
+  private invalidCredentials() {
+    return new UnauthorizedException({
+      code: 'INVALID_CREDENTIALS',
+      message: 'E-posta veya şifre hatalı.',
+    });
   }
 
   private invalidRefreshToken() {
@@ -247,41 +433,5 @@ export class AuthService {
       code: 'INVALID_REFRESH_TOKEN',
       message: 'Oturum süresi doldu. Lütfen tekrar giriş yapın.',
     });
-  }
-
-  private async createTokenPair(userId: string, email: string): Promise<TokenPair> {
-    const secret = this.getJwtSecret();
-    const accessToken = this.jwtService.sign(
-      { sub: userId, email, tokenType: 'access' },
-      { secret, expiresIn: '15m' },
-    );
-
-    const refreshToken = this.jwtService.sign(
-      { sub: userId, email, tokenType: 'refresh' },
-      { secret, expiresIn: '30d' },
-    );
-
-    const tokenHash = createHash('sha256').update(refreshToken).digest('hex');
-    const expiresAt = new Date();
-    expiresAt.setDate(expiresAt.getDate() + 30);
-
-    return { accessToken, refreshToken, tokenHash, expiresAt };
-  }
-
-  private async generateTokens(userId: string, email: string) {
-    const tokenPair = await this.createTokenPair(userId, email);
-
-    await this.prisma.refreshToken.create({
-      data: {
-        userId,
-        tokenHash: tokenPair.tokenHash,
-        expiresAt: tokenPair.expiresAt,
-      },
-    });
-
-    return {
-      accessToken: tokenPair.accessToken,
-      refreshToken: tokenPair.refreshToken,
-    };
   }
 }

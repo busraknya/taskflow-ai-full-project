@@ -47,6 +47,10 @@ model User {
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
   deletedAt     DateTime?
+  // Set to block authentication without deleting the account.
+  disabledAt        DateTime?
+  // Access tokens issued before this instant are rejected.
+  passwordChangedAt DateTime?
 
   memberships       WorkspaceMembership[]
   assignedTasks     Task[]              @relation("TaskAssignee")
@@ -62,12 +66,18 @@ model RefreshToken {
   id         String   @id @default(uuid())
   userId     String
   user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // SHA-256 (hex) of the opaque refresh token; the raw token is never stored.
   tokenHash  String   @unique
+  // All tokens produced by rotation from one login share a family.
+  familyId   String?
+  // Set when this token was rotated (as opposed to revoked by logout/reuse).
+  replacedByTokenId String?
   expiresAt  DateTime
   revokedAt  DateTime?
   createdAt  DateTime @default(now())
 
   @@index([userId])
+  @@index([familyId])
 }
 
 model Workspace {

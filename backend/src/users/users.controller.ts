@@ -1,9 +1,19 @@
-import { Controller, Get, Patch, Body, UseGuards, Req } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Patch,
+  Body,
+  UseGuards,
+  Req,
+  Res,
+} from '@nestjs/common';
+import type { Response } from 'express';
 import type { AuthenticatedRequest } from '../common/types/authenticated-request';
 import { UsersService } from './users.service';
 import { AuthGuard } from '@nestjs/passport';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { UpdateNotificationPreferenceDto } from './dto/update-notification-preference.dto';
+import { setRefreshCookie } from '../auth/refresh-cookie';
 
 @Controller('users/me')
 @UseGuards(AuthGuard('jwt'))
@@ -31,7 +41,14 @@ export class UsersController {
   async changePassword(
     @Req() req: AuthenticatedRequest,
     @Body() dto: ChangePasswordDto,
+    @Res({ passthrough: true }) res: Response,
   ) {
-    return this.usersService.changePassword(req.user.id, dto);
+    const result = await this.usersService.changePassword(req.user.id, dto);
+
+    // Other sessions are revoked; the caller continues on a fresh session.
+    // The new refresh token is only delivered via the HttpOnly cookie.
+    setRefreshCookie(res, result.refreshToken);
+
+    return { message: result.message, accessToken: result.accessToken };
   }
 }

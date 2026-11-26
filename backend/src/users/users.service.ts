@@ -2,10 +2,14 @@ import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import * as bcrypt from 'bcrypt';
 import { ChangePasswordDto } from './dto/change-password.dto';
+import { AuthService } from '../auth/auth.service';
 
 @Injectable()
 export class UsersService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private authService: AuthService,
+  ) {}
 
   async getPreferences(userId: string) {
     return this.prisma.notificationPreference.findMany({
@@ -30,9 +34,16 @@ export class UsersService {
     });
   }
 
+  /**
+   * Changes the password and ends every existing session (all devices).
+   * A fresh session is issued for the caller so the current client stays
+   * signed in; access tokens issued earlier are rejected via passwordChangedAt.
+   */
   async changePassword(userId: string, dto: ChangePasswordDto) {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
-    if (!user) throw new UnauthorizedException('Kullanıcı bulunamadı.');
+    if (!user || user.deletedAt || user.disabledAt) {
+      throw new UnauthorizedException('Kullanıcı bulunamadı.');
+    }
 
     const isMatch = await bcrypt.compare(dto.currentPassword, user.passwordHash);
     if (!isMatch) {
@@ -43,17 +54,42 @@ export class UsersService {
     }
 
     const newPasswordHash = await bcrypt.hash(dto.newPassword, 10);
-    await this.prisma.$transaction(async (tx) => {
+
+    // One transaction under the per-user session lock: a concurrent refresh
+    // either commits before (and its new token is revoked here) or runs after
+    // (and finds its token revoked). The caller's fresh session is created in
+    // the same transaction so it can never be revoked by this change.
+    const tokens = await this.prisma.$transaction(async (tx) => {
+      const locked = await this.authService.lockUser(tx, userId);
+      // The current password was verified outside the lock; reject if the
+      // account was blocked or the password changed concurrently.
+      if (
+        !locked ||
+        locked.blocked ||
+        locked.passwordHash !== user.passwordHash
+      ) {
+        return null;
+      }
+
       await tx.user.update({
         where: { id: userId },
-        data: { passwordHash: newPasswordHash },
+        data: { passwordHash: newPasswordHash, passwordChangedAt: new Date() },
       });
-      await tx.refreshToken.updateMany({
-        where: { userId, revokedAt: null },
-        data: { revokedAt: new Date() },
-      });
+      await this.authService.revokeAllForUser(userId, tx);
+      return this.authService.issueSession(tx, locked.id, locked.email);
     });
 
-    return { message: 'Şifreniz başarıyla değiştirildi. Lütfen yeni şifrenizle tekrar giriş yapın.' };
+    if (!tokens) {
+      throw new UnauthorizedException({
+        code: 'INVALID_CURRENT_PASSWORD',
+        message: 'Mevcut şifreniz hatalı.',
+      });
+    }
+
+    return {
+      message: 'Şifreniz başarıyla değiştirildi.',
+      accessToken: tokens.accessToken,
+      refreshToken: tokens.refreshToken,
+    };
   }
 }

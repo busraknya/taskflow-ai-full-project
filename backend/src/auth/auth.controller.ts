@@ -16,12 +16,11 @@ import { LoginDto } from './dto/login.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { AuthGuard } from '@nestjs/passport';
 import { AuthRateLimitGuard } from '../common/rate-limit/rate-limit.guard';
-
-type RefreshTokenRequest = Request & {
-  cookies?: {
-    refreshToken?: string;
-  };
-};
+import {
+  clearRefreshCookie,
+  readRefreshCookie,
+  setRefreshCookie,
+} from './refresh-cookie';
 
 type AuthenticatedRequest = Request & {
   user: {
@@ -30,6 +29,13 @@ type AuthenticatedRequest = Request & {
   };
 };
 
+/*
+ * Web and mobile clients share one session implementation (opaque refresh
+ * tokens, rotation, reuse detection, per-user locking in AuthService). They
+ * differ only in transport: web keeps the refresh token in an HttpOnly,
+ * SameSite=Strict cookie; mobile sends it in the HTTPS request body and keeps
+ * it in encrypted storage. Every endpoint is rate limited.
+ */
 @Controller('auth')
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
@@ -49,13 +55,9 @@ export class AuthController {
   ) {
     const result = await this.authService.login(dto);
 
-    res.cookie('refreshToken', result.refreshToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
-      maxAge: 30 * 24 * 60 * 60 * 1000,
-    });
+    setRefreshCookie(res, result.refreshToken);
 
+    // The refresh token is only ever delivered via the HttpOnly cookie.
     return {
       accessToken: result.accessToken,
       user: result.user,
@@ -66,10 +68,10 @@ export class AuthController {
   @UseGuards(AuthRateLimitGuard)
   @Post('refresh')
   async refresh(
-    @Req() req: RefreshTokenRequest,
+    @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ) {
-    const refreshToken = req.cookies?.refreshToken;
+    const refreshToken = readRefreshCookie(req);
 
     if (!refreshToken) {
       throw new UnauthorizedException({
@@ -80,12 +82,7 @@ export class AuthController {
 
     const result = await this.authService.refreshTokens(refreshToken);
 
-    res.cookie('refreshToken', result.refreshToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
-      maxAge: 30 * 24 * 60 * 60 * 1000,
-    });
+    setRefreshCookie(res, result.refreshToken);
 
     return {
       accessToken: result.accessToken,
@@ -127,10 +124,9 @@ export class AuthController {
     @Req() req: AuthenticatedRequest,
     @Res({ passthrough: true }) res: Response,
   ) {
-    const userId = req.user.id;
-    await this.authService.logout(userId);
+    await this.authService.logout(req.user.id, readRefreshCookie(req));
 
-    res.clearCookie('refreshToken');
+    clearRefreshCookie(res);
 
     return { message: 'Başarıyla çıkış yapıldı.' };
   }
