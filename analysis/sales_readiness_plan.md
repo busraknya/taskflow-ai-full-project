@@ -255,3 +255,14 @@ Bu run tamamlanmadan CI PASS denmeyecek. Backend lint non-blocking kalmaya devam
 - Backend lint baseline hâlâ `continue-on-error: true`; lint adımının workflow'da tamamlanması temiz lint sonucu olarak yorumlanmamalı.
 
 **Durum:** Önceki CI yeşil; yeni geniş E2E senaryoları kodlandı fakat doğrulanmayı bekliyor. Gerçek UI E2E, Android API E2E, davet/e-posta, tam tenant/rol matrisi, TLS/proxy, backup/restore, secret-history scan, lisans/attribution ve release ZIP kapıları açık. **NO-GO**.
+
+
+## 26 Kasım 2026 — Son CI incelemesi ve takip düzeltmesi
+
+- CI run [45785767742](https://github.com/busraknya/taskflow-ai-full-project/actions/runs/45785767742), HEAD `db98da663bd1078f23c6a6d8a1a9496d2e93ebbe`, başarısız: frontend, ML ve Docker başarılı; Android ve backend job başarısız.
+- Android hata log'u yine `org.jetbrains.kotlin:compose-compiler-gradle-plugin:2.2.10` artifact'ının çözümlenemediğini gösterdi. Önceki run [45762301250](https://github.com/busraknya/taskflow-ai-full-project/actions/runs/45762301250) aynı branch Compose çözümleme ayarıyla Android unit test, debug APK ve Room instrumented testlerini başarıyla çalıştırmıştı. Sonuç tutarsız; Android kapısı yeşil kabul edilemez.
+- Backend run'ında PostgreSQL/Redis servisleri healthy oldu, Prisma Client üretildi ve iki migration başarıyla uygulandı. 13 unit test suite / 46 test geçti. E2E adımı başlamadan önce ESLint/Prettier, Redis mock tanımlarındaki 6 format hatası nedeniyle durdu.
+- Önceki E2E denemesinde (run `45782889962`) register çağrısı 503 döndü. Log, ioredis lazy connection sırasında `Stream isn't writeable and enableOfflineQueue options is false` hatasını gösterdi. `RateLimitService.ensureConnected()` eklendi; ancak bu düzeltme henüz E2E çalıştırmasıyla doğrulanmadı.
+- Prettier'ın bildirdiği 6 format hatası düzeltildi. Commit `c8c92a468cf3348bf5d4264632a9e9d21d9212ea`; yeni CI run [45793136142](https://github.com/busraknya/taskflow-ai-full-project/actions/runs/45793136142) queued durumunda. Sonuç alınmadan backend E2E veya Android düzeltmesi başarılı sayılmayacak.
+
+**Durum:** E2E doğrulaması açık; Android plugin resolution tekrarlanabilir değil; backend genel lint non-blocking ayarı ve dependency audit bulguları da açık. Production/sales readiness **NO-GO**.
