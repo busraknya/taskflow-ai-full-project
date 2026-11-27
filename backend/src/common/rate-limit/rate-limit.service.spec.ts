@@ -12,6 +12,7 @@ type RedisEval = (
 type RedisMock = {
   status: string;
   eval: jest.MockedFunction<RedisEval>;
+  ping: jest.MockedFunction<() => Promise<string>>;
   connect: jest.MockedFunction<() => Promise<void>>;
   on: jest.MockedFunction<
     (event: string, listener: (...args: unknown[]) => void) => RedisMock
@@ -30,6 +31,7 @@ jest.mock('ioredis', () => ({
   default: jest.fn().mockImplementation(() => ({
     status: 'ready',
     eval: jest.fn<ReturnType<RedisEval>, Parameters<RedisEval>>(),
+    ping: jest.fn<Promise<string>, []>().mockResolvedValue('PONG'),
     connect: jest.fn<Promise<void>, []>().mockResolvedValue(undefined),
     on: jest
       .fn<RedisMock, [string, (...args: unknown[]) => void]>()
@@ -183,5 +185,34 @@ describe('RateLimitService', () => {
     expect(() => new RateLimitService()).toThrow(
       'valid REDIS_HOST and REDIS_PORT are required',
     );
+  });
+
+  describe('ping (readiness)', () => {
+    it('resolves when Redis answers PONG', async () => {
+      const service = new RateLimitService();
+      await expect(service.ping()).resolves.toBeUndefined();
+      expect(latestRedisMock().ping).toHaveBeenCalledTimes(1);
+      service.onModuleDestroy();
+    });
+
+    it('rejects when Redis returns an unexpected reply', async () => {
+      const service = new RateLimitService();
+      latestRedisMock().ping.mockResolvedValue('LOADING');
+      await expect(service.ping()).rejects.toThrow(
+        'Unexpected Redis PING reply',
+      );
+      service.onModuleDestroy();
+    });
+
+    it('rejects without sending PING when the connection cannot be established', async () => {
+      const service = new RateLimitService();
+      const redis = latestRedisMock();
+      redis.status = 'end';
+      redis.connect.mockRejectedValue(new Error('connect ECONNREFUSED'));
+
+      await expect(service.ping()).rejects.toThrow('connect ECONNREFUSED');
+      expect(redis.ping).not.toHaveBeenCalled();
+      service.onModuleDestroy();
+    });
   });
 });

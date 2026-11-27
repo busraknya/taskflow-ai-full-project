@@ -134,6 +134,18 @@ export class RateLimitService implements OnModuleDestroy {
     }
   }
 
+  /**
+   * Readiness probe for the shared Redis connection. Resolves when Redis
+   * answers PING and rejects otherwise (including connection failures).
+   */
+  async ping(): Promise<void> {
+    await this.ensureConnected();
+    const reply = await this.redis.ping();
+    if (reply !== 'PONG') {
+      throw new Error('Unexpected Redis PING reply');
+    }
+  }
+
   onModuleDestroy(): void {
     this.redis.disconnect();
   }
