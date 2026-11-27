@@ -5,7 +5,7 @@ import { AuthController } from './auth.controller';
 import { JwtModule } from '@nestjs/jwt';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { PassportModule } from '@nestjs/passport';
-import { ACCESS_TOKEN_TTL, getRequiredJwtSecret } from './jwt-config';
+import { buildJwtModuleOptions } from './jwt-config';
 
 @Module({
   imports: [
@@ -14,10 +14,8 @@ import { ACCESS_TOKEN_TTL, getRequiredJwtSecret } from './jwt-config';
     // there is deliberately no hard-coded fallback.
     JwtModule.registerAsync({
       inject: [ConfigService],
-      useFactory: (configService: ConfigService) => ({
-        secret: getRequiredJwtSecret(configService),
-        signOptions: { expiresIn: ACCESS_TOKEN_TTL },
-      }),
+      useFactory: (configService: ConfigService) =>
+        buildJwtModuleOptions(configService),
     }),
   ],
   controllers: [AuthController],
