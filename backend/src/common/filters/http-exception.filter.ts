@@ -6,9 +6,13 @@ import {
   HttpStatus,
   Logger,
 } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
 import type { Request, Response } from 'express';
 import { STATUS_CODES } from 'http';
+import {
+  isPrismaError,
+  redactSensitiveText,
+  stackFramesOnly,
+} from '../logging/log-sanitizer';
 
 const GENERIC_ERROR_MESSAGE = 'Beklenmeyen bir sunucu hatası oluştu.';
 
@@ -40,32 +44,6 @@ function asExposedClientHttpError(
     return { status, message: candidate.message };
   }
   return null;
-}
-
-function isPrismaError(exception: unknown): exception is Error {
-  return (
-    exception instanceof Prisma.PrismaClientKnownRequestError ||
-    exception instanceof Prisma.PrismaClientUnknownRequestError ||
-    exception instanceof Prisma.PrismaClientRustPanicError ||
-    exception instanceof Prisma.PrismaClientInitializationError ||
-    exception instanceof Prisma.PrismaClientValidationError
-  );
-}
-
-/**
- * Only the "    at ..." frames of a stack. Prisma messages can span several
- * lines and include query arguments, so every message line is dropped, not
- * just the first one.
- */
-function stackFramesOnly(stack: string | undefined): string | undefined {
-  if (!stack) {
-    return undefined;
-  }
-  const frames = stack
-    .split('\n')
-    .filter((line) => /^\s+at\s/.test(line))
-    .join('\n');
-  return frames || undefined;
 }
 
 @Catch()
@@ -146,7 +124,7 @@ export class HttpExceptionFilter implements ExceptionFilter {
     } else if (exception instanceof Error) {
       this.logger.error(
         `Unhandled ${exception.constructor.name} on ${where}`,
-        exception.stack,
+        exception.stack ? redactSensitiveText(exception.stack) : undefined,
       );
     } else {
       this.logger.error(

@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, ConflictException, ForbiddenException } from '@nestjs/common';
+import { Injectable, NotFoundException, ConflictException, ForbiddenException, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateTaskDto } from './dto/create-task.dto';
 import { UpdateTaskDto } from './dto/update-task.dto';
@@ -6,9 +6,12 @@ import { AuditService } from '../common/audit/audit.service';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { AiService } from '../ai/ai.service';
 import { RiskFeatureService } from '../ai/risk-feature.service';
+import { describeError } from '../common/logging/log-sanitizer';
 
 @Injectable()
 export class TasksService {
+  private readonly logger = new Logger(TasksService.name);
+
   constructor(
     private prisma: PrismaService,
     private auditService: AuditService,
@@ -36,7 +39,11 @@ export class TasksService {
         },
       });
     } catch (error) {
-      console.error('[AI Risk] Failed to assess task risk:', error);
+      const { summary, stack } = describeError(error);
+      this.logger.error(
+        `Risk assessment failed for task ${taskId}: ${summary}`,
+        stack,
+      );
     }
   }
 

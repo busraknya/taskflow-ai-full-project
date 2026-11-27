@@ -1,3 +1,4 @@
+import { Logger } from '@nestjs/common';
 import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { Job } from 'bullmq';
 import * as nodemailer from 'nodemailer';
@@ -6,6 +7,7 @@ import {
   safeHttpUrl,
   sanitizeHeaderText,
 } from './email-template.util';
+import { describeError, maskEmail } from '../common/logging/log-sanitizer';
 
 type TaskAssignedTemplateData = {
   type?: 'task-assigned';
@@ -30,6 +32,8 @@ type EmailJobData = {
 
 @Processor('email')
 export class EmailProcessor extends WorkerHost {
+  private readonly logger = new Logger(EmailProcessor.name);
+
   async process(job: Job<EmailJobData>): Promise<{ sent: true }> {
     const { recipient, subject, templateData } = job.data;
     const transporter = nodemailer.createTransport({
@@ -79,12 +83,14 @@ export class EmailProcessor extends WorkerHost {
         text,
         html,
       });
-      console.log(`[EmailWorker] Email successfully sent to ${recipient}`);
+      this.logger.log(`Email sent to ${maskEmail(recipient)}.`);
       return { sent: true };
     } catch (error) {
-      console.error(
-        `[EmailWorker] Failed to send email to ${recipient}:`,
-        error,
+      // SMTP replies can echo the recipient; describeError masks addresses.
+      const { summary, stack } = describeError(error);
+      this.logger.error(
+        `Failed to send email to ${maskEmail(recipient)}: ${summary}`,
+        stack,
       );
       throw error;
     }

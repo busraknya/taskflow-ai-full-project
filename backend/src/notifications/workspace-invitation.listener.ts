@@ -1,7 +1,8 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
 import { InjectQueue } from '@nestjs/bullmq';
 import type { Queue } from 'bullmq';
+import { describeError } from '../common/logging/log-sanitizer';
 
 type WorkspaceInvitationEvent = {
   workspaceId: string;
@@ -14,6 +15,8 @@ type WorkspaceInvitationEvent = {
 
 @Injectable()
 export class WorkspaceInvitationListener {
+  private readonly logger = new Logger(WorkspaceInvitationListener.name);
+
   constructor(@InjectQueue('email') private readonly emailQueue: Queue) {}
 
   @OnEvent('workspace.member_invited')
@@ -44,9 +47,10 @@ export class WorkspaceInvitationListener {
         },
       );
     } catch (error) {
-      console.error(
-        '[Notification] Failed to enqueue workspace invitation email:',
-        error,
+      const { summary, stack } = describeError(error);
+      this.logger.error(
+        `Failed to enqueue workspace invitation email for user ${payload.userId}: ${summary}`,
+        stack,
       );
     }
   }

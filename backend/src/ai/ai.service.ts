@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { HttpService } from '@nestjs/axios';
 import { firstValueFrom } from 'rxjs';
 import { ConfigService } from '@nestjs/config';
+import { describeError } from '../common/logging/log-sanitizer';
 
 export interface RiskPredictionResult {
   risk_level: 'LOW' | 'MEDIUM' | 'HIGH' | 'UNAVAILABLE';
@@ -41,9 +42,12 @@ export class AiService {
     } catch (error) {
       // Master Invariant #3: Model çalışmıyorsa "çalışıyormuş gibi" sahte sonuç üretilmez.
       // AI Spec §9: Fail-safe - UNAVAILABLE döner.
+      // Log the error class/code only: the raw HTTP client error carries the
+      // request configuration and body.
+      const { summary, stack } = describeError(error);
       this.logger.error(
-        'Failed to communicate with ML service, falling back to UNAVAILABLE',
-        error,
+        `Failed to communicate with ML service (${summary}); falling back to UNAVAILABLE`,
+        stack,
       );
       return {
         risk_level: 'UNAVAILABLE',

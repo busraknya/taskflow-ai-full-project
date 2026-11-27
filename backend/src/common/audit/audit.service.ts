@@ -1,5 +1,6 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { describeError } from '../logging/log-sanitizer';
 
 interface LogAuditParams {
   workspaceId: string;
@@ -12,6 +13,8 @@ interface LogAuditParams {
 
 @Injectable()
 export class AuditService {
+  private readonly logger = new Logger(AuditService.name);
+
   constructor(private prisma: PrismaService) {}
 
   async log(params: LogAuditParams) {
@@ -27,7 +30,12 @@ export class AuditService {
         },
       });
     } catch (error) {
-      console.error('Failed to write audit log:', error);
+      // Metadata can contain user content, so it is not logged.
+      const { summary, stack } = describeError(error);
+      this.logger.error(
+        `Failed to write audit log (${params.entityType} ${params.action}, entity ${params.entityId}): ${summary}`,
+        stack,
+      );
     }
   }
 }

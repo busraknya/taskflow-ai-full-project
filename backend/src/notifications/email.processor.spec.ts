@@ -1,3 +1,4 @@
+import { Logger } from '@nestjs/common';
 import type { Job } from 'bullmq';
 
 const sendMail = jest.fn();
@@ -27,7 +28,7 @@ describe('EmailProcessor HTML escaping', () => {
   beforeEach(() => {
     sendMail.mockReset();
     sendMail.mockResolvedValue({});
-    jest.spyOn(console, 'log').mockImplementation(() => undefined);
+    jest.spyOn(Logger.prototype, 'log').mockImplementation(() => undefined);
   });
 
   afterEach(() => jest.restoreAllMocks());
@@ -157,5 +158,60 @@ describe('EmailProcessor HTML escaping', () => {
     expect(mail.subject).toBe(
       'You were invited to Team Bcc: victim@example.com',
     );
+  });
+});
+
+describe('EmailProcessor logging', () => {
+  const processor = new EmailProcessor();
+  const job = {
+    data: {
+      recipient: 'alice.private@example.com',
+      subject: 'New Task Assigned',
+      templateData: { fullName: 'Alice', taskTitle: 'Ship', taskId: 't1' },
+    },
+  } as Job<never>;
+  let infoLog: jest.SpyInstance;
+  let errorLog: jest.SpyInstance;
+
+  beforeEach(() => {
+    sendMail.mockReset();
+    infoLog = jest
+      .spyOn(Logger.prototype, 'log')
+      .mockImplementation(() => undefined);
+    errorLog = jest
+      .spyOn(Logger.prototype, 'error')
+      .mockImplementation(() => undefined);
+  });
+
+  afterEach(() => jest.restoreAllMocks());
+
+  const logged = (spy: jest.SpyInstance) =>
+    spy.mock.calls.flat().map(String).join('\n');
+
+  it('masks the recipient when an email is sent', async () => {
+    sendMail.mockResolvedValue({});
+    await processor.process(job);
+
+    expect(logged(infoLog)).toBe('Email sent to a***@e***.com.');
+  });
+
+  it('masks the recipient and SMTP reply and keeps the error type on failure', async () => {
+    const smtpError = Object.assign(
+      new Error(
+        '550 5.1.1 <alice.private@example.com>: Recipient address rejected',
+      ),
+      { code: 'EENVELOPE' },
+    );
+    sendMail.mockRejectedValue(smtpError);
+
+    await expect(processor.process(job)).rejects.toBe(smtpError);
+
+    const text = logged(errorLog);
+    expect(text).toContain(
+      'Failed to send email to a***@e***.com: Error (code=EENVELOPE)',
+    );
+    expect(text).toContain('<a***@e***.com>: Recipient address rejected');
+    expect(text).toMatch(/\n\s+at\s/); // stack frames kept
+    expect(text).not.toContain('alice.private@example.com');
   });
 });

@@ -1,3 +1,4 @@
+import { Logger } from '@nestjs/common';
 import type { Queue } from 'bullmq';
 
 jest.mock('@nestjs/event-emitter', () => ({
@@ -41,12 +42,17 @@ describe('WorkspaceInvitationListener', () => {
         }),
       }),
       expect.objectContaining({
-        jobId: expect.stringContaining('workspace-invitation-workspace-1-user-1'),
+        jobId: expect.stringContaining(
+          'workspace-invitation-workspace-1-user-1',
+        ),
       }),
     );
   });
 
-  it('does not throw when the email queue is unavailable', async () => {
+  it('does not throw when the email queue is unavailable and logs no personal data', async () => {
+    const errorLog = jest
+      .spyOn(Logger.prototype, 'error')
+      .mockImplementation(() => undefined);
     queue.add.mockRejectedValueOnce(new Error('Redis unavailable'));
 
     await expect(
@@ -59,5 +65,13 @@ describe('WorkspaceInvitationListener', () => {
         expiresAt: new Date('2026-12-02T12:00:00.000Z'),
       }),
     ).resolves.toBeUndefined();
+
+    const logged = errorLog.mock.calls.flat().map(String).join('\n');
+    expect(logged).toContain(
+      'Failed to enqueue workspace invitation email for user user-1: Error',
+    );
+    expect(logged).not.toContain('member@example.com');
+    expect(logged).not.toContain('New Member');
+    errorLog.mockRestore();
   });
 });
