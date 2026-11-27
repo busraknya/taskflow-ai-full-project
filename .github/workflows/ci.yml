@@ -162,6 +162,19 @@ jobs:
       - name: Validate Compose configuration
         run: |
           cp .env.example .env
+          # The backend rejects the .env.example JWT_SECRET placeholder, so
+          # each run uses a fresh random secret (hex output only: [0-9a-f]).
+          jwt_secret="$(openssl rand -hex 32)"
+          echo "::add-mask::${jwt_secret}"
+          if [ "$(grep -c '^JWT_SECRET=' .env)" -ne 1 ]; then
+            echo "Expected exactly one JWT_SECRET line in .env" >&2
+            exit 1
+          fi
+          sed -i "s/^JWT_SECRET=.*/JWT_SECRET=${jwt_secret}/" .env
+          if ! grep -Eq '^JWT_SECRET=[0-9a-f]{64}$' .env; then
+            echo "JWT_SECRET was not replaced with a generated value" >&2
+            exit 1
+          fi
           docker compose config --quiet
       - name: Build all service images
         run: docker compose build
