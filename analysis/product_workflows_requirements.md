@@ -195,6 +195,8 @@ Bu yolculuğun tamamı henüz E2E kanıtıyla doğrulanmış değildir.
 
 **Açık ML kararları:** Gecikme tanımı; tahmin ufku; due date değişince eski tahminin saklanması; tahmin güncelliği; veri yetersizken deneysel gösterim; kullanıcıya açıklanacak faktörler.
 
+**ML mimarisi (27 Kasım 2026):** Yukarıdaki açık ML kararlarının yanıtları ve onaylı mimari, belgenin sonundaki "27 Kasım 2026 — ML mimarisi (onaylı öneri)" bölümündedir. Aşama 0 uygulandı: ürünle birlikte tahmin modeli gelmez ve risk hesaplaması asenkrondur.
+
 ### WF-07 — Web/Android veri tutarlılığı
 
 **Ana akış:** İstemci backend'den kanonik veriyi alır → değişiklik gönderir → backend RBAC/version kontrolü yapar → kanonik yanıt döner → diğer istemci refresh/polling/push stratejisiyle güncellenir.
@@ -718,3 +720,144 @@ CI run #44262570835 tüm beş job'ı geçmiştir (Android unit + instrumented Ro
 Bu düzeltmeler henüz `main`'e merge edilmedi.
 
 Bu turda değerlendirilmeyen gereksinimlerin durumu önceki bölümlerde kaldığı gibidir. Yeni ürün kararları §10'a (madde 11–16) eklendi. 14. madde 26 Kasım'da karara bağlandı (404); diğerleri açıktır.
+
+
+---
+
+# 27 Kasım 2026 — ML mimarisi (onaylı öneri)
+
+> Bu bölüm, ürün sahibinin onayladığı ML mimarisini tek yerde toplar. Önceki bölümleri değiştirmez. WF-06'daki ML gereksinimleri (ML-01…ML-11) ve §13.15'teki veri/etiket notları geçerlidir; bu bölüm onların uygulanma biçimini tanımlar.
+
+## 1. Amaç ve ilkeler
+
+TaskFlow AI, görevlerin teslim tarihini kaçırma riskini gerçek görev yaşam döngüsü verisinden öğrenerek tahmin etmeli, tahminlerini ölçmeli ve yalnızca kanıtlanmış iyileşmede güncellemelidir. Ürün self-hosted dağıtılır; müşteri verisi kurulumun dışına çıkmaz.
+
+1. Gerçek ML merkezdedir; kurallar yalnızca karşılaştırma baseline'ıdır.
+2. Güvenilir olay kaynağı: yalnız ekleme yapılan ve görev güncellemesiyle aynı veritabanı işleminde yazılan `TaskEvent` tablosu.
+3. Açık saatli teslim tarihleri o saatte geçerlidir; yalnızca tarih içeren teslim tarihleri workspace saat diliminde o günün sonunda dolar; tüm zaman damgaları UTC saklanır.
+4. Altı sentetik örnekle eğitilmiş eski model kaldırılmıştır; demo olarak tutulmaz.
+5. Eğitim yalnızca workspace bazındadır; workspace verileri hiçbir zaman karışmaz. Kurulum genelinde eğitim yalnızca ileride açıkça değerlendirilecek bir seçenektir.
+6. Workspace bazında eğitimi workspace yöneticisi açıkça etkinleştirir; sonrasında hazırlık kontrolü ve zamanlanmış eğitim otomatik çalışabilir.
+7. Model sürümleri kalıcı depolamada saklanır.
+8. Eğitim özellikleri, canlı tahminle aynı tanımlarla backend'de üretilir.
+9. Veri hazırlık eşikleri yapılandırılabilir başlangıç hipotezleridir; kanıtlanmış şart değildir.
+10. Küçük workspace'ler tamamen kullanılabilir kalır; yanıltıcı tahmin gösterilmez.
+11. Sentetik veri yalnızca teknik doğruluğu ve pipeline davranışını doğrular; gerçek dünya başarısı kanıtı olarak sunulmaz.
+12. Her yeni model etkinleşmeden önce değerlendirmeden geçer; geçemezse önceki model korunur.
+13. Workspace verisi, eğitim, modeller ve tahminler sıkı biçimde izole edilir.
+14. Public Jira Dataset yalnız koşullu adaydır: lisans, kişisel veri, kaynak içerik hakları, veritabanı hakları ve ticari dağıtım etkileri doğrulanmadan kullanılmaz. Lisansı belirsiz veri kullanılmaz.
+15. Doğrulanmamış model çıktıları güvenilir olasılık olarak gösterilmez.
+
+## 2. Başlangıç durumu ve sınırlamaları
+
+- ML servisi tek tahmin yapan bir `/predict` sunuyordu; model 6 elle yazılmış örnekle eğitilmişti ve sağduyuya aykırı çıktılar veriyordu (ör. 30 gün gecikmiş görev LOW).
+- Risk, görev oluşturma ve güncelleme isteği içinde senkron hesaplanıyordu (O-1).
+- Özellikler görev geçmişini kullanmıyor; teslim tarihi yoksa 7 gün varsayıyordu.
+- Audit kaydı yalnızca güncelleme sonrası durumu tutuyor ve işlemin parçası değil; teslim tarihi ve atama geçmişi, `completedAt` ve tahmin anındaki özellikler kaydedilmiyor.
+- Android çevrimdışı değişikliklerde istemci zamanını göndermiyor.
+
+## 3. Veri temeli
+
+- **`TaskEvent`:** `id`, `workspaceId`, `taskId`, `type`, `field`, `oldValue`, `newValue`, `occurredAt` (UTC, sunucu), `clientOccurredAt` (opsiyonel), `actorId`, `source`. Olay türleri: oluşturma; durum, teslim tarihi, atanan kişi, öncelik değişikliği; silme/arşivleme; yorum. Görev güncellemesiyle aynı işlemde yazılır; olay yazılamazsa güncelleme de geri alınır. İndeksler: (`workspaceId`, `taskId`, `occurredAt`), (`workspaceId`, `occurredAt`). Audit log'dan yalnızca durum geçmişi kısmen geri doldurulabilir.
+- **Türetilmiş alanlar:** `completedAt` (son DONE geçişi; yeniden açılırsa sıfırlanır); teslim tarihinin "yalnızca tarih / açık saatli" bilgisi; workspace saat dilimi.
+- **Tahmin kaydı (`RiskAssessment`):** `featureSnapshot`, `featureSpecVersion`, kalibre `probability` (yalnızca doğrulanmışsa), `category`, `modelId`/`modelVersion`, `state`; yapılandırılabilir saklama süresi.
+
+## 4. Tahmin problemi ve etiket
+
+- Hedef: P(tahmin anında bilinen teslim tarihinde görev hâlâ tamamlanmamış | o anki durum).
+- Geç: son DONE teslim tarihinden sonra ya da teslim tarihinde açık. Zamanında: teslim tarihinden önce DONE. Etiket tahmin anındaki teslim tarihine göre hesaplanır.
+- Dışlananlar: teslim tarihi olmayan, teslim tarihinden önce silinen/arşivlenen, tamamlandıktan sonra teslim tarihi girilen görevler; oluşturulduğunda gecikmiş görevler ayrı grup.
+- Sonucu belli olmayan görevler sınıflandırmada kullanılmaz; survival yaklaşımında right-censored kullanılabilir.
+- Çıktı: kalibrasyon kontrolünden geçen modelde olasılık; LOW/MEDIUM/HIGH eşikleri test setinde seçilip modelle saklanır. Teslim tarihi olmayan görevde tahmin üretilmez.
+
+## 5. Özellik ve tahmin sözleşmesi
+
+- Backend'de `TaskEvent`'i oynatan, belirli bir ana göre çalışan tek özellik üreticisi; canlı tahmin ve eğitim aynı kodu kullanır.
+- `featureSpecVersion` ile sürümleme; uyuşmazlıkta ML servisi isteği reddeder.
+- Özellik grupları: zaman, ilerleme, teslim tarihi davranışı, iş yükü, aktivite, görev nitelikleri. Serbest metin içeriği, ham kişi kimlikleri ve tamamlanma sonrası bilgiler kullanılmaz.
+- ML servisi: `/predict`, `/predict/batch`; istekler `workspaceId` ve `featureSpecVersion` taşır.
+
+## 6. Tahmin akışı
+
+- `risk-assessment` BullMQ kuyruğu; oluşturma, güncelleme, yorum ve atamada iş eklenir; görev sürümüne bağlı `jobId` ve kısa gecikme ile tekilleştirme; eski sürüm işleri atlanır.
+- Teslim tarihi olan açık görevler için günlük, workspace bazında toplu yeniden hesaplama.
+- Workspace'in etkin modeli yoksa ML çağrılmaz ve durum "veri toplanıyor" / "tahmin yok" olarak kaydedilir.
+- Hatalarda backoff ile yeniden deneme; son geçerli değerlendirme korunur; istek yolu ML'i beklemez. ML servisi modelsiz de `healthy` döner.
+
+## 7. Modeller
+
+- Zorunlu baseline'lar: taban oran, az özellikli Logistic Regression.
+- Birincil aday: HistGradientBoostingClassifier. Güçlü aday: ayrık zamanlı survival (görev-gün hazard, GBM ile).
+- Opsiyonel (yalnızca ölçülebilir kazançla): LightGBM, Cox PH, Random Survival Forest.
+- Küçük veri önlemleri: sığ ağaç, yüksek yaprak minimumu, az veride sigmoid kalibrasyon.
+- Açıklanabilirlik: genel için permutation importance; tek tahmin için katkı değerleri (SHAP opsiyonel). Sabit eşikli ipuçları kullanılmaz.
+
+## 8. Değerlendirme ve etkinleştirme
+
+- Zamana göre ayrım (genişleyen pencere, en yakın dönem test) ve proje bazlı gruplama; aynı görevin snapshot'ları farklı setlere düşmez.
+- Sızıntı kontrolleri: zamanda geri gitme değişmezliği, karıştırılmış etiket testi, bilinçli tuzak özelliği.
+- Metrikler: PR-AUC, Brier, ECE, seçilen eşikte precision/recall, bootstrap güven aralıkları.
+- Etkinleştirme: (1) PR-AUC'de baseline ve mevcut modeli önceden belirlenmiş farkla geçme, güven aralığı alt sınırı > 0; (2) Brier/ECE tolerans içinde; (3) dejenere olmayan dağılım; (4) karıştırılmış etiket testi; (5) şüpheli baskın özellik yok.
+- Başarısızlıkta mevcut model kalır ve gerekçeli rapor yazılır; her workspace için son K model saklanır ve geri dönülebilir. Olasılık yalnızca kalibrasyon kontrolünden geçmiş modelde gösterilir.
+
+## 9. Workspace bazında yerel eğitim
+
+- Yönetici açıkça etkinleştirir; öncesinde yalnızca hazırlık durumu gösterilir.
+- Hazırlık her gece hesaplanır; yalnızca etiketlenebilir görevler (teslim tarihi var, sonucu belli, dışlanmamış, `TaskEvent` dönemine ait) sayılır; snapshot değil görev sayısı esastır.
+- Başlangıç hipotezleri (yapılandırılabilir): ≥ 300 etiketlenebilir görev; her sınıfta ≥ 50; azınlık oranı %5–95; ≥ 90 gün aralık ve son ≥ 30 gün test dönemi; test döneminde ≥ 20 azınlık görevi; ≥ 3 atanan kişi veya proje ve yeterli alan doluluğu.
+- Eşiklerin doğrulanması: (1) gizli sinyalli sentetik simülasyonla veri miktarına göre metrik ve güven aralığı değişimi (yalnızca istatistiksel alt sınır); (2) hukuken onaylanmış gerçek veri olursa öğrenme eğrileri; (3) yerel hazırlık ve değerlendirme raporları ile müşterilerin isteğe bağlı paylaştığı bilgiler — merkezi veri toplanmaz; (4) asıl koruma etkinleştirme kontrolüdür.
+- Zamanlama: ayda bir veya etiketlenebilir görev sayısı ~%20 arttığında (hangisi daha geç); elle tetikleme mümkündür.
+- Akış: backend eğitim satırlarını üretir → `model-training` BullMQ işi ML servisinde düşük eşzamanlılıkla eğitir → değerlendirme ve etkinleştirme kontrolü → model ve `metadata.json` kalıcı depolamaya yazılır.
+- Depolama: `models/workspaces/<workspaceId>/<modelId>/` (kalıcı volume).
+- İzolasyon: her iş ve tahmin tek `workspaceId` taşır; model yükleyici metadata'daki `workspaceId` uyuşmazsa reddeder; eğitim satırları başka workspace verisi içeremez (testle doğrulanır); workspace silinince modelleri silinir.
+- Küçük workspace'lerde tüm ürün çalışır; risk alanında yalnızca "veri toplanıyor" / "henüz doğrulanmış model yok" gösterilir.
+
+## 10. Ürün çıkışı
+
+- Varsayılan tahmin modeli gönderilmez; ürün eksiksiz ve test edilmiş öğrenme altyapısıyla çıkar.
+- Genel model yalnızca hukuken onaylı bir veri setiyle eğitilip gerçek veride baseline'ı geçerse sonraki bir sürümde, "bu workspace'in verisiyle eğitilmedi" uyarısıyla eklenebilir.
+- Pazarlama: "Her workspace'in kendi verisinden öğrenir, modelini ölçer ve yalnızca kanıtlanmış iyileşmede etkinleştirir." Doğruluk yüzdesi verilmez; ekran görüntülerinde sahte tahmin gösterilmez.
+
+## 11. Doğrulama stratejisi
+
+- Seed'li, deterministik olay simülatörü (durum makinesi), veriyi gerçek uygulama yolundan yazar; senaryo fixture'ları repoda, ölçek üretimi ayrıca.
+- Senaryolar: zamanında/geç/sınırda tamamlanma; teslim tarihinde açık; sonucu belirsiz; erteleme, öne çekme, kaldırma, tamamlandıktan sonra ekleme; saat dilimi ve yaz saati; yeniden açma ve geri dönüşler; çoklu yeniden atama; eksik alanlar; sırasız/tekrarlı olaylar; çevrimdışı gecikme; silme/arşivleme; teslim tarihi kullanmayan, çok küçük, tek sınıflı, dengesiz ve çoklu workspace'ler.
+- Tutarlılık: sıralı zaman, geçerli geçişler, olay oynatma ile görev satırı uyumu, doğru `workspaceId`.
+- Sentetik veri teknik doğruluğu, pipeline davranışını, sınır durumlarını, izolasyonu ve gizli sinyalin geri bulunmasını (gürültüde etkinleştirme reddi) doğrular; gerçek müşteri başarısını doğrulamaz.
+
+## 12. Arayüz durumları (web ve Android aynı)
+
+| Durum | Gösterilen | Olasılık |
+|---|---|---|
+| Veri toplanıyor | "Risk tahmini için veri toplanıyor (etiketlenebilir görev: X / Y)" | Hayır |
+| Eğitim kapalı / doğrulanmış model yok | "Bu workspace için henüz doğrulanmış bir model yok" | Hayır |
+| Genel model (koşullu) | "Genel model; bu workspace'in verisiyle eğitilmedi" + model kartı | Yalnızca kalibre edilmişse |
+| Workspace modeli etkin | Kategori, gerçek katkı faktörleri, eğitim dönemi, baseline'a göre iyileşme | Yalnızca kalibre edilmişse |
+| Düşük güven | Kategori + "düşük güven" | Hayır |
+| Tahmin yok | "Tahmin şu an yapılamıyor" (servis kapalı / teslim tarihi yok) | Hayır |
+
+## 13. Uygulama aşamaları ve kabul kriterleri
+
+| Aşama | İçerik | Kabul kriterleri |
+|---|---|---|
+| **0** | O-1 `risk-assessment` kuyruğu; eski 6 örnekli modelin, `train.py`'nin ve model dosyasının kaldırılması; ML servisinin modelsiz açılması; dürüst arayüz durumları; model kartı ve README | Görev istekleri ML'i beklemez; ML servisi modelsiz `healthy`, Docker smoke testi geçer; web ve Android uydurma kategori göstermez; testler yeşil |
+| **1** (0'a bağlı) | `TaskEvent` (aynı işlem), `completedAt`, teslim tarihi biçimi ve workspace saat dilimi, opsiyonel `clientOccurredAt`, audit'ten kısmi geri doldurma, simülatör v1 | Olay yazılamazsa güncelleme geri alınır; oynatma ile görev satırı birebir uyumlu; saat dilimi/yaz saati testleri; yalnız ekleme yapan migration; güncelleme gecikmesi ölçülmüş |
+| **2** (1'e bağlı) | As-of özellik ve etiket üreticisi, `featureSpecVersion`, `RiskAssessment` alanları, `/predict/batch`, günlük yeniden hesaplama, sızıntı testleri | Sızıntı testleri yeşil; sözleşme testi; teslim tarihi olmayan görevde tahmin yok; günlük hesaplama hedef sürede |
+| **3** (2'ye bağlı) | Baseline'lar, HistGB, kalibrasyon ve eşik seçimi, etkinleştirme/kalibrasyon kontrolleri, metadata ve geri alma, uçtan uca sentetik testler | Gizli sinyalde model geçer ve etkinleşir; gürültü ve karıştırılmış etikette reddedilir; başarısız model öncekini bozmaz; tekrarlanabilir eğitim; sentetik metrik iddia olarak kullanılmaz |
+| **4** (3'e bağlı) | Yönetici onayı, hazırlık raporu, zamanlanmış eğitim, kalıcı volume ve workspace modelleri, izolasyon kontrolleri, tüm arayüz durumları | Onaysız eğitim çalışmaz; kriterler yapılandırılabilir ve raporlanır; workspace'ler arası sızıntı yok (testle); silinen workspace'in modelleri silinir; küçük workspace kullanılabilir; web/Android aynı durumu gösterir |
+| **5** (opsiyonel) | Survival karşılaştırması, tek tahmin açıklaması, LightGBM, eşiklerin kanıtla ayarı; koşullu genel model | — |
+
+Sürüm kapısı: 0–4 kabul kriterlerini karşılamış; model kartı "ürünle birlikte doğrulanmış bir model gönderilmemektedir" der; doğruluk iddiası yok.
+
+## 14. Açık kararlar ve dış bağımlılıklar
+
+1. Teslim tarihi veri modeli: workspace saat dilimi alanının varlığı ve "yalnızca tarih / açık saatli" bilgisinin saklanma biçimi (Aşama 1'den önce).
+2. Etkinleştirme parametreleri: minimum iyileşme farkı, kalibrasyon toleransı, saklanacak model sayısı K.
+3. Olay ve tahmin kayıtlarının saklama politikası.
+4. Public Jira Dataset için hukuki görüş (KVKK/GDPR dayanağı; kaynak Jira örneklerinin veritabanı hakları ve kullanım şartları) ve Envato kurallarının kontrolü — yalnız genel model seçeneği için.
+5. Eğitim işinin müşteri sunucusunda kullanacağı varsayılan kaynak sınırları.
+
+## 15. Uygulama durumu
+
+- **Aşama 0 uygulandı (27 Kasım 2026, `fix/go-live-blockers`, henüz commit edilmedi):** `risk-assessment` BullMQ kuyruğu ve processor; görev istekleri işi yalnızca kuyruğa ekler ve beklemez; ML servisi modelsiz açılır ve `/predict` için `503 MODEL_UNAVAILABLE` döner; model yoksa risk kaydı yazılmaz; eski `v1` modelin mevcut veritabanlarındaki kayıtları API'de gösterilmez; web ve Android yalnızca bir modelden gelen LOW/MEDIUM/HIGH değerini gösterir, aksi halde "risk tahmini henüz yok" durumunu gösterir.
+- Aşama 1 ve sonrası henüz başlamadı.

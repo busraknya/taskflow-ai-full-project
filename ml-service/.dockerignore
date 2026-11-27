@@ -2,8 +2,8 @@
 # Docker reads .dockerignore only from the context root, so the repository
 # root .dockerignore does NOT apply here.
 #
-# Required by the image and kept: requirements.txt, main.py, models/
-# (including models/*.joblib).
+# Required by the image and kept: requirements.txt, main.py.
+# No model artifact is shipped; validated models are provided at runtime.
 
 # Secrets and local environment files
 .env
@@ -27,8 +27,7 @@ __pycache__/
 .coverage
 htmlcov/
 
-# Training and test code (not used at runtime)
-train.py
+# Test code (not used at runtime)
 test_*.py
 MODEL_CARD.md
 

@@ -6,22 +6,26 @@ from pydantic import BaseModel
 
 app = FastAPI(title="TaskFlow AI Risk Service", version="1.0")
 
-# Mutlak yol (Absolute Path) kullanarak dosya karmaşasını önleyelim
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-MODEL_DIR = os.path.join(BASE_DIR, "models")
-MODEL_PATH = os.path.join(MODEL_DIR, "risk_model_v1.joblib")
+# No model is shipped with the product. A model is only loaded when one has
+# been trained and validated (see MODEL_CARD.md); until then the service runs
+# without a model and reports MODEL_UNAVAILABLE instead of guessing.
+MODEL_PATH = os.environ.get(
+    "RISK_MODEL_PATH", os.path.join(BASE_DIR, "models", "risk_model.joblib")
+)
+
 
 def load_model():
     if not os.path.isfile(MODEL_PATH):
-        raise RuntimeError(
-            f"Model artifact not found at {MODEL_PATH}. "
-            "Train and validate a model explicitly before starting the service."
-        )
+        print("No risk model artifact found; predictions are unavailable.")
+        return None
 
-    print(f"📂 Loading model from {MODEL_PATH}...")
+    print(f"Loading model from {MODEL_PATH}...")
     return joblib.load(MODEL_PATH)
 
+
 model = load_model()
+
 
 class TaskFeatures(BaseModel):
     days_until_due: float
@@ -29,35 +33,35 @@ class TaskFeatures(BaseModel):
     comment_count: int
     priority: int
 
+
 @app.get("/health")
 def health_check():
+    # The service is healthy without a model; model availability is reported
+    # separately so orchestration does not depend on a model existing.
     return {"status": "healthy", "model_loaded": model is not None}
+
 
 @app.post("/predict")
 def predict_risk(data: TaskFeatures):
     if model is None:
         raise HTTPException(status_code=503, detail="MODEL_UNAVAILABLE")
-    
+
     features = np.array([[
         data.days_until_due,
         data.assignee_active_task_count,
         data.comment_count,
-        data.priority
+        data.priority,
     ]])
-    
+
     pred_idx = model.predict(features)[0]
     mapping = {0: "LOW", 1: "MEDIUM", 2: "HIGH"}
-    risk_level = mapping.get(pred_idx, "LOW")
-    
-    factors = []
-    if data.days_until_due <= 2:
-        factors.append({"feature": "days_until_due", "explanation": f"Due in {data.days_until_due} days"})
-    if data.assignee_active_task_count >= 4:
-        factors.append({"feature": "assignee_active_task_count", "explanation": f"Assignee has {data.assignee_active_task_count} active tasks"})
+    risk_level = mapping.get(int(pred_idx))
+    if risk_level is None:
+        raise HTTPException(status_code=503, detail="MODEL_UNAVAILABLE")
 
     return {
         "risk_level": risk_level,
         "risk_score": None,  # Not a calibrated probability; intentionally unavailable.
-        "model_version": "v1",
-        "factors": factors
+        "model_version": getattr(model, "taskflow_model_version", "unversioned"),
+        "factors": [],
     }

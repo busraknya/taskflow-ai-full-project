@@ -1,4 +1,5 @@
 import { theme } from '@/lib/theme';
+import { currentRiskLevel, riskBadgeClass } from '@/lib/risk';
 
 interface Task {
   id: string;
@@ -30,7 +31,8 @@ export function KanbanColumn({ columnId, title, tasks, onMoveForward, onTaskClic
 
       <div className="space-y-2 overflow-y-auto flex-1 pr-1">
         {tasks.map((task) => {
-          const risk = task.riskAssessments?.[0];
+          // Only a level from a model is shown; otherwise no badge at all.
+          const riskLevel = currentRiskLevel(task.riskAssessments);
           return (
             <div
               key={task.id}
@@ -39,13 +41,9 @@ export function KanbanColumn({ columnId, title, tasks, onMoveForward, onTaskClic
             >
               <div className="flex justify-between items-start">
                 <h3 className="text-xs font-medium text-white">{task.title}</h3>
-                {risk && (
-                  <span className={`text-[9px] uppercase px-1.5 py-0.5 rounded font-mono ${
-                    risk.riskLevel === 'HIGH' ? 'bg-red-950 text-red-400 border border-red-900' :
-                    risk.riskLevel === 'MEDIUM' ? 'bg-amber-950 text-amber-400 border border-amber-900' :
-                    'bg-zinc-800 text-zinc-400'
-                  }`}>
-                    {risk.riskLevel}
+                {riskLevel && (
+                  <span className={`text-[9px] uppercase px-1.5 py-0.5 rounded font-mono ${riskBadgeClass(riskLevel)}`}>
+                    {riskLevel}
                   </span>
                 )}
               </div>

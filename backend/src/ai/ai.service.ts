@@ -1,60 +1,67 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { HttpService } from '@nestjs/axios';
+import { isAxiosError } from 'axios';
 import { firstValueFrom } from 'rxjs';
 import { ConfigService } from '@nestjs/config';
-import { describeError } from '../common/logging/log-sanitizer';
 
 export interface RiskPredictionResult {
-  risk_level: 'LOW' | 'MEDIUM' | 'HIGH' | 'UNAVAILABLE';
+  risk_level: 'LOW' | 'MEDIUM' | 'HIGH';
   risk_score: number | null;
   model_version: string;
   factors: Array<{ feature: string; explanation: string }>;
 }
 
+export interface RiskFeatures {
+  days_until_due: number;
+  assignee_active_task_count: number;
+  comment_count: number;
+  priority: number;
+}
+
 @Injectable()
 export class AiService {
-  private readonly logger = new Logger(AiService.name);
   private readonly mlServiceUrl: string;
 
   constructor(
     private readonly httpService: HttpService,
     private readonly configService: ConfigService,
   ) {
-    // FastAPI servisimizin Docker içindeki adresi (ml-service:8000)
+    // Address of the FastAPI ML service inside Docker (ml-service:8000).
     this.mlServiceUrl =
-      this.configService.get<string>('ML_SERVICE_URL') || 'http://localhost:8000';
+      this.configService.get<string>('ML_SERVICE_URL') ||
+      'http://localhost:8000';
   }
 
-  async assessTaskRisk(taskData: {
-    days_until_due: number;
-    assignee_active_task_count: number;
-    comment_count: number;
-    priority: number;
-  }): Promise<RiskPredictionResult> {
+  /**
+   * Returns a prediction from a loaded model, or null when the ML service has
+   * no model (503 MODEL_UNAVAILABLE). No fallback result is fabricated.
+   * Other failures (network, timeouts, unexpected errors) are thrown so the
+   * caller can retry; they are logged by the caller.
+   */
+  async assessTaskRisk(
+    features: RiskFeatures,
+  ): Promise<RiskPredictionResult | null> {
     try {
       const response = await firstValueFrom(
         this.httpService.post<RiskPredictionResult>(
           `${this.mlServiceUrl}/predict`,
-          taskData,
+          features,
         ),
       );
       return response.data;
     } catch (error) {
-      // Master Invariant #3: Model çalışmıyorsa "çalışıyormuş gibi" sahte sonuç üretilmez.
-      // AI Spec §9: Fail-safe - UNAVAILABLE döner.
-      // Log the error class/code only: the raw HTTP client error carries the
-      // request configuration and body.
-      const { summary, stack } = describeError(error);
-      this.logger.error(
-        `Failed to communicate with ML service (${summary}); falling back to UNAVAILABLE`,
-        stack,
-      );
-      return {
-        risk_level: 'UNAVAILABLE',
-        risk_score: null,
-        model_version: 'unknown',
-        factors: [],
-      };
+      if (isModelUnavailable(error)) {
+        return null;
+      }
+      throw error;
     }
   }
+}
+
+function isModelUnavailable(error: unknown): boolean {
+  if (!isAxiosError(error) || error.response?.status !== 503) {
+    return false;
+  }
+  const data = error.response.data as { detail?: unknown } | undefined;
+  return data?.detail === 'MODEL_UNAVAILABLE';
 }

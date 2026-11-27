@@ -115,6 +115,12 @@ fun TaskScreen(
                 Spacer(modifier = Modifier.height(8.dp))
             }
 
+            // Honest risk state: no level is shown unless a model produced one.
+            if (!isLoading && tasks.isNotEmpty() && tasks.none { currentRiskLevel(it.riskAssessments) != null }) {
+                Text(RISK_UNAVAILABLE_MESSAGE, color = Color(0xFF71717A), fontSize = 10.sp)
+                Spacer(modifier = Modifier.height(8.dp))
+            }
+
             if (isLoading) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     CircularProgressIndicator(color = Color.White)
@@ -141,8 +147,8 @@ fun TaskScreen(
                                 ) {
                                     Text(text = task.title, color = Color.White, fontSize = 14.sp, modifier = Modifier.weight(1f))
 
-                                    // AI Risk Rozeti (AI Spec §6)
-                                    val riskLevel = task.riskAssessments?.firstOrNull()?.riskLevel
+                                    // Risk badge only for a level produced by a model.
+                                    val riskLevel = currentRiskLevel(task.riskAssessments)
                                     if (riskLevel != null) {
                                         val badgeColor = when (riskLevel) {
                                             "HIGH" -> Color(0xFFEF4444)   // Kırmızı

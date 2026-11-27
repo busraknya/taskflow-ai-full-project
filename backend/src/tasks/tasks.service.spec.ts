@@ -1,33 +1,34 @@
 import { ConflictException, NotFoundException } from '@nestjs/common';
 
-// TasksService unit tests do not exercise the HTTP client; isolate the ESM-only
-// @nestjs/axios dependency instead of loading the real AI transport module.
-jest.mock('../ai/ai.service', () => ({ AiService: class AiService {} }));
-jest.mock('@nestjs/event-emitter', () => ({ EventEmitter2: class EventEmitter2 {} }));
+// Isolate Nest packages that ship ESM entry points.
+jest.mock('@nestjs/event-emitter', () => ({
+  EventEmitter2: class EventEmitter2 {},
+}));
+jest.mock('@nestjs/bullmq', () => ({ InjectQueue: () => () => undefined }));
+import type { Queue } from 'bullmq';
 import { TasksService } from './tasks.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../common/audit/audit.service';
 import type { EventEmitter2 } from '@nestjs/event-emitter';
-import type { AiService } from '../ai/ai.service';
-import { RiskFeatureService } from '../ai/risk-feature.service';
+import type { RiskAssessmentJobData } from '../ai/risk-assessment.queue';
 
 describe('TasksService atomic version updates', () => {
   const prisma = {
     task: {
       findFirst: jest.fn(),
       updateMany: jest.fn(),
+      create: jest.fn(),
     },
+    project: { findFirst: jest.fn() },
   };
   const audit = { log: jest.fn().mockResolvedValue(undefined) };
   const events = { emit: jest.fn() };
-  const ai = {};
-  const riskFeatures = {};
+  const riskQueue = { add: jest.fn() };
   const service = new TasksService(
     prisma as unknown as PrismaService,
     audit as unknown as AuditService,
     events as unknown as EventEmitter2,
-    ai as unknown as AiService,
-    riskFeatures as unknown as RiskFeatureService,
+    riskQueue as unknown as Queue<RiskAssessmentJobData>,
   );
 
   const existingTask = {
@@ -42,6 +43,7 @@ describe('TasksService atomic version updates', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     audit.log.mockResolvedValue(undefined);
+    riskQueue.add.mockResolvedValue({});
   });
 
   it('loads task details only within the requested workspace', async () => {
@@ -66,7 +68,13 @@ describe('TasksService atomic version updates', () => {
         assignee: {
           select: { id: true, fullName: true, avatarUrl: true },
         },
+        // Assessments from the retired demo model (v1) and legacy
+        // UNAVAILABLE placeholders are never returned.
         riskAssessments: {
+          where: {
+            riskLevel: { not: 'UNAVAILABLE' },
+            modelVersion: { notIn: ['v1'] },
+          },
           orderBy: { computedAt: 'desc' },
           take: 1,
         },
@@ -143,5 +151,80 @@ describe('TasksService atomic version updates', () => {
     await expect(
       service.update('workspace-1', 'task-1', 'user-1', { version: 4 }),
     ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  describe('asynchronous risk assessment (O-1)', () => {
+    it('schedules an assessment for the new version after an update', async () => {
+      prisma.task.findFirst
+        .mockResolvedValueOnce(existingTask)
+        .mockResolvedValueOnce({ ...existingTask, version: 5 });
+      prisma.task.updateMany.mockResolvedValue({ count: 1 });
+
+      await service.update('workspace-1', 'task-1', 'user-1', { version: 4 });
+
+      expect(riskQueue.add).toHaveBeenCalledWith(
+        'assess-task',
+        { taskId: 'task-1', workspaceId: 'workspace-1', taskVersion: 5 },
+        expect.objectContaining({
+          jobId: 'task-task-1-v5',
+          delay: 2_000,
+          attempts: 3,
+        }),
+      );
+    });
+
+    it('schedules an assessment when a task is created', async () => {
+      prisma.project.findFirst.mockResolvedValue({ id: 'project-1' });
+      prisma.task.create.mockResolvedValue({
+        ...existingTask,
+        version: 0,
+        title: 'New task',
+      });
+
+      await service.create('workspace-1', 'user-1', {
+        title: 'New task',
+        projectId: 'project-1',
+      });
+
+      expect(riskQueue.add).toHaveBeenCalledWith(
+        'assess-task',
+        { taskId: 'task-1', workspaceId: 'workspace-1', taskVersion: 0 },
+        expect.objectContaining({ jobId: 'task-task-1-v0' }),
+      );
+    });
+
+    it('does not wait for the queue, so a slow or unavailable Redis never blocks the request', async () => {
+      riskQueue.add.mockReturnValue(new Promise(() => undefined));
+      prisma.task.findFirst
+        .mockResolvedValueOnce(existingTask)
+        .mockResolvedValueOnce({ ...existingTask, version: 5 });
+      prisma.task.updateMany.mockResolvedValue({ count: 1 });
+
+      await expect(
+        service.update('workspace-1', 'task-1', 'user-1', { version: 4 }),
+      ).resolves.toMatchObject({ version: 5 });
+    });
+
+    it('still completes the request when scheduling fails', async () => {
+      riskQueue.add.mockRejectedValue(new Error('Redis unavailable'));
+      prisma.task.findFirst
+        .mockResolvedValueOnce(existingTask)
+        .mockResolvedValueOnce({ ...existingTask, version: 5 });
+      prisma.task.updateMany.mockResolvedValue({ count: 1 });
+
+      await expect(
+        service.update('workspace-1', 'task-1', 'user-1', { version: 4 }),
+      ).resolves.toMatchObject({ version: 5 });
+      await new Promise((resolve) => setImmediate(resolve));
+    });
+
+    it('does not schedule anything when the update conflicts', async () => {
+      prisma.task.findFirst.mockResolvedValueOnce(existingTask);
+
+      await expect(
+        service.update('workspace-1', 'task-1', 'user-1', { version: 3 }),
+      ).rejects.toBeInstanceOf(ConflictException);
+      expect(riskQueue.add).not.toHaveBeenCalled();
+    });
   });
 });

@@ -3,6 +3,12 @@
 import { useEffect, useState } from 'react';
 import { api } from '@/lib/api';
 import { theme } from '@/lib/theme';
+import {
+  currentRiskLevel,
+  RISK_UNAVAILABLE_DETAIL,
+  RISK_UNAVAILABLE_TITLE,
+  riskBadgeClass,
+} from '@/lib/risk';
 import { X, Send, Trash2, Calendar, User, AlertCircle } from 'lucide-react';
 
 interface Comment {
@@ -157,30 +163,40 @@ export function TaskDetailModal({ taskId, workspaceId, onClose, currentUserId, c
               <p className="text-xs text-zinc-400 leading-relaxed">{task.description || 'No description provided.'}</p>
             </div>
 
-            {/* AI Risk Assessment Panel (AI Spec §6) */}
-            {task.riskAssessments?.[0] && (
-              <div className="p-3 bg-zinc-900 border border-zinc-800 rounded-lg space-y-2">
-                <div className="flex justify-between items-center">
-                  <span className="text-[10px] uppercase font-mono text-zinc-400 flex items-center gap-1">
-                    <AlertCircle size={12} /> Experimental Risk Classification
-                  </span>
-                  <span className={`text-[10px] uppercase px-2 py-0.5 rounded font-mono ${
-                    task.riskAssessments[0].riskLevel === 'HIGH' ? 'bg-red-950 text-red-400 border border-red-900' :
-                    task.riskAssessments[0].riskLevel === 'MEDIUM' ? 'bg-amber-950 text-amber-400 border border-amber-900' :
-                    'bg-zinc-800 text-zinc-400'
-                  }`}>
-                    {task.riskAssessments[0].riskLevel === 'UNAVAILABLE' ? 'Prediction unavailable' : task.riskAssessments[0].riskLevel}
-                  </span>
+            {/* Risk panel: a level only from a model, otherwise an honest state. */}
+            {(() => {
+              const riskLevel = currentRiskLevel(task.riskAssessments);
+              const factors = task.riskAssessments?.[0]?.factors ?? [];
+              return (
+                <div className="p-3 bg-zinc-900 border border-zinc-800 rounded-lg space-y-2">
+                  <div className="flex justify-between items-center">
+                    <span className="text-[10px] uppercase font-mono text-zinc-400 flex items-center gap-1">
+                      <AlertCircle size={12} /> Delay risk
+                    </span>
+                    {riskLevel ? (
+                      <span className={`text-[10px] uppercase px-2 py-0.5 rounded font-mono ${riskBadgeClass(riskLevel)}`}>
+                        {riskLevel}
+                      </span>
+                    ) : (
+                      <span className="text-[10px] px-2 py-0.5 rounded font-mono bg-zinc-800 text-zinc-400">
+                        {RISK_UNAVAILABLE_TITLE}
+                      </span>
+                    )}
+                  </div>
+                  {riskLevel ? (
+                    factors.length > 0 && (
+                      <ul className="text-[11px] text-zinc-400 space-y-1 pl-4 list-disc">
+                        {factors.map((f, idx) => (
+                          <li key={idx}>{f.explanation}</li>
+                        ))}
+                      </ul>
+                    )
+                  ) : (
+                    <p className="text-[11px] text-zinc-500">{RISK_UNAVAILABLE_DETAIL}</p>
+                  )}
                 </div>
-                {task.riskAssessments[0].factors?.length > 0 && (
-                  <ul className="text-[11px] text-zinc-400 space-y-1 pl-4 list-disc">
-                    {task.riskAssessments[0].factors.map((f, idx) => (
-                      <li key={idx}>{f.explanation}</li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-            )}
+              );
+            })()}
 
             {/* Meta Info (Assignee & Due Date) */}
             <div className="grid grid-cols-2 gap-4 text-xs pt-2 pb-4 border-b border-zinc-800">

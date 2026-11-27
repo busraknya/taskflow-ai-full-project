@@ -1,7 +1,10 @@
 import { Module } from '@nestjs/common';
 import { AiService } from './ai.service';
 import { HttpModule } from '@nestjs/axios';
+import { BullModule } from '@nestjs/bullmq';
 import { RiskFeatureService } from './risk-feature.service';
+import { RiskAssessmentProcessor } from './risk-assessment.processor';
+import { RISK_ASSESSMENT_QUEUE } from './risk-assessment.queue';
 
 @Module({
   imports: [
@@ -11,8 +14,10 @@ import { RiskFeatureService } from './risk-feature.service';
       timeout: 3_000,
       maxRedirects: 0,
     }),
+    // Risk is computed asynchronously, never inside a task request (O-1).
+    BullModule.registerQueue({ name: RISK_ASSESSMENT_QUEUE }),
   ],
-  providers: [AiService, RiskFeatureService],
-  exports: [AiService, RiskFeatureService],
+  providers: [AiService, RiskFeatureService, RiskAssessmentProcessor],
+  exports: [AiService, RiskFeatureService, BullModule],
 })
 export class AiModule {}

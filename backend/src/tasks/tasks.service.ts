@@ -4,9 +4,17 @@ import { CreateTaskDto } from './dto/create-task.dto';
 import { UpdateTaskDto } from './dto/update-task.dto';
 import { AuditService } from '../common/audit/audit.service'; 
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { AiService } from '../ai/ai.service';
-import { RiskFeatureService } from '../ai/risk-feature.service';
+import { InjectQueue } from '@nestjs/bullmq';
+import type { Queue } from 'bullmq';
 import { describeError } from '../common/logging/log-sanitizer';
+import {
+  CURRENT_RISK_ASSESSMENT_INCLUDE,
+  RISK_ASSESSMENT_DELAY_MS,
+  RISK_ASSESSMENT_JOB,
+  RISK_ASSESSMENT_QUEUE,
+  RiskAssessmentJobData,
+  riskAssessmentJobId,
+} from '../ai/risk-assessment.queue';
 
 @Injectable()
 export class TasksService {
@@ -16,35 +24,43 @@ export class TasksService {
     private prisma: PrismaService,
     private auditService: AuditService,
     private eventEmitter: EventEmitter2,
-    private aiService: AiService,
-    private riskFeatureService: RiskFeatureService,
+    @InjectQueue(RISK_ASSESSMENT_QUEUE)
+    private riskAssessmentQueue: Queue<RiskAssessmentJobData>,
   ) {}
 
-  private async assessAndSaveRisk(taskId: string, workspaceId: string, status: string) {
-    if (status === 'DONE') return;
-
-    try {
-      const features = await this.riskFeatureService.extractFeaturesForTask(taskId);
-      if (!features) return;
-
-      const prediction = await this.aiService.assessTaskRisk(features);
-
-      await this.prisma.riskAssessment.create({
-        data: {
-          taskId,
-          riskLevel: prediction.risk_level as any,
-          riskScore: prediction.risk_score,
-          factors: prediction.factors,
-          modelVersion: prediction.model_version,
+  /**
+   * Schedules a risk assessment without waiting for it (O-1). The request
+   * never blocks on Redis or the ML service; failures are only logged.
+   */
+  private scheduleRiskAssessment(task: {
+    id: string;
+    workspaceId: string;
+    version: number;
+  }): void {
+    this.riskAssessmentQueue
+      .add(
+        RISK_ASSESSMENT_JOB,
+        {
+          taskId: task.id,
+          workspaceId: task.workspaceId,
+          taskVersion: task.version,
         },
+        {
+          jobId: riskAssessmentJobId(task.id, task.version),
+          delay: RISK_ASSESSMENT_DELAY_MS,
+          attempts: 3,
+          backoff: { type: 'exponential', delay: 10_000 },
+          removeOnComplete: { age: 24 * 3600, count: 1000 },
+          removeOnFail: { age: 7 * 24 * 3600, count: 1000 },
+        },
+      )
+      .catch((error: unknown) => {
+        const { summary, stack } = describeError(error);
+        this.logger.error(
+          `Failed to schedule risk assessment for task ${task.id}: ${summary}`,
+          stack,
+        );
       });
-    } catch (error) {
-      const { summary, stack } = describeError(error);
-      this.logger.error(
-        `Risk assessment failed for task ${taskId}: ${summary}`,
-        stack,
-      );
-    }
   }
 
   async create(workspaceId: string, userId: string, dto: CreateTaskDto) {
@@ -101,8 +117,7 @@ export class TasksService {
       });
     }
 
-    // AI Risk Değerlendirmesini Tetikle
-    await this.assessAndSaveRisk(task.id, workspaceId, task.status);
+    this.scheduleRiskAssessment(task);
 
     return task;
   }
@@ -114,10 +129,7 @@ export class TasksService {
         assignee: {
           select: { id: true, fullName: true, avatarUrl: true },
         },
-        riskAssessments: {
-          orderBy: { computedAt: 'desc' },
-          take: 1,
-        },
+        riskAssessments: CURRENT_RISK_ASSESSMENT_INCLUDE,
       },
     });
 
@@ -139,10 +151,7 @@ export class TasksService {
         assignee: {
           select: { id: true, fullName: true, avatarUrl: true },
         },
-        riskAssessments: {
-          orderBy: { computedAt: 'desc' },
-          take: 1,
-        },
+        riskAssessments: CURRENT_RISK_ASSESSMENT_INCLUDE,
       },
       orderBy: { position: 'asc' },
     });
@@ -222,10 +231,7 @@ export class TasksService {
         assignee: {
           select: { id: true, fullName: true, avatarUrl: true },
         },
-        riskAssessments: {
-          orderBy: { computedAt: 'desc' },
-          take: 1,
-        },
+        riskAssessments: CURRENT_RISK_ASSESSMENT_INCLUDE,
       },
     });
 
@@ -251,7 +257,7 @@ export class TasksService {
       });
     }
 
-    await this.assessAndSaveRisk(updatedTask.id, workspaceId, updatedTask.status);
+    this.scheduleRiskAssessment(updatedTask);
 
     return updatedTask;
   }

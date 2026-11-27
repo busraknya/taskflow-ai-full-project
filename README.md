@@ -43,7 +43,7 @@ TaskFlow is still under active development. The list above describes the intende
 
 The goal is to explore whether task information—such as time remaining until a due date and the assignee's workload—can help identify tasks that may be delayed.
 
-This feature is experimental. The current sample data is not enough to demonstrate real-world prediction quality, so TaskFlow does not claim to provide verified delay probabilities.
+No predictive model is included. TaskFlow will learn from each workspace's own task history, inside your installation, and show a delay-risk level only after a model trained on that history has passed evaluation. Until then the apps state that a risk prediction is not available yet, and TaskFlow does not claim verified delay probabilities.
 
 ### Project documentation
 
@@ -51,7 +51,7 @@ This feature is experimental. The current sample data is not enough to demonstra
 - [Detailed workflows and requirements](analysis/product_workflows_requirements.md) — detailed requirements, acceptance scenarios, technical findings, and testing notes.
 - [Go-live audit](analysis/go_live.md) — release readiness, security audit history, verification evidence, and the current go/no-go decision.
 - [Sales readiness plan](analysis/sales_readiness_plan.md) — open blockers and progress toward a sellable source-code release.
-- [ML model card](ml-service/MODEL_CARD.md) — intended use and limitations of the experimental risk model.
+- [ML model card](ml-service/MODEL_CARD.md) — current status of the risk model and the rules for showing predictions.
 
 ### Development status
 
@@ -97,7 +97,7 @@ TaskFlow hâlâ geliştirme aşamasındadır. Bu maddeler hedeflediğimiz ürün
 
 Amacımız, teslim tarihine kalan süre ve görevi üstlenen kişinin iş yükü gibi bilgilerden yararlanarak gecikme riski taşıyan görevleri belirlemeyi araştırmak.
 
-Bu özellik deneysel aşamadadır. Şu anki örnek veriler gerçek hayattaki tahmin başarısını göstermek için yeterli değildir. Bu nedenle TaskFlow'un doğrulanmış gecikme olasılıkları sunduğunu iddia etmiyoruz.
+Ürünle birlikte bir tahmin modeli gelmez. TaskFlow, her workspace'in kendi görev geçmişinden kurulumunuzun içinde öğrenecek ve gecikme riski seviyesini yalnızca bu geçmişle eğitilmiş bir model değerlendirmeden geçtikten sonra gösterecektir. O zamana kadar uygulamalar risk tahmininin henüz mevcut olmadığını belirtir; TaskFlow doğrulanmış gecikme olasılıkları sunduğunu iddia etmez.
 
 ### Proje belgeleri
 
@@ -105,7 +105,7 @@ Bu özellik deneysel aşamadadır. Şu anki örnek veriler gerçek hayattaki tah
 - [Ayrıntılı iş akışları ve gereksinimler](analysis/product_workflows_requirements.md) — gereksinimler, kabul senaryoları, teknik bulgular ve test notları.
 - [Yayına çıkış denetimi](analysis/go_live.md) — yayına hazırlık, güvenlik denetimi geçmişi, doğrulama kanıtları ve güncel GO/NO-GO kararı.
 - [Satışa hazırlık planı](analysis/sales_readiness_plan.md) — satılabilir kaynak kod sürümü için açık engelleyiciler ve ilerleme.
-- [ML model kartı](ml-service/MODEL_CARD.md) — deneysel risk modelinin kullanım amacı ve sınırları.
+- [ML model kartı](ml-service/MODEL_CARD.md) — risk modelinin güncel durumu ve tahmin gösterme kuralları.
 
 ### Geliştirme durumu
 
@@ -127,7 +127,7 @@ TaskFlow'u adım adım geliştiriyoruz. Kodda bulunan bir özellik ile test edil
 - **Web application:** Next.js, TypeScript, and Tailwind CSS.
 - **Backend API:** NestJS, Prisma, and PostgreSQL.
 - **Background jobs:** Redis and BullMQ.
-- **ML service:** FastAPI and scikit-learn. Task-risk analysis is experimental; the included model was trained on a very small synthetic dataset and is not a validated probability model.
+- **ML service:** FastAPI and scikit-learn. No model is shipped: the service starts without one, `GET /health` reports `"model_loaded": false`, and `POST /predict` returns `503 MODEL_UNAVAILABLE`. The backend computes risk asynchronously through a BullMQ queue, so task requests never wait for the ML service.
 - **Android client:** Kotlin and Jetpack Compose, with Room-backed offline operation.
 
 The Docker Compose stack starts PostgreSQL, Redis, the ML API, the backend API, and the web frontend. Database migrations run through a dedicated one-shot Compose service before the backend starts.
@@ -268,7 +268,7 @@ The backend exposes two unauthenticated health endpoints. They are excluded from
 
 - `GET /api/v1` is kept for existing monitors and returns the same response as liveness.
 - Responses only report `up` or `down` per dependency; connection errors are logged on the server without hosts or credentials and are never returned to clients.
-- The ML service is not part of readiness: when it is unavailable, tasks still work and risk assessments are recorded as `UNAVAILABLE`.
+- The ML service is not part of readiness: when it is unavailable or has no model, tasks still work and no risk assessment is stored.
 - The Compose backend health check uses the readiness endpoint, so `docker compose up --wait` and the frontend's `depends_on` wait until PostgreSQL and Redis are reachable. Docker does not restart unhealthy containers automatically; when using an orchestrator such as Kubernetes, use `/health/live` for liveness probes and `/health/ready` for readiness probes.
 
 ### Invitation links
@@ -369,7 +369,7 @@ Run the relevant checks from each subproject when changing code. A passing CI ru
 
 ## Known limitations
 
-- ML task-risk analysis is experimental. The bundled model uses a tiny synthetic training dataset; do not interpret its output as a calibrated probability or claim production prediction accuracy.
+- No task-risk model is shipped, so no risk levels are shown yet. Risk assessments written by the removed demonstration model (`v1`) in existing databases are hidden by the API.
 - Workspace invitations currently target registered accounts. Acceptance and seven-day expiry are implemented; browser-flow and SMTP delivery verification are still required. The invite response is identical for registered and unregistered addresses, but a pending invitation row is created (and shown in the member list) only for registered accounts, and response-time differences may also reveal whether an account exists. Partial account enumeration by workspace admins therefore remains possible.
 - The per-account login limit (20 attempts per 15 minutes) also counts failed attempts made by others: an attacker who knows an email address can keep that account's login blocked. Existing sessions are not affected.
 - Redis is required for authentication: while it is unavailable, login, refresh, logout, password change, and invitations return `503`, and the first authentication request after Redis recovers can still fail once.

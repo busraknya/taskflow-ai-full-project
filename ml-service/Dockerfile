@@ -12,8 +12,9 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir --no-index --find-links=/wheels -r requirements.txt \
     && rm -rf /wheels
 COPY main.py ./main.py
-COPY models ./models
-RUN useradd --create-home --uid 10001 appuser \
+# No model is shipped; models/ is created for validated artifacts mounted later.
+RUN mkdir -p /app/models \
+    && useradd --create-home --uid 10001 appuser \
     && chown -R appuser:appuser /app
 USER appuser
 EXPOSE 8000
