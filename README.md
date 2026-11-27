@@ -218,7 +218,7 @@ Before exposing an installation to the public internet:
 
 - Put a maintained reverse proxy in front of the web and API services and terminate TLS/HTTPS there.
 - Set `CORS_ORIGINS` and `NEXT_PUBLIC_API_URL` to the real HTTPS origins, then rebuild the frontend after changing its public API URL.
-- Use unique, strong database and JWT secrets; do not commit `.env` or share secrets in support requests. `JWT_SECRET` must be at least 32 bytes (the backend refuses to start otherwise). The backend does **not** detect the sample value from `.env.example`, so always replace it.
+- Use unique, strong database and JWT secrets; do not commit `.env` or share secrets in support requests. `JWT_SECRET` must be at least 32 bytes, and the backend refuses to start if it is shorter, if it is the sample value from `.env.example` or another known placeholder, if it contains a template marker such as `replace_with`, `change_me` or `your-secret`, or if it is a trivially weak repetition such as `aaaa…`. These checks cannot recognise every guessable value, so always generate the secret with `openssl rand -hex 32`.
 - Restrict database and Redis access to the private container network. Do not publish their ports publicly.
 - Configure SMTP credentials through the deployment's secret-management mechanism.
 - Establish tested database backup, restore, update, and rollback procedures.

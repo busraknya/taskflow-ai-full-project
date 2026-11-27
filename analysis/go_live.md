@@ -1,3 +1,5 @@
+> **Güncel durum notu — 27 Kasım 2026:** C-1, H-1 ve M-5 `fix/go-live-blockers` dalında kapatıldı ve CI ile doğrulandı; ayrıntılar belgenin sonundaki **"27 Kasım 2026 — C-1, M-5 ve H-1 kapanışı"** bölümündedir. Güncel karar hâlâ **NO-GO**.
+
 > **Güncel durum notu — 26 Kasım 2026:** Bu sayfanın başındaki 18 Kasım bloğu ve sonraki tarihli bölümler tarihsel kayıttır; orada "açık" görünen bazı bulgular (refresh yarışı, parola sonrası oturum iptali, doğrudan ACTIVE davet, rate limit ve Helmet/CSP eksikliği) sonradan kapatılmıştır. En güncel değerlendirme ve kanıtlar için belgenin sonundaki **"26 Kasım 2026 — Güvenlik uygulamaları sonrası değerlendirme"** bölümüne bakın. Güncel karar: **NO-GO**.
 
 > **Kaynak kod yeniden kontrolü — 18 Kasım 2026 (latest branch):**
@@ -708,7 +710,7 @@ Bu run tamamlanmadan CI PASS denmeyecek. Backend lint non-blocking kalmaya devam
 | Davet doğrudan ACTIVE üyelik veriyor (18 Kasım bloğu) | Kapandı (PENDING akışı önceki remediation commit'lerinde); gizlilik kuralları eklendi | `2b30009`; PostgreSQL E2E |
 | Rate limiting yok (§2.5) | Kapandı (kodda var, yerel E2E ile doğrulandı) | Önceki remediation + `20ecec7` |
 | Helmet/CSP/security headers yok (§2.5) | Kapandı (kodda var, tarayıcıda doğrulandı) | `20ecec7` |
-| Exception filter beklenmeyen `Error.message` değerini döndürüyor (§2.5) | **Açık** | `backend/src/common/filters/http-exception.filter.ts:47-48` |
+| Exception filter beklenmeyen `Error.message` değerini döndürüyor (§2.5) | **Açık** (26 Kasım); 27 Kasım'da `0802f3d` ile kapandı | `backend/src/common/filters/http-exception.filter.ts:47-48` (26 Kasım) |
 | Docker build context'ine yerel `.env` giriyor (SEC-04 denetim bulgusu; bu belgede daha önce bulgu olarak kayıtlı değildi) | Kapandı | `761f03a`; imaj içerik taraması |
 | ML Dockerfile tek aşamalı ve root çalışıyor (tarihsel bulgu) | Yalnız `.dockerignore` kısmı karşılandı; multi-stage build, non-root çalışma ve bind mount konuları yeniden değerlendirilmedi ve **kapanmış sayılmamalı** | `761f03a` (`ml-service/.dockerignore`) |
 
@@ -731,8 +733,8 @@ Bu kanıtlar gerçek tarayıcı ve Android kullanıcı yolculuklarını, SMTP te
 
 | ID | Önem | Bulgu | Durum |
 |---|---|---|---|
-| C-1 | Critical (yapılandırmaya bağlı) | `.env.example` içindeki `JWT_SECRET` yer tutucusu 32 byte kontrolünü geçiyor; değiştirilmezse access token sahteciliği mümkün. README uyarıyor, kod tespit etmiyor. | Açık |
-| H-1 | High | CI E2E adımı `taskflow.e2e-spec.ts` 403/404 uyuşmazlığı nedeniyle büyük olasılıkla başarısız (yerelde doğrulandı, CI'da doğrulanamadı). | Açık |
+| C-1 | Critical (yapılandırmaya bağlı) | `.env.example` içindeki `JWT_SECRET` yer tutucusu 32 byte kontrolünü geçiyor; değiştirilmezse access token sahteciliği mümkün. README uyarıyor, kod tespit etmiyor. | Kapandı (27 Kasım, `1961f0b` + `eb7f162`) |
+| H-1 | High | CI E2E adımı `taskflow.e2e-spec.ts` 403/404 uyuşmazlığı nedeniyle büyük olasılıkla başarısız (yerelde doğrulandı, CI'da doğrulanamadı). | Kapandı (27 Kasım, `01005bc`; gerekli CI job'ları başarılı) |
 | H-2 | High | Repoda TLS/reverse proxy yok; production'da refresh cookie `Secure` olduğundan HTTP üzerinden web oturumu yenilenemez. | Açık |
 | H-3 | High (yapılandırmaya bağlı) | `TRUST_PROXY_HOPS` yanlış ayarlanırsa veya backend portu proxy dışında erişilebilir kalırsa IP sahteciliği ya da paylaşılan auth limitleri. | Açık |
 | H-4 | High | Hesap başına login limiti (20 / 15 dk) başkası tarafından tüketilebilir; hedef hesabın girişi sürekli engellenebilir. | Açık, karar gerekli |
@@ -740,7 +742,7 @@ Bu kanıtlar gerçek tarayıcı ve Android kullanıcı yolculuklarını, SMTP te
 | M-2 | Medium (teorik) | Redis'e paketlerin düştüğü kesintide istek başına yaklaşık 3,5 sn ek gecikme. | Test edilmedi |
 | M-3 | Medium | Refresh token ailelerinin mutlak ömrü yok. | Açık |
 | M-4 | Medium | 30 sn grace penceresi theft detection'ı daraltıyor (R-2). | Açık |
-| M-5 | Medium | Exception filter iç hata mesajını döndürüyor (SEC-06). | Açık |
+| M-5 | Medium | Exception filter iç hata mesajını döndürüyor (SEC-06). | Kapandı (27 Kasım, `0802f3d`) |
 | M-6 | Medium (yapılandırmaya bağlı) | `REDIS_PASSWORD` varsayılanı boş. | Açık |
 | M-7 | Medium | Ortak IP (NAT/CGNAT) arkasındaki kullanıcılar IP başına auth limitlerini paylaşır. | Açık |
 | M-8 | Medium | CI `prisma migrate deploy` komutunu `--config` olmadan çalıştırıyor. Yerel gözleme göre CLI bu durumda kullanılmayan `prisma7.config.ts` dosyasını yüklüyor; CI'da aynı davranış olası, ancak bağımsız olarak doğrulanmadı. | Açık |
@@ -752,3 +754,53 @@ Düşük önemli açıklar: davetlerde kısmi hesap tespiti (bekleyen satır ve 
 **Güncel karar: NO-GO.** Uygulama kodundaki kimlik, oturum, davet, rate limit ve header kontrolleri kodda mevcut ve yerel testlerle doğrulandı. C-1, H-1, H-2, H-3 ve M-5 go-live engelleyicisidir; bunlar kapatılmadan ve TLS'li, doğru proxy topolojisine sahip bir ortamda gerçek kullanıcı akışları doğrulanmadan ticari production dağıtımı yapılmamalı. Karar, yalnız bu onaylı engelleyicilere dayanarak da NO-GO'dur.
 
 H-4 (hesap başına login limiti politikası) ve M-1 (Redis kesintisinde logout ve parola değişimi davranışı) ürün sahibi kararını bekliyor (`product_workflows_requirements.md` §10, karar 11 ve 12). Ürün sahibi bunları go-live kapısı olarak onaylarsa P0 engelleyici olarak kalırlar; onaylamazsa P1'e taşınmaları önerilir. Bu belge iki karardan hiçbirini vermez; aynı koşul `sales_readiness_plan.md` içinde de geçerlidir.
+
+
+---
+
+# 27 Kasım 2026 — C-1, M-5 ve H-1 kapanışı
+
+> Bu bölüm önceki tarihli bölümleri silmez. 26 Kasım "Karar" paragrafı o tarihteki durumu anlatan tarihsel kayıttır; güncel karar aşağıdadır. Dal: `fix/go-live-blockers`. Bu değişiklikler henüz `main`'e merge edilmedi.
+
+## Bu turda dala eklenen commit'ler
+
+| Commit | Kapsam |
+|---|---|
+| `01005bc` | H-1: `test/taskflow.e2e-spec.ts` içindeki iki eski 403 beklentisi 404 olarak düzeltildi (ürün sahibinin 404 kararı; guard davranışı değişmedi) |
+| `1961f0b` | C-1: backend açılışta bilinen `JWT_SECRET` yer tutucularını (şu anki ve eski `.env.example` değerleri), yer tutucu işaretlerini (`replace_with`, `change_me`, `your-secret`, `placeholder` vb.), tamamı köşeli parantezli şablonları ve en fazla 8 karakterlik bir parçanın tekrarından oluşan değerleri reddediyor; hata mesajı secret'ı içermiyor |
+| `eb7f162` | C-1 CI uyumluluğu: Compose smoke testi `.env.example` kopyasındaki yer tutucuyu her çalışmada `openssl rand -hex 32` ile üretilen bir secret ile değiştiriyor |
+| `0802f3d` | M-5: `HttpException` olmayan hatalar istemciye yalnızca genel 500 mesajıyla dönüyor; hatalar sunucu tarafında method ve query string'siz path ile loglanıyor; Prisma hatalarında mesaj loglanmıyor (yalnızca sınıf, `code` ve stack frame'leri); `expose: true` olan 4xx `http-errors` hataları kendi status'ünü koruyor (çok büyük gövde artık 413) |
+
+## Doğrulama kanıtı
+
+- **GitHub Actions (TaskFlow CI, beş job: Backend, Frontend, ML, Docker Compose, Android):**
+  - `01005bc`: run `45878677241` (`push`) ve run `45878686268` (`pull_request`) — beş job başarılı.
+  - `1961f0b`: run `45949820235` — **başarısız**. Docker Compose job'u, CI'ın `.env.example` yer tutucusunu kullanması nedeniyle kırıldı (C-1'in beklenen etkisi; `eb7f162` ile düzeltildi). Android unit test adımı da başarısızdı; commit Android'e dokunmuyor.
+  - `eb7f162`: run `45952276417` — ilk denemede Android unit test adımı başarısız; Android kodu değişmeden yeniden çalıştırılan **ikinci denemede beş job başarılı**. İlk denemedeki hata geçici altyapı sorunu olarak değerlendirildi, kök nedeni log'a erişilemediği için doğrulanmadı.
+  - `0802f3d`: run `45959034137`, ilk deneme — beş job başarılı.
+- **Yerel koşular:** C-1 için `jwt-config.spec.ts` (42 test) ve mutasyon kontrolleri; M-5 için `http-exception.filter.spec.ts` (21 test) ve mutasyon kontrolleri; backend unit suite 20/20 suite, 220/220 test; tek kullanımlık PostgreSQL 16 + Redis 7 ile backend E2E 5/5 suite, 32/32 test; düzeltilmiş Compose adımıyla yerel `docker compose up --wait` beş servis healthy.
+- **Not:** Bu commit'ler için `pull_request` CI çalışması yok; PR #1'in `main` ile doküman conflict'i bulunduğu için GitHub `pull_request` workflow'unu tetiklemiyor. Yukarıdaki sonuçlar `push` çalışmalarına aittir.
+- **Bilinen aralıklı durum:** `src/auth/auth-session.spec.ts` M-5 çalışması sırasında yerelde iki kez aralıklı başarısız oldu, sonraki 16 yerel koşuda ve CI'da geçti; kök nedeni belirlenmedi.
+
+## Bulgu durumu (27 Kasım)
+
+| ID | Önem | Durum | Kanıt / bağımlılık |
+|---|---|---|---|
+| C-1 | Critical | **Kapandı (dalda)** | `1961f0b`, `eb7f162`; CI run `45952276417` (deneme 2) ve `45959034137` |
+| H-1 | High | **Kapandı (dalda)** | `01005bc`; gerekli beş CI job'u `01005bc`, `eb7f162` (deneme 2) ve `0802f3d` üzerinde başarılı |
+| M-5 | Medium | **Kapandı (dalda)** | `0802f3d`; CI run `45959034137` |
+| H-2 | High | Açık | Repoda TLS/reverse proxy yok; deploy topolojisi kararına (karar 13) bağlı |
+| H-3 | High (yapılandırmaya bağlı) | Açık | `TRUST_PROXY_HOPS` değeri deploy topolojisi kararına (karar 13) bağlı |
+| H-4 | High | Açık, ürün sahibi kararı bekleniyor | `product_workflows_requirements.md` §10, karar 11 |
+| M-1 | Medium | Açık, ürün sahibi kararı bekleniyor | `product_workflows_requirements.md` §10, karar 12 |
+| M-2, M-3, M-4, M-6, M-7, M-8 | Medium | Açık / doğrulanmadı | 26 Kasım tablosundaki durum geçerli |
+
+C-1 kalan sınırlaması: işaret içermeyen, tahmin edilebilir insan yazımı secret'lar (ör. şirket adı + yıl) güvenilir biçimde tespit edilemez; README'deki `openssl rand -hex 32` yönergesi geçerlidir. M-5 kalan sınırlaması: Prisma dışı hataların stack'i mesajıyla birlikte loglanır (loglarda kişisel veri riskine ilişkin düşük önemli bulgu açık kalır).
+
+## Doğrulanmamış olanlar
+
+Gerçek backend ile Web UI ve Android E2E, gerçek SMTP teslimatı, TLS'li production ortamı ve backup/restore hâlâ doğrulanmadı. Başarılı ret akışının E2E'si ve M-2 de doğrulanmadı.
+
+## Güncel karar
+
+**Güncel karar: NO-GO.** C-1, H-1 ve M-5 `fix/go-live-blockers` dalında kapandı ve CI ile doğrulandı. Buna karşın H-2 ve H-3 (TLS/reverse proxy ve proxy topolojisi) açık go-live engelleyicileridir ve deploy topolojisi kararına (karar 13) bağlıdır. H-4 ve M-1 ürün sahibi kararını bekliyor; go-live kapısı olarak onaylanırlarsa P0 engelleyici olarak kalırlar, onaylanmazlarsa P1'e taşınmaları önerilir. Ayrıca bu düzeltmeler `main`'de değildir ve yukarıdaki doğrulanmamış kullanıcı/operasyon akışları tamamlanmadan ticari production dağıtımı yapılmamalıdır.

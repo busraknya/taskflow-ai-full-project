@@ -313,6 +313,8 @@ Bu senaryolar otomasyon ve manuel test planının temelidir. CI build'i tek baş
 - E2E-20: backend üye olmayan kullanıcıya 404 döndürüyor ve veri sızdırmıyor (`test/workspace-invitations.e2e-spec.ts`). `test/taskflow.e2e-spec.ts` aynı durumda 403 beklediği için başarısız; beklenen kod için karar gerekli (bkz. §10).
 - Web UI ve Android için hiçbir E2E senaryosu bu turda doğrulanmadı.
 
+**Kanıt güncellemesi (27 Kasım 2026):** 14. karar (404) sonrasında `test/taskflow.e2e-spec.ts` içindeki iki eski 403 beklentisi (`GET /workspaces/:workspaceId/projects` ve `PATCH /workspaces/:workspaceId/tasks/:id`) `01005bc` ile 404 olarak düzeltildi. Yerel PostgreSQL 16 + Redis 7 koşusunda bu test 2/2, bütün backend E2E suite'i 5/5 suite ve 32/32 test geçti; GitHub Actions'ta gerekli beş job `01005bc`, `eb7f162` ve `0802f3d` üzerinde başarılı (ayrıntı: `go_live.md`, 27 Kasım bölümü). Böylece E2E-20 ve E2E-01'in kayıt adımları **backend API seviyesinde** doğrulandı. Web UI ve Android istemci E2E doğrulaması hâlâ yok.
+
 ## 7. İşlevsel olmayan gereksinimler
 
 | Alan | Beklenti |
@@ -393,7 +395,7 @@ Bu diyagram mantıksal sorumlulukları gösterir; event bağlantıları gerçek 
 11. Hesap başına login limiti nasıl olmalı? Mevcut 20 deneme / 15 dk politikası başkası tarafından tüketilebildiği için hedefli hesap engellemeye açık; (IP, hesap) bazlı limit ve yalnız başarısız denemeleri sayan genel üst sınır alternatifi değerlendirilmeli.
 12. Redis erişilemezken logout ve parola değişimi reddedilmeli mi (mevcut: `503`), yoksa izin verilmeli mi? Redis için yüksek erişilebilirlik gerekiyor mu?
 13. Hedef deployment topolojisi nedir (doğrudan, tek reverse proxy, CDN + load balancer)? `TRUST_PROXY_HOPS` değeri ve Web/API'nin aynı site altında yayınlanması buna göre sabitlenmeli.
-14. Başka workspace'e erişimde 403 mü 404 mü dönülmeli (E2E-20)? Mevcut backend 404 döndürüyor; `test/taskflow.e2e-spec.ts` 403 bekliyor.
+14. Başka workspace'e erişimde 403 mü 404 mü dönülmeli (E2E-20)? **Karar verildi (26 Kasım 2026): 404 Not Found.** Üye olmayan kullanıcıdan workspace'in varlığı gizlenir. Karar öncesinde backend zaten 404 döndürüyordu, `test/taskflow.e2e-spec.ts` ise 403 bekliyordu. `WorkspaceMemberGuard` (`backend/src/workspaces/guards/workspace-member.guard.ts`) değiştirilmedi; test `01005bc` ile bu karara uyarlandı.
 15. Refresh token ailelerine mutlak bir oturum ömrü konulacak mı? Ömür yoksa düzenli kullanılan bir oturum logout veya parola değişimine kadar geçerli kalır (go_live M-3); ömür konulursa kullanıcılar, özellikle Android'de, periyodik olarak yeniden giriş yapar.
 16. 30 saniyelik refresh reuse grace penceresi kısaltılacak mı? Kısa pencere çalınmış token tespitini güçlendirir (go_live M-4, R-2), ancak çok sekmeli veya yavaş ağdaki meşru eşzamanlı refresh isteklerinin `REFRESH_TOKEN_ROTATED` alıp oturumun düşmesine yol açabilir.
 
@@ -709,4 +711,10 @@ CI run #44262570835 tüm beş job'ı geçmiştir (Android unit + instrumented Ro
 | OPS-02 | Kısmi | İmaj içerik taraması | `.env` imajlara girmiyor; `JWT_SECRET` yer tutucusu kodda tespit edilmiyor |
 | OPS-05 | Kısmi | Unit test, tarayıcı kontrolü | CORS allowlist, Helmet ve nonce tabanlı CSP var; HTTPS/reverse proxy yok |
 
-Bu turda değerlendirilmeyen gereksinimlerin durumu önceki bölümlerde kaldığı gibidir. Yeni ürün kararları §10'a (madde 11–16) eklendi.
+**Çözüm notu (27 Kasım 2026):** Yukarıdaki tablo 26 Kasım durumunu kaydeder ve değiştirilmemiştir. İki satırdaki tespit `fix/go-live-blockers` dalında sonradan kapatıldı (ayrıntı ve CI kanıtı: `go_live.md`, 27 Kasım bölümü):
+- **AUTH-05:** "Beklenmeyen hatalarda iç mesaj istemciye dönüyor (SEC-06)" tespiti M-5 kapsamında `0802f3d` ile kapandı. `HttpException` olmayan hatalar istemciye yalnızca genel 500 mesajıyla dönüyor ve sunucu tarafında loglanıyor (`http-exception.filter.spec.ts`, CI run `45959034137`). Rate limit ve güvenli hata mesajları dalda kodda var. Hesap başına login limiti politikası (H-4, §10 karar 11) açık kaldığı için AUTH-05'in rate limit tarafı ürün kararına bağlıdır.
+- **OPS-02:** "`JWT_SECRET` yer tutucusu kodda tespit edilmiyor" tespiti C-1 kapsamında `1961f0b` ile kapandı. Backend bilinen yer tutucuları ve açıkça zayıf secret'ları açılışta reddediyor; CI Compose testi `eb7f162` ile rastgele secret kullanıyor. WF-12 altındaki 26 Kasım kod gözlemindeki aynı ifade için de bu not geçerlidir. OPS-02 **kısmi** kalır: `.env` dosyası dalda Git'ten kaldırıldı, ancak `main`'de hâlâ izleniyor ve public Git geçmişinde bulunduğu için değerlerin rotation değerlendirmesi açıktır; işaret içermeyen tahmin edilebilir secret'lar da tespit edilemez.
+
+Bu düzeltmeler henüz `main`'e merge edilmedi.
+
+Bu turda değerlendirilmeyen gereksinimlerin durumu önceki bölümlerde kaldığı gibidir. Yeni ürün kararları §10'a (madde 11–16) eklendi. 14. madde 26 Kasım'da karara bağlandı (404); diğerleri açıktır.
