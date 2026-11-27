@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { BullModule } from '@nestjs/bullmq';
 import { EventEmitterModule } from '@nestjs/event-emitter';
+import { RiskModelModule } from './risk-model/risk-model.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { PrismaModule } from './prisma/prisma.module';
@@ -51,6 +52,7 @@ import { RateLimitModule } from './common/rate-limit/rate-limit.module';
     ProjectsModule,
     TasksModule,
     AiModule,
+    RiskModelModule,
     UsersModule,
     CommentsModule,
     NotificationsModule,

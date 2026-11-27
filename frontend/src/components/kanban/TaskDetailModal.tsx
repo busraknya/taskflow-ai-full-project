@@ -3,12 +3,8 @@
 import { useEffect, useState } from 'react';
 import { api } from '@/lib/api';
 import { theme } from '@/lib/theme';
-import {
-  currentRiskLevel,
-  RISK_UNAVAILABLE_DETAIL,
-  RISK_UNAVAILABLE_TITLE,
-  riskBadgeClass,
-} from '@/lib/risk';
+import { describeRisk, riskBadgeClass } from '@/lib/risk';
+import type { RiskModelStatus } from '@/lib/risk';
 import { X, Send, Trash2, Calendar, User, AlertCircle } from 'lucide-react';
 
 interface Comment {
@@ -26,6 +22,7 @@ interface TaskRiskAssessment {
   riskLevel: string;
   riskScore: number | null;
   factors: RiskFactor[];
+  reason?: string | null;
 }
 
 interface TaskDetails {
@@ -35,11 +32,13 @@ interface TaskDetails {
   status: string;
   priority: number;
   dueDate: string | null;
+  dueDateIsDateOnly?: boolean;
   assignee: { id: string; fullName: string; avatarUrl?: string | null } | null;
   riskAssessments: TaskRiskAssessment[];
 }
 
 interface TaskDetailModalProps {
+  riskModelStatus?: RiskModelStatus | null;
   taskId: string | null;
   workspaceId: string;
   onClose: () => void;
@@ -48,7 +47,7 @@ interface TaskDetailModalProps {
   canManageAllComments: boolean;
 }
 
-export function TaskDetailModal({ taskId, workspaceId, onClose, currentUserId, canAddComment, canManageAllComments }: TaskDetailModalProps) {
+export function TaskDetailModal({ riskModelStatus = null, taskId, workspaceId, onClose, currentUserId, canAddComment, canManageAllComments }: TaskDetailModalProps) {
   const [task, setTask] = useState<TaskDetails | null>(null);
   const [loadedTaskId, setLoadedTaskId] = useState<string | null>(null);
   const [comments, setComments] = useState<Comment[]>([]);
@@ -163,36 +162,33 @@ export function TaskDetailModal({ taskId, workspaceId, onClose, currentUserId, c
               <p className="text-xs text-zinc-400 leading-relaxed">{task.description || 'No description provided.'}</p>
             </div>
 
-            {/* Risk panel: a level only from a model, otherwise an honest state. */}
+            {/* Risk panel: a level only from this workspace's validated model,
+                otherwise an honest state (architecture §12). */}
             {(() => {
-              const riskLevel = currentRiskLevel(task.riskAssessments);
-              const factors = task.riskAssessments?.[0]?.factors ?? [];
+              const view = describeRisk(riskModelStatus, task.riskAssessments);
+              const factors = view.level ? task.riskAssessments?.[0]?.factors ?? [] : [];
               return (
                 <div className="p-3 bg-zinc-900 border border-zinc-800 rounded-lg space-y-2">
-                  <div className="flex justify-between items-center">
+                  <div className="flex justify-between items-center gap-2">
                     <span className="text-[10px] uppercase font-mono text-zinc-400 flex items-center gap-1">
                       <AlertCircle size={12} /> Delay risk
                     </span>
-                    {riskLevel ? (
-                      <span className={`text-[10px] uppercase px-2 py-0.5 rounded font-mono ${riskBadgeClass(riskLevel)}`}>
-                        {riskLevel}
-                      </span>
-                    ) : (
-                      <span className="text-[10px] px-2 py-0.5 rounded font-mono bg-zinc-800 text-zinc-400">
-                        {RISK_UNAVAILABLE_TITLE}
-                      </span>
-                    )}
+                    <span
+                      className={`text-[10px] px-2 py-0.5 rounded font-mono ${
+                        view.level ? `uppercase ${riskBadgeClass(view.level)}` : 'bg-zinc-800 text-zinc-400'
+                      }`}
+                    >
+                      {view.title}
+                      {view.probability !== null && ` · ${Math.round(view.probability * 100)}%`}
+                    </span>
                   </div>
-                  {riskLevel ? (
-                    factors.length > 0 && (
-                      <ul className="text-[11px] text-zinc-400 space-y-1 pl-4 list-disc">
-                        {factors.map((f, idx) => (
-                          <li key={idx}>{f.explanation}</li>
-                        ))}
-                      </ul>
-                    )
-                  ) : (
-                    <p className="text-[11px] text-zinc-500">{RISK_UNAVAILABLE_DETAIL}</p>
+                  {view.detail && <p className="text-[11px] text-zinc-500">{view.detail}</p>}
+                  {factors.length > 0 && (
+                    <ul className="text-[11px] text-zinc-400 space-y-1 pl-4 list-disc">
+                      {factors.map((f, idx) => (
+                        <li key={idx}>{f.explanation}</li>
+                      ))}
+                    </ul>
                   )}
                 </div>
               );
@@ -206,7 +202,12 @@ export function TaskDetailModal({ taskId, workspaceId, onClose, currentUserId, c
               </div>
               <div className="flex items-center space-x-2 text-zinc-400">
                 <Calendar size={14} />
-                <span>Due: <strong className="text-white">{task.dueDate ? new Date(task.dueDate).toLocaleDateString() : 'No deadline'}</strong></span>
+                <span>Due: <strong className="text-white">{task.dueDate
+                  ? task.dueDateIsDateOnly
+                    ? // Date-only due dates are stored as UTC midnight of the calendar date.
+                      new Date(task.dueDate).toLocaleDateString(undefined, { timeZone: 'UTC' })
+                    : new Date(task.dueDate).toLocaleString()
+                  : 'No deadline'}</strong></span>
               </div>
             </div>
 

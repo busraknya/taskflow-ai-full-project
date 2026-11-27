@@ -1,4 +1,10 @@
-import { IsString, MinLength, Matches } from 'class-validator';
+import {
+  IsOptional,
+  IsString,
+  IsTimeZone,
+  Matches,
+  MinLength,
+} from 'class-validator';
 
 export class CreateWorkspaceDto {
   @IsString()
@@ -13,4 +19,9 @@ export class CreateWorkspaceDto {
       'The slug can only contain lowercase letters, numbers, and hyphens (-).',
   })
   slug!: string;
+
+  /** IANA time zone; defaults to UTC. */
+  @IsTimeZone()
+  @IsOptional()
+  timezone?: string;
 }

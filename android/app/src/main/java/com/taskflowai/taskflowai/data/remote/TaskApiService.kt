@@ -15,6 +15,11 @@ interface TaskApiService {
         @Query("projectId") projectId: String? = null
     ): Response<List<TaskDto>>
 
+    @GET("workspaces/{workspaceId}/risk-model")
+    suspend fun getRiskModelStatus(
+        @Path("workspaceId") workspaceId: String
+    ): Response<RiskModelStatusDto>
+
     @PATCH("workspaces/{workspaceId}/tasks/{taskId}")
     suspend fun updateTaskStatus(
         @Path("workspaceId") workspaceId: String,

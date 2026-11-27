@@ -11,6 +11,8 @@ import { SettingsModal } from '@/components/settings/SettingsModal';
 import { TaskDetailModal } from '@/components/kanban/TaskDetailModal';
 import { Navbar } from '@/components/layout/Navbar';
 import { CreateProjectModal } from '@/components/projects/CreateProjectModal';
+import { RiskModelModal } from '@/components/workspaces/RiskModelModal';
+import type { RiskModelStatus } from '@/lib/risk';
 import { useAuthStore } from '@/store/useAuthStore';
 
 interface Project { id: string; name: string; }
@@ -44,6 +46,8 @@ export default function WorkspaceDashboard() {
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [showProjectModal, setShowProjectModal] = useState(false);
   const [activeTaskId, setActiveTaskId] = useState<string | null>(null);
+  const [showRiskModelModal, setShowRiskModelModal] = useState(false);
+  const [riskModelStatus, setRiskModelStatus] = useState<RiskModelStatus | null>(null);
 
 
 
@@ -98,7 +102,9 @@ export default function WorkspaceDashboard() {
         projectId: selectedProject.id,
         priority: taskData.priority,
         assigneeId: taskData.assigneeId || undefined,
-        dueDate: taskData.dueDate ? new Date(taskData.dueDate).toISOString() : undefined,
+        // The form provides a calendar date (YYYY-MM-DD); send it unchanged so the
+        // API stores it as a date-only due date ending in the workspace time zone.
+        dueDate: taskData.dueDate || undefined,
       });
       setShowTaskModal(false);
       fetchTasks(workspaceId, selectedProject.id);
@@ -131,6 +137,11 @@ export default function WorkspaceDashboard() {
         setCurrentUserRole(currentWs.role); // <-- Kullanıcının bu workspace'teki rolü set ediliyor
         fetchProjects(currentWs.id);
         fetchMembers(currentWs.id);
+        // Workspace-level risk state for the task panel; optional.
+        api
+          .get<RiskModelStatus>(`/workspaces/${currentWs.id}/risk-model`)
+          .then((res) => setRiskModelStatus(res.data))
+          .catch(() => setRiskModelStatus(null));
       } catch (err: any) {
         setError('Failed to initialize workspace.');
         setLoading(false);
@@ -168,6 +179,17 @@ export default function WorkspaceDashboard() {
       <div className="max-w-7xl mx-auto w-full p-6 space-y-6 flex-1 flex flex-col">
         
         <Alert message={error} type="error" />
+
+        {workspaceId && (
+          <div className="flex justify-end">
+            <button
+              onClick={() => setShowRiskModelModal(true)}
+              className="text-xs text-zinc-400 hover:text-white border border-zinc-800 rounded-md px-3 py-1.5"
+            >
+              Delay-risk model
+            </button>
+          </div>
+        )}
 
         {!selectedProject ? (
           <div className="text-center py-16 border border-dashed border-zinc-800 rounded-lg space-y-3">
@@ -216,7 +238,18 @@ export default function WorkspaceDashboard() {
           onClose={() => setShowSettingsModal(false)}
         />
 
+        {workspaceId && (
+          <RiskModelModal
+            isOpen={showRiskModelModal}
+            onClose={() => setShowRiskModelModal(false)}
+            workspaceId={workspaceId}
+            canManage={isOwnerOrAdmin}
+            onStatusChange={setRiskModelStatus}
+          />
+        )}
+
         <TaskDetailModal
+          riskModelStatus={riskModelStatus}
           taskId={activeTaskId}
           workspaceId={workspaceId || ''}
           currentUserId={currentUserId}

@@ -41,4 +41,9 @@ export class UpdateTaskDto {
   @IsInt()
   @Min(0)
   version!: number;
+
+  /** Time the change was made on a client while offline (informational). */
+  @IsDateString()
+  @IsOptional()
+  clientOccurredAt?: string;
 }

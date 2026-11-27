@@ -11,8 +11,11 @@ COPY --from=wheels /wheels /wheels
 COPY requirements.txt .
 RUN pip install --no-cache-dir --no-index --find-links=/wheels -r requirements.txt \
     && rm -rf /wheels
-COPY main.py ./main.py
-# No model is shipped; models/ is created for validated artifacts mounted later.
+COPY main.py feature_spec.json ./
+COPY training/ ./training/
+# No model is shipped. Workspace models are written to MODELS_DIR by training
+# (mount a persistent volume there).
+ENV MODELS_DIR=/app/models
 RUN mkdir -p /app/models \
     && useradd --create-home --uid 10001 appuser \
     && chown -R appuser:appuser /app

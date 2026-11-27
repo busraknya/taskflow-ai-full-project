@@ -24,7 +24,9 @@ export function CreateWorkspaceModal({ isOpen, onClose, onCreated, onError, api 
     onError('');
 
     try {
-      await api.post('/workspaces', { name, slug });
+      // Date-only due dates end at midnight in the workspace time zone.
+      const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      await api.post('/workspaces', { name, slug, ...(timezone ? { timezone } : {}) });
       setName('');
       setSlug('');
       onCreated();

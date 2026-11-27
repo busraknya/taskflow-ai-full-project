@@ -39,6 +39,11 @@ services:
       dockerfile: Dockerfile
     expose:
       - "8000"
+    environment:
+      MODELS_DIR: /app/models
+    volumes:
+      # Workspace risk models, training reports and the active-model pointer.
+      - ml-models:/app/models
     restart: unless-stopped
 
   migrate:
@@ -75,6 +80,16 @@ services:
       SMTP_USER: ${SMTP_USER:-}
       SMTP_PASSWORD: ${SMTP_PASSWORD:-}
       SMTP_FROM: ${SMTP_FROM:-}
+      # Risk-model readiness and training schedule (configurable hypotheses).
+      RISK_READINESS_MIN_TASKS: ${RISK_READINESS_MIN_TASKS:-300}
+      RISK_READINESS_MIN_PER_CLASS: ${RISK_READINESS_MIN_PER_CLASS:-50}
+      RISK_READINESS_MIN_MINORITY_SHARE: ${RISK_READINESS_MIN_MINORITY_SHARE:-0.05}
+      RISK_READINESS_MIN_SPAN_DAYS: ${RISK_READINESS_MIN_SPAN_DAYS:-90}
+      RISK_READINESS_MIN_TEST_TASKS: ${RISK_READINESS_MIN_TEST_TASKS:-250}
+      RISK_READINESS_MIN_TEST_MINORITY: ${RISK_READINESS_MIN_TEST_MINORITY:-20}
+      RISK_READINESS_MIN_GROUPS: ${RISK_READINESS_MIN_GROUPS:-3}
+      RISK_TRAINING_MIN_DAYS: ${RISK_TRAINING_MIN_DAYS:-30}
+      RISK_TRAINING_MIN_GROWTH: ${RISK_TRAINING_MIN_GROWTH:-0.2}
     ports:
       - "4000:4000"
     depends_on:
@@ -113,3 +128,4 @@ services:
 volumes:
   postgres_data:
   redis_data:
+  ml-models:

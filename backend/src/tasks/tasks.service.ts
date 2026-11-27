@@ -7,13 +7,18 @@ import { EventEmitter2 } from '@nestjs/event-emitter';
 import { InjectQueue } from '@nestjs/bullmq';
 import type { Queue } from 'bullmq';
 import { describeError } from '../common/logging/log-sanitizer';
+import { parseDueDateInput } from '../task-events/due-date';
+import {
+  diffTaskState,
+  toEventRows,
+  toHistoryState,
+} from '../task-events/task-history';
 import {
   CURRENT_RISK_ASSESSMENT_INCLUDE,
-  RISK_ASSESSMENT_DELAY_MS,
-  RISK_ASSESSMENT_JOB,
+  enqueueRiskAssessment,
   RISK_ASSESSMENT_QUEUE,
-  RiskAssessmentJobData,
   riskAssessmentJobId,
+  RiskQueueJobData,
 } from '../ai/risk-assessment.queue';
 
 @Injectable()
@@ -25,7 +30,7 @@ export class TasksService {
     private auditService: AuditService,
     private eventEmitter: EventEmitter2,
     @InjectQueue(RISK_ASSESSMENT_QUEUE)
-    private riskAssessmentQueue: Queue<RiskAssessmentJobData>,
+    private riskAssessmentQueue: Queue<RiskQueueJobData>,
   ) {}
 
   /**
@@ -37,30 +42,18 @@ export class TasksService {
     workspaceId: string;
     version: number;
   }): void {
-    this.riskAssessmentQueue
-      .add(
-        RISK_ASSESSMENT_JOB,
-        {
-          taskId: task.id,
-          workspaceId: task.workspaceId,
-          taskVersion: task.version,
-        },
-        {
-          jobId: riskAssessmentJobId(task.id, task.version),
-          delay: RISK_ASSESSMENT_DELAY_MS,
-          attempts: 3,
-          backoff: { type: 'exponential', delay: 10_000 },
-          removeOnComplete: { age: 24 * 3600, count: 1000 },
-          removeOnFail: { age: 7 * 24 * 3600, count: 1000 },
-        },
-      )
-      .catch((error: unknown) => {
+    enqueueRiskAssessment(
+      this.riskAssessmentQueue,
+      { taskId: task.id, workspaceId: task.workspaceId, taskVersion: task.version },
+      riskAssessmentJobId(task.id, task.version),
+      (error) => {
         const { summary, stack } = describeError(error);
         this.logger.error(
           `Failed to schedule risk assessment for task ${task.id}: ${summary}`,
           stack,
         );
-      });
+      },
+    );
   }
 
   async create(workspaceId: string, userId: string, dto: CreateTaskDto) {
@@ -86,17 +79,39 @@ export class TasksService {
       }
     }
 
-    const task = await this.prisma.task.create({
-      data: {
-        workspaceId,
-        projectId: dto.projectId,
-        title: dto.title,
-        description: dto.description,
-        status: dto.status || 'TODO',
-        priority: dto.priority || 0,
-        assigneeId: dto.assigneeId,
-        dueDate: dto.dueDate ? new Date(dto.dueDate) : undefined,
-      },
+    const due = parseDueDateInput(dto.dueDate || undefined);
+    const status = dto.status || 'TODO';
+    const now = new Date();
+
+    // The task and its CREATED event are written atomically (TaskEvent).
+    const task = await this.prisma.$transaction(async (tx) => {
+      const created = await tx.task.create({
+        data: {
+          workspaceId,
+          projectId: dto.projectId,
+          title: dto.title,
+          description: dto.description,
+          status,
+          priority: dto.priority || 0,
+          assigneeId: dto.assigneeId,
+          dueDate: due?.dueDate ?? undefined,
+          dueDateIsDateOnly: due?.dueDateIsDateOnly ?? false,
+          completedAt: status === 'DONE' ? now : null,
+        },
+      });
+      await tx.taskEvent.createMany({
+        data: toEventRows(
+          [
+            {
+              type: 'CREATED',
+              oldValue: null,
+              newValue: { ...toHistoryState(created, 0) },
+            },
+          ],
+          { workspaceId, taskId: created.id, actorId: userId, occurredAt: now },
+        ),
+      });
+      return created;
     });
 
     await this.auditService.log({
@@ -188,27 +203,79 @@ export class TasksService {
       }
     }
 
-    // Compare-and-swap: the version check and increment must be one atomic DB operation.
-    const updateResult = await this.prisma.task.updateMany({
-      where: {
-        id: taskId,
-        workspaceId,
-        deletedAt: null,
-        version: dto.version,
-      },
-      data: {
-        title: dto.title,
-        description: dto.description,
-        status: dto.status,
-        priority: dto.priority,
-        assigneeId: dto.assigneeId,
-        dueDate: dto.dueDate !== undefined ? (dto.dueDate ? new Date(dto.dueDate) : null) : undefined,
-        position: dto.position,
-        version: { increment: 1 },
-      },
+    const due = parseDueDateInput(dto.dueDate);
+    const now = new Date();
+
+    // completedAt tracks the last transition to DONE and is cleared on reopen.
+    let completedAt: Date | null | undefined;
+    if (dto.status !== undefined && dto.status !== task.status) {
+      if (dto.status === 'DONE') completedAt = now;
+      else if (task.status === 'DONE') completedAt = null;
+    }
+
+    // `task` was read at dto.version; if the compare-and-swap below succeeds,
+    // these are exactly the values the update replaced.
+    const changes = diffTaskState(
+      toHistoryState(task, 0),
+      toHistoryState(
+        {
+          status: dto.status ?? task.status,
+          priority: dto.priority ?? task.priority,
+          assigneeId:
+            dto.assigneeId !== undefined ? dto.assigneeId : task.assigneeId,
+          dueDate: due ? due.dueDate : task.dueDate,
+          dueDateIsDateOnly: due
+            ? due.dueDateIsDateOnly
+            : task.dueDateIsDateOnly,
+          completedAt:
+            completedAt !== undefined ? completedAt : task.completedAt,
+        },
+        0,
+      ),
+    );
+
+    // Compare-and-swap and the matching TaskEvents commit or roll back together.
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const updateResult = await tx.task.updateMany({
+        where: {
+          id: taskId,
+          workspaceId,
+          deletedAt: null,
+          version: dto.version,
+        },
+        data: {
+          title: dto.title,
+          description: dto.description,
+          status: dto.status,
+          priority: dto.priority,
+          assigneeId: dto.assigneeId,
+          dueDate: due ? due.dueDate : undefined,
+          dueDateIsDateOnly: due ? due.dueDateIsDateOnly : undefined,
+          completedAt,
+          position: dto.position,
+          version: { increment: 1 },
+        },
+      });
+      if (updateResult.count !== 1) {
+        return false;
+      }
+      if (changes.length > 0) {
+        await tx.taskEvent.createMany({
+          data: toEventRows(changes, {
+            workspaceId,
+            taskId,
+            actorId: userId,
+            occurredAt: now,
+            clientOccurredAt: dto.clientOccurredAt
+              ? new Date(dto.clientOccurredAt)
+              : null,
+          }),
+        });
+      }
+      return true;
     });
 
-    if (updateResult.count !== 1) {
+    if (!updated) {
       const currentTask = await this.prisma.task.findFirst({
         where: { id: taskId, workspaceId, deletedAt: null },
         select: { version: true },

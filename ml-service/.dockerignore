@@ -2,7 +2,8 @@
 # Docker reads .dockerignore only from the context root, so the repository
 # root .dockerignore does NOT apply here.
 #
-# Required by the image and kept: requirements.txt, main.py.
+# Required by the image and kept: requirements.txt, main.py, feature_spec.json,
+# training/. Synthetic test data generation (synthetic_data.py) is excluded.
 # No model artifact is shipped; validated models are provided at runtime.
 
 # Secrets and local environment files
@@ -41,3 +42,4 @@ Dockerfile*
 *.swp
 .DS_Store
 *.log
+synthetic_data.py

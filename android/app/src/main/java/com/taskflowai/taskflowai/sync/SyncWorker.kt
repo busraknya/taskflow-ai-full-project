@@ -47,7 +47,11 @@ class SyncWorker(
                 val response = ApiClient.taskService.updateTaskStatus(
                     workspaceId = operation.workspaceId,
                     taskId = operation.entityId,
-                    request = UpdateTaskRequest(status = status, version = version),
+                    request = UpdateTaskRequest(
+                        status = status,
+                        version = version,
+                        clientOccurredAt = java.time.Instant.ofEpochMilli(operation.createdAt).toString(),
+                    ),
                     authorization = "Bearer ${session.accessToken}",
                 )
                 when {

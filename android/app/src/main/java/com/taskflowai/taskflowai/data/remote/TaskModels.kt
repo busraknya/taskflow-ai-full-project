@@ -9,7 +9,32 @@ data class AssigneeDto(
 data class RiskAssessmentDto(
     val riskLevel: String,
     val riskScore: Double?,
-    val factors: List<FactorDto>?
+    val factors: List<FactorDto>?,
+    val reason: String? = null
+)
+
+/** Workspace risk-model state (GET workspaces/{id}/risk-model); extra fields are ignored. */
+data class RiskModelStatusDto(
+    val trainingEnabled: Boolean,
+    val modelServiceAvailable: Boolean,
+    val readiness: ReadinessDto?,
+    val activeModel: ActiveModelDto?,
+    val lastRun: TrainingRunDto?
+)
+
+data class ReadinessDto(
+    val ready: Boolean,
+    val labelableTasks: Int,
+    val requiredTasks: Int
+)
+
+data class ActiveModelDto(
+    val modelVersion: String,
+    val calibrated: Boolean
+)
+
+data class TrainingRunDto(
+    val status: String
 )
 
 data class FactorDto(
@@ -32,5 +57,7 @@ data class TaskDto(
 
 data class UpdateTaskRequest(
     val status: String,
-    val version: Int
+    val version: Int,
+    // ISO-8601 time the change was made on the device while offline.
+    val clientOccurredAt: String? = null
 )

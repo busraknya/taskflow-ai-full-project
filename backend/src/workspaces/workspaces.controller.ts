@@ -9,11 +9,15 @@ import {
   Patch,
   Delete,
 } from '@nestjs/common';
-import type { AuthenticatedRequest } from '../common/types/authenticated-request';
+import type {
+  AuthenticatedRequest,
+  WorkspaceMemberRequest,
+} from '../common/types/authenticated-request';
 import { WorkspacesService } from './workspaces.service';
 import { CreateWorkspaceDto } from './dto/create-workspace.dto';
 import { InviteMemberDto } from './dto/invite-member.dto';
 import { UpdateMemberRoleDto } from './dto/update-member-role.dto';
+import { UpdateWorkspaceSettingsDto } from './dto/update-workspace-settings.dto';
 import { AuthGuard } from '@nestjs/passport';
 import { WorkspaceMemberGuard } from './guards/workspace-member.guard';
 import { AuthRateLimitGuard } from '../common/rate-limit/rate-limit.guard';
@@ -101,6 +105,20 @@ export class WorkspacesController {
   @UseGuards(WorkspaceMemberGuard)
   async findOne(@Param('workspaceId') workspaceId: string) {
     return this.workspacesService.findOne(workspaceId);
+  }
+
+  @Patch(':workspaceId')
+  @UseGuards(WorkspaceMemberGuard)
+  async updateSettings(
+    @Param('workspaceId') workspaceId: string,
+    @Req() req: WorkspaceMemberRequest,
+    @Body() dto: UpdateWorkspaceSettingsDto,
+  ) {
+    return this.workspacesService.updateSettings(
+      workspaceId,
+      req.membership.role,
+      dto,
+    );
   }
 
   @Get(':workspaceId/audit')

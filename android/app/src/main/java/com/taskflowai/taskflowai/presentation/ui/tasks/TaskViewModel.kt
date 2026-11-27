@@ -14,6 +14,7 @@ import com.taskflowai.taskflowai.data.local.PendingOperationEntity
 import com.taskflowai.taskflowai.data.local.TokenManager
 import com.taskflowai.taskflowai.data.remote.ApiClient
 import com.taskflowai.taskflowai.data.remote.ProjectDto
+import com.taskflowai.taskflowai.data.remote.RiskModelStatusDto
 import com.taskflowai.taskflowai.data.remote.TaskDto
 import com.taskflowai.taskflowai.data.remote.UpdateTaskRequest
 import com.taskflowai.taskflowai.sync.SyncScheduler
@@ -49,9 +50,24 @@ class TaskViewModel(
         private set
     var errorMessage by mutableStateOf<String?>(null)
         private set
+    var riskModelStatus by mutableStateOf<RiskModelStatusDto?>(null)
+        private set
 
     init {
         fetchProjects()
+        fetchRiskModelStatus()
+    }
+
+    /** Workspace-level risk state; optional, failures only hide the detail. */
+    private fun fetchRiskModelStatus() {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val response = ApiClient.taskService.getRiskModelStatus(workspaceId)
+                riskModelStatus = if (response.isSuccessful) response.body() else null
+            } catch (error: Exception) {
+                riskModelStatus = null
+            }
+        }
     }
 
     private fun fetchProjects() {

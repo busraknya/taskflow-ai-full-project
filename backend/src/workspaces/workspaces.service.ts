@@ -1,6 +1,7 @@
 import { Injectable, ConflictException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateWorkspaceDto } from './dto/create-workspace.dto';
+import { UpdateWorkspaceSettingsDto } from './dto/update-workspace-settings.dto';
 import { WorkspaceRole, MembershipStatus, Prisma } from '@prisma/client';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 
@@ -34,7 +35,7 @@ export class WorkspacesService {
 
     return this.prisma.$transaction(async (tx) => {
       const workspace = await tx.workspace.create({
-        data: { name: dto.name, slug: dto.slug },
+        data: { name: dto.name, slug: dto.slug, timezone: dto.timezone },
       });
 
       await tx.workspaceMembership.create({
@@ -48,6 +49,26 @@ export class WorkspacesService {
       });
 
       return workspace;
+    });
+  }
+
+  /** Workspace settings; only OWNER and ADMIN may change them. */
+  async updateSettings(
+    workspaceId: string,
+    actorRole: WorkspaceRole,
+    dto: UpdateWorkspaceSettingsDto,
+  ) {
+    if (
+      actorRole !== WorkspaceRole.OWNER &&
+      actorRole !== WorkspaceRole.ADMIN
+    ) {
+      throw new ForbiddenException(
+        'Only workspace owners and admins can change settings.',
+      );
+    }
+    return this.prisma.workspace.update({
+      where: { id: workspaceId },
+      data: { timezone: dto.timezone },
     });
   }
 

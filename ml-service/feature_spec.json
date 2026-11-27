@@ -1,0 +1,27 @@
+{
+  "version": "tf-risk-v1",
+  "description": "Risk features computed by the backend from TaskEvent history as known at prediction time. Must match backend/src/risk-features/feature-spec.ts.",
+  "features": [
+    { "name": "hours_to_deadline", "description": "Hours from prediction time to the effective deadline (date-only due dates end at midnight in the workspace time zone)." },
+    { "name": "deadline_is_date_only", "description": "1 when the due date is a calendar date, 0 for an explicit time." },
+    { "name": "task_age_hours", "description": "Hours since the task was created." },
+    { "name": "deadline_lead_hours", "description": "Hours between when the current due date was set and the deadline." },
+    { "name": "status_todo", "description": "1 when the status is TODO." },
+    { "name": "status_in_progress", "description": "1 when the status is IN_PROGRESS." },
+    { "name": "status_in_review", "description": "1 when the status is IN_REVIEW." },
+    { "name": "hours_in_status", "description": "Hours since the last status change (or creation)." },
+    { "name": "status_change_count", "description": "Number of status changes." },
+    { "name": "reopen_count", "description": "Number of transitions out of DONE." },
+    { "name": "due_date_change_count", "description": "Number of due-date changes after creation." },
+    { "name": "postpone_count", "description": "Number of due-date changes that moved the deadline later." },
+    { "name": "has_assignee", "description": "1 when the task is assigned." },
+    { "name": "assignee_change_count", "description": "Number of assignee changes after creation." },
+    { "name": "assignee_open_tasks", "description": "Other open tasks assigned to the same person at prediction time." },
+    { "name": "assignee_overdue_tasks", "description": "Other open tasks of the same person whose deadline had passed at prediction time." },
+    { "name": "comment_count", "description": "Comments on the task at prediction time." },
+    { "name": "comments_last_7d", "description": "Comments added in the 7 days before prediction time." },
+    { "name": "events_last_7d", "description": "Task events in the 7 days before prediction time." },
+    { "name": "hours_since_last_event", "description": "Hours since the most recent task event." },
+    { "name": "priority", "description": "Task priority (0-3)." }
+  ]
+}

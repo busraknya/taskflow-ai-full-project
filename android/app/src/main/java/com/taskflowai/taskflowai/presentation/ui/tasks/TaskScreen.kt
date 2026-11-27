@@ -115,9 +115,13 @@ fun TaskScreen(
                 Spacer(modifier = Modifier.height(8.dp))
             }
 
-            // Honest risk state: no level is shown unless a model produced one.
-            if (!isLoading && tasks.isNotEmpty() && tasks.none { currentRiskLevel(it.riskAssessments) != null }) {
-                Text(RISK_UNAVAILABLE_MESSAGE, color = Color(0xFF71717A), fontSize = 10.sp)
+            // Honest risk state: no level is shown unless this workspace's model produced one.
+            val riskMessage = workspaceRiskMessage(
+                viewModel.riskModelStatus,
+                tasks.any { currentRiskLevel(it.riskAssessments) != null }
+            )
+            if (!isLoading && tasks.isNotEmpty() && riskMessage != null) {
+                Text(riskMessage, color = Color(0xFF71717A), fontSize = 10.sp)
                 Spacer(modifier = Modifier.height(8.dp))
             }
 

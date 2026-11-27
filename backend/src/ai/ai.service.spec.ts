@@ -8,13 +8,16 @@ jest.mock('@nestjs/axios', () => ({ HttpService: class HttpService {} }));
 
 import type { HttpService } from '@nestjs/axios';
 import { AiService } from './ai.service';
+import {
+  FEATURE_NAMES,
+  FEATURE_SPEC_VERSION,
+  FeatureVector,
+} from '../risk-features/feature-spec';
 
-const FEATURES = {
-  days_until_due: 1,
-  assignee_active_task_count: 4,
-  comment_count: 0,
-  priority: 3,
-};
+const FEATURES = Object.fromEntries(
+  FEATURE_NAMES.map((name) => [name, 1]),
+) as FeatureVector;
+const ITEMS = [{ taskId: 'task-1', features: FEATURES }];
 
 function httpError(status: number, data: unknown): AxiosError {
   const config = { headers: new AxiosHeaders() };
@@ -44,19 +47,23 @@ describe('AiService', () => {
 
   beforeEach(() => jest.clearAllMocks());
 
-  it('returns the prediction of a loaded model', async () => {
+  it('sends the workspace, feature spec version and items to /predict/batch', async () => {
     const prediction = {
-      risk_level: 'MEDIUM',
-      risk_score: null,
-      model_version: 'ws-model-1',
-      factors: [],
+      modelVersion: 'ws-model-1',
+      results: [{ taskId: 'task-1', riskLevel: 'MEDIUM', probability: null }],
     };
     http.post.mockReturnValue(of({ data: prediction }));
 
-    await expect(service.assessTaskRisk(FEATURES)).resolves.toEqual(prediction);
+    await expect(service.predictBatch('ws-1', ITEMS)).resolves.toEqual(
+      prediction,
+    );
     expect(http.post).toHaveBeenCalledWith(
-      'http://ml-service:8000/predict',
-      FEATURES,
+      'http://ml-service:8000/predict/batch',
+      {
+        workspaceId: 'ws-1',
+        featureSpecVersion: FEATURE_SPEC_VERSION,
+        items: ITEMS,
+      },
     );
   });
 
@@ -65,7 +72,7 @@ describe('AiService', () => {
       throwError(() => httpError(503, { detail: 'MODEL_UNAVAILABLE' })),
     );
 
-    await expect(service.assessTaskRisk(FEATURES)).resolves.toBeNull();
+    await expect(service.predictBatch('ws-1', ITEMS)).resolves.toBeNull();
   });
 
   it.each([
@@ -80,6 +87,6 @@ describe('AiService', () => {
   ])('rethrows %s so the caller can retry', async (_label, error) => {
     http.post.mockReturnValue(throwError(() => error));
 
-    await expect(service.assessTaskRisk(FEATURES)).rejects.toBe(error);
+    await expect(service.predictBatch('ws-1', ITEMS)).rejects.toBe(error);
   });
 });
