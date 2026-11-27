@@ -257,6 +257,20 @@ Redis backs the background-job queue and all rate-limit counters, so it is a pro
 - Set `REDIS_PASSWORD` (Compose then starts Redis with `requirepass`); with an empty value Redis runs without authentication.
 - If Redis is unavailable, authentication endpoints (login, register, refresh, logout) and sensitive operations (password change, invitations) return `503`; other API requests continue. Once access tokens expire, web users cannot refresh their session until Redis is back. Plan Redis availability and monitoring accordingly.
 
+### Health checks
+
+The backend exposes two unauthenticated health endpoints. They are excluded from rate limiting so that probes never depend on the limiter.
+
+| Endpoint | Purpose | Responses |
+|---|---|---|
+| `GET /api/v1/health/live` | Liveness: the backend process is running and serving HTTP. Does not contact PostgreSQL or Redis. | `200 {"status":"ok"}` |
+| `GET /api/v1/health/ready` | Readiness: PostgreSQL (`SELECT 1`) and Redis (`PING`) are reachable. Both checks run in parallel with a 2-second timeout each. | `200 {"status":"ok","checks":{"database":"up","redis":"up"}}` or `503` with code `SERVICE_NOT_READY` and `details.checks` showing which dependency is `down` |
+
+- `GET /api/v1` is kept for existing monitors and returns the same response as liveness.
+- Responses only report `up` or `down` per dependency; connection errors are logged on the server without hosts or credentials and are never returned to clients.
+- The ML service is not part of readiness: when it is unavailable, tasks still work and risk assessments are recorded as `UNAVAILABLE`.
+- The Compose backend health check uses the readiness endpoint, so `docker compose up --wait` and the frontend's `depends_on` wait until PostgreSQL and Redis are reachable. Docker does not restart unhealthy containers automatically; when using an orchestrator such as Kubernetes, use `/health/live` for liveness probes and `/health/ready` for readiness probes.
+
 ### Invitation links
 
 `FRONTEND_URL` is the base of the link in invitation emails (`<FRONTEND_URL>/workspaces`). It defaults to `http://localhost:3000`, so set it to the public HTTPS web-app URL. Links that are not absolute `http`/`https` URLs are omitted from emails.
@@ -282,7 +296,7 @@ A short reference of the implemented controls. Current verification status and o
 
 | Policy | Limit | Key | If Redis is unavailable |
 |---|---|---|---|
-| Baseline, every route except `GET /api/v1` | 600 / minute | client IP | allowed, logged |
+| Baseline, every route except the health endpoints (`GET /api/v1`, `/api/v1/health/live`, `/api/v1/health/ready`) | 600 / minute | client IP | allowed, logged |
 | Authenticated reads (`GET`, `HEAD`, `OPTIONS`) | 300 / minute | user | allowed, logged |
 | Authenticated writes | 120 / minute | user | allowed, logged |
 | Auth endpoints and invitation creation | 10 / minute per route | client IP | `503` |
@@ -329,6 +343,19 @@ All paths are relative to `/api/v1`. Web clients use the refresh cookie; mobile 
 | `INVALID_CURRENT_PASSWORD` | 401 | Password change with a wrong current password |
 | `RATE_LIMITED` | 429 | Rate limit exceeded; see `Retry-After` |
 | — | 503 | Rate limiter unavailable on a fail-closed endpoint |
+
+## Input length limits
+
+The API rejects longer values with `400 Bad Request` (code `Bad Request`); the offending field is listed in `details.fields`, for example `title must be shorter than or equal to 200 characters`.
+
+| Field | Maximum length | Applies to |
+|---|---|---|
+| Task title | 200 characters | Task create and update |
+| Task description | 10,000 characters | Task create and update |
+| Project name | 100 characters | Project create |
+| Comment body | 5,000 characters | Comment create |
+
+Lengths are counted as JavaScript string length, so some characters such as emoji count as two.
 
 ## Android client
 
