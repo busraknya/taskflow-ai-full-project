@@ -1,12 +1,18 @@
-import { IsString, IsUUID, IsOptional, IsInt, Min, Max, IsDateString, IsEnum } from 'class-validator';
+import { IsString, IsUUID, IsOptional, IsInt, Min, Max, IsDateString, IsEnum, MaxLength } from 'class-validator';
 import { TaskStatus } from '@prisma/client';
+import {
+  TASK_DESCRIPTION_MAX_LENGTH,
+  TASK_TITLE_MAX_LENGTH,
+} from './create-task.dto';
 
 export class UpdateTaskDto {
   @IsString()
+  @MaxLength(TASK_TITLE_MAX_LENGTH)
   @IsOptional()
   title?: string;
 
   @IsString()
+  @MaxLength(TASK_DESCRIPTION_MAX_LENGTH)
   @IsOptional()
   description?: string;
 
