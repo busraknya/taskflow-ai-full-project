@@ -127,7 +127,7 @@ TaskFlow'u adım adım geliştiriyoruz. Kodda bulunan bir özellik ile test edil
 - **Web application:** Next.js, TypeScript, and Tailwind CSS.
 - **Backend API:** NestJS, Prisma, and PostgreSQL.
 - **Background jobs:** Redis and BullMQ.
-- **ML service:** FastAPI and scikit-learn. No model is shipped: the service starts without one, `GET /health` reports `"model_loaded": false`, and `POST /predict` returns `503 MODEL_UNAVAILABLE`. The backend computes risk asynchronously through a BullMQ queue, so task requests never wait for the ML service.
+- **ML service:** FastAPI and scikit-learn. No model is shipped: the service starts without one, `GET /health` reports `"model_loaded": false`, and `POST /predict` / `POST /predict/batch` return `503 MODEL_UNAVAILABLE`. The backend computes risk asynchronously through a BullMQ queue (after task and comment changes, and for all open tasks daily at 02:00 UTC), so task requests never wait for the ML service. Inputs follow the versioned feature contract in `ml-service/feature_spec.json`. Each workspace can have its own model, trained on its own history and activated only after it passes an evaluation gate, stored under `MODELS_DIR` with rollback; see `ml-service/MODEL_CARD.md`.
 - **Android client:** Kotlin and Jetpack Compose, with Room-backed offline operation.
 
 The Docker Compose stack starts PostgreSQL, Redis, the ML API, the backend API, and the web frontend. Database migrations run through a dedicated one-shot Compose service before the backend starts.
@@ -357,6 +357,35 @@ The API rejects longer values with `400 Bad Request` (code `Bad Request`); the o
 
 Lengths are counted as JavaScript string length, so some characters such as emoji count as two.
 
+## Task due dates, workspace time zone and task history
+
+- `dueDate` on task create/update accepts either a calendar date (`YYYY-MM-DD`) or an ISO 8601 date-time. A calendar date is stored as UTC midnight with `dueDateIsDateOnly: true` and is due at the end of that day in the workspace time zone; a date-time is an exact deadline. Send `null` to clear the due date.
+- Each workspace has a `timezone` (IANA name such as `Europe/Istanbul`, default `UTC`). It can be set on `POST /workspaces` and changed by owners and admins with `PATCH /workspaces/:workspaceId` `{ timezone }`; other members receive `403`.
+- Task changes (status, due date, assignee, priority) and comment additions/deletions are recorded in an append-only `TaskEvent` history in the same database transaction as the change. Offline Android changes include the device time as `clientOccurredAt`; the server time remains authoritative. The history is the foundation for workspace-local model training and is not exposed through the API yet.
+- Upgrading: the migration treats existing due dates as calendar dates and backfills history from audit records plus one snapshot per task.
+
+## Delay-risk model (per workspace)
+
+No model is shipped. Each workspace can learn delay risk from its own task history, on your server, after an owner or admin turns training on.
+
+| Endpoint (relative to `/api/v1`) | Who | Purpose |
+|---|---|---|
+| `GET /workspaces/:workspaceId/risk-model` | Any member | Training on/off, data readiness, active model summary, last training run |
+| `PATCH /workspaces/:workspaceId/risk-model` `{ trainingEnabled }` | Owner, admin | Turn training on or off. Turning it off stops predictions immediately and deactivates the model. |
+| `POST /workspaces/:workspaceId/risk-model/train` | Owner, admin | Queue a training run now (`202`); refused with `409` while disabled or while a run is in progress |
+| `POST /workspaces/:workspaceId/risk-model/rollback` | Owner, admin | Reactivate the previous model (`409` if there is none) |
+
+- **Readiness** is checked every night at 03:00 UTC for every workspace, and right after training is enabled. A workspace is ready when all of these hold (defaults, configurable through the `RISK_*` variables in `.env.example`):
+  - at least 300 tasks with a known outcome, including at least 50 in the smaller outcome group (at least 5% of all);
+  - at least 90 days of history;
+  - at least 250 such tasks in the last 30 days, of which at least 20 are in the smaller group;
+  - at least 3 assignees or projects.
+
+  The 250-task evaluation period follows the measured power of the evaluation gate. With far fewer recent tasks, a real signal is rarely confirmed; see `ml-service/MODEL_CARD.md`.
+- **Training** runs automatically when a workspace with training enabled is ready, for the first time and then at most monthly once outcome-known tasks have grown by 20%. A model is activated only if it passes the evaluation gate, otherwise the current state is kept. Every run, including rejected ones, is recorded.
+- **Predictions** are recomputed after task and comment changes and daily at 02:00 UTC. The web app and Android app show the same states: collecting data (with progress), no validated model yet, the level from the workspace's model (marked low confidence when it is not calibrated), or why there is no prediction for a task.
+- **Storage:** models are stored in the `ml-models` Docker volume. Include it in backups if you want to keep trained models; without it, models are retrained from task history on the next scheduled run. Models of deleted workspaces are removed nightly.
+
 ## Android client
 
 The Android project is under `android/`. Debug builds use the development API configuration; release builds require an HTTPS API base URL. Configure the release URL using the Gradle property documented in `android/app/build.gradle.kts`, then build and sign release artifacts with your own keystore. Never commit signing keys or passwords.
@@ -369,7 +398,8 @@ Run the relevant checks from each subproject when changing code. A passing CI ru
 
 ## Known limitations
 
-- No task-risk model is shipped, so no risk levels are shown yet. Risk assessments written by the removed demonstration model (`v1`) in existing databases are hidden by the API.
+- No task-risk model is shipped. A workspace shows risk levels only after an owner or admin enables training and a model trained on that workspace's own history passes evaluation; small or new workspaces see "collecting data" instead. Risk assessments written by the removed demonstration model (`v1`) are hidden by the API.
+- The ML service's management endpoints (`/train`, `/models/...`) have no authentication of their own. They are reachable only inside the Compose network (the service is not published), so do not expose port 8000.
 - Workspace invitations currently target registered accounts. Acceptance and seven-day expiry are implemented; browser-flow and SMTP delivery verification are still required. The invite response is identical for registered and unregistered addresses, but a pending invitation row is created (and shown in the member list) only for registered accounts, and response-time differences may also reveal whether an account exists. Partial account enumeration by workspace admins therefore remains possible.
 - The per-account login limit (20 attempts per 15 minutes) also counts failed attempts made by others: an attacker who knows an email address can keep that account's login blocked. Existing sessions are not affected.
 - Redis is required for authentication: while it is unavailable, login, refresh, logout, password change, and invitations return `503`, and the first authentication request after Redis recovers can still fail once.
