@@ -12,7 +12,7 @@ export class ProjectsService {
     });
 
     if (!membership || (membership.role !== 'OWNER' && membership.role !== 'ADMIN')) {
-      throw new ForbiddenException('Bu workspace içinde proje oluşturma yetkiniz yok.');
+      throw new ForbiddenException('You do not have permission to create projects in this workspace.');
     }
 
     return this.prisma.project.create({
@@ -42,7 +42,7 @@ export class ProjectsService {
     });
 
     if (!membership || (membership.role !== 'OWNER' && membership.role !== 'ADMIN')) {
-      throw new ForbiddenException('Bu projeyi silme yetkiniz yok.');
+      throw new ForbiddenException('You do not have permission to delete this project.');
     }
 
     const project = await this.prisma.project.findFirst({
@@ -50,7 +50,7 @@ export class ProjectsService {
     });
 
     if (!project) {
-      throw new NotFoundException('Proje bulunamadı.');
+      throw new NotFoundException('Project not found.');
     }
 
     return this.prisma.project.update({

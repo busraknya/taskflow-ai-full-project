@@ -1,0 +1,55 @@
+# Secrets and local environment
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.keystore
+*.jks
+
+# Node / Next.js
+node_modules/
+**/node_modules/
+.next/
+**/.next/
+dist/
+**/dist/
+coverage/
+**/coverage/
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Android / Gradle / IDE
+.gradle/
+**/.gradle/
+**/build/
+**/.idea/
+*.iml
+local.properties
+captures/
+.externalNativeBuild/
+.cxx/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+*.swp
+*.swo
+
+# Logs and temporary files
+*.log
+tmp/
+temp/

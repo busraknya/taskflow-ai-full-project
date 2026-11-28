@@ -1,76 +1,67 @@
 'use client';
 
-interface Member {
-  id: string;
-  role: string;
-  status: string;
-  user: {
-    id: string;
-    fullName: string;
-    email: string;
-  };
-}
+import { ROLE_LABEL } from '@/lib/labels';
+import type { Member } from '@/lib/tasks';
+import { Avatar } from '@/components/ui/Avatar';
+import { Badge } from '@/components/ui/Badge';
+import { Button } from '@/components/ui/Button';
+import { Select } from '@/components/ui/Field';
 
-interface MemberListTableProps {
+interface MemberListProps {
   members: Member[];
-  onRoleChange: (membershipId: string, newRole: string) => void;
-  onRemove: (membershipId: string) => void;
-  isOwnerOrAdmin: boolean;
+  currentUserId: string | null;
+  /** Only owners change roles. */
+  canChangeRoles: boolean;
+  /** Owners and admins remove members; admins cannot remove owners. */
+  currentRole: string;
+  onRoleChange: (member: Member, role: string) => void;
+  onRemove: (member: Member) => void;
 }
 
-export function MemberListTable({ members, onRoleChange, onRemove, isOwnerOrAdmin }: MemberListTableProps) {
+export function MemberListTable({ members, currentUserId, canChangeRoles, currentRole, onRoleChange, onRemove }: MemberListProps) {
+  const canRemove = (m: Member) => (currentRole === 'OWNER' || (currentRole === 'ADMIN' && m.role !== 'OWNER')) && m.user.id !== currentUserId;
+
   return (
-    <div className="border border-zinc-800 rounded-lg overflow-hidden bg-zinc-900/20">
-      <table className="w-full text-left text-xs">
-        <thead className="bg-zinc-900/50 border-b border-zinc-800 text-zinc-400 uppercase font-mono text-[10px]">
-          <tr>
-            <th className="p-3">Name</th>
-            <th className="p-3">Email</th>
-            <th className="p-3">Role</th>
-            <th className="p-3">Status</th>
-            {isOwnerOrAdmin && <th className="p-3 text-right">Actions</th>}
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-zinc-800">
-          {members.map((m) => (
-            <tr key={m.id} className="hover:bg-zinc-900/30 transition-colors">
-              <td className="p-3 font-medium text-white">{m.user.fullName}</td>
-              <td className="p-3 text-zinc-400">{m.user.email}</td>
-              <td className="p-3">
-                {isOwnerOrAdmin ? (
-                  <select
-                    value={m.role}
-                    onChange={(e) => onRoleChange(m.id, e.target.value)}
-                    className="bg-zinc-800 text-zinc-200 font-mono px-2 py-1 rounded text-[10px] uppercase border border-zinc-700 focus:outline-none cursor-pointer"
-                  >
-                    <option value="OWNER">Owner</option>
-                    <option value="ADMIN">Admin</option>
-                    <option value="MEMBER">Member</option>
-                    <option value="VIEWER">Viewer</option>
-                  </select>
-                ) : (
-                  <span className="bg-zinc-800 text-zinc-300 font-mono px-2 py-0.5 rounded text-[10px] uppercase">
-                    {m.role}
-                  </span>
-                )}
-              </td>
-              <td className="p-3">
-                <span className="text-emerald-400 font-mono text-[10px]">● {m.status}</span>
-              </td>
-              {isOwnerOrAdmin && (
-                <td className="p-3 text-right">
-                  <button
-                    onClick={() => onRemove(m.id)}
-                    className="text-red-400 hover:text-red-300 transition-colors font-medium text-[11px] underline"
-                  >
-                    Remove
-                  </button>
-                </td>
-              )}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+    <section aria-labelledby="members-heading" className="flex flex-col gap-3">
+      <h2 id="members-heading" className="text-[13px] font-semibold text-fg">
+        Members <span className="font-normal text-fg-subtle tabular-nums">{members.length}</span>
+      </h2>
+      <ul className="divide-y divide-line rounded-card border border-line bg-surface">
+        {members.map((m) => (
+          <li key={m.id} className="flex flex-wrap items-center gap-3 px-4 py-3">
+            <Avatar name={m.user.fullName ?? m.user.email} />
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-medium text-fg">
+                {m.user.fullName ?? <span className="font-normal text-fg-muted italic">Invitation pending</span>}
+                {m.user.id === currentUserId && <span className="font-normal text-fg-subtle"> (you)</span>}
+              </p>
+              <p className="truncate text-[13px] text-fg-muted">{m.user.email}</p>
+            </div>
+            {m.status !== 'ACTIVE' && <Badge tone="warning">{m.status === 'PENDING' ? 'Pending' : m.status.toLowerCase()}</Badge>}
+            {canChangeRoles && m.role !== 'OWNER' ? (
+              <div className="w-32">
+                <label htmlFor={`role-${m.id}`} className="sr-only">
+                  Role for {m.user.fullName ?? m.user.email}
+                </label>
+                <Select id={`role-${m.id}`} value={m.role} onChange={(e) => onRoleChange(m, e.target.value)} className="h-8 text-[13px]">
+                  {['ADMIN', 'MEMBER', 'VIEWER'].map((r) => (
+                    <option key={r} value={r}>
+                      {ROLE_LABEL[r]}
+                    </option>
+                  ))}
+                </Select>
+              </div>
+            ) : (
+              <Badge tone={m.role === 'OWNER' ? 'accent' : 'neutral'}>{ROLE_LABEL[m.role] ?? m.role}</Badge>
+            )}
+            {canRemove(m) && (
+              <Button size="sm" variant="ghost" className="text-danger hover:bg-danger-soft hover:text-danger" onClick={() => onRemove(m)}>
+                Remove
+              </Button>
+            )}
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }

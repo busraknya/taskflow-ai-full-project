@@ -1,95 +1,107 @@
 'use client';
 
 import { useState } from 'react';
-import { theme } from '@/lib/theme';
+import { api } from '@/lib/api';
+import { getErrorMessage, type ApiErrorBody } from '@/lib/errors';
+import { Alert } from '@/components/ui/Alert';
+import { Button } from '@/components/ui/Button';
+import { Dialog } from '@/components/ui/Dialog';
+import { Field, Input } from '@/components/ui/Field';
 
-interface CreateModalProps {
-  isOpen: boolean;
+const toSlug = (value: string) =>
+  value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/(^-|-$)/g, '');
+
+interface CreateWorkspaceModalProps {
+  open: boolean;
   onClose: () => void;
-  onCreated: () => void;
-  onError: (msg: string) => void;
-  api: any;
+  onCreated: (slug: string) => void;
 }
 
-export function CreateWorkspaceModal({ isOpen, onClose, onCreated, onError, api }: CreateModalProps) {
+export function CreateWorkspaceModal({ open, onClose, onCreated }: CreateWorkspaceModalProps) {
   const [name, setName] = useState('');
   const [slug, setSlug] = useState('');
-  const [creating, setCreating] = useState(false);
+  const [slugEdited, setSlugEdited] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
 
-  if (!isOpen) return null;
+  const close = () => {
+    setError('');
+    onClose();
+  };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setCreating(true);
-    onError('');
-
+    setSaving(true);
+    setError('');
     try {
-      await api.post('/workspaces', { name, slug });
+      // Date-only due dates end at midnight in the workspace time zone.
+      const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      await api.post('/workspaces', { name, slug, ...(timezone ? { timezone } : {}) });
       setName('');
       setSlug('');
-      onCreated();
-      onClose();
-    } catch (err: any) {
-      onError(err.response?.data?.message || 'Failed to create workspace.');
+      setSlugEdited(false);
+      onCreated(slug);
+    } catch (err) {
+      setError(getErrorMessage((err as { response?: { data?: ApiErrorBody } }).response?.data));
     } finally {
-      setCreating(false);
+      setSaving(false);
     }
   };
 
   return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-      <div className={`w-full max-w-md ${theme.colors.bg.secondary} border ${theme.colors.border.primary} rounded-xl p-6 space-y-4 shadow-2xl`}>
-        <div className="flex justify-between items-center">
-          <h2 className="text-sm font-medium text-white">Create Workspace</h2>
-          <button onClick={onClose} className="text-zinc-400 hover:text-white text-xs">✕</button>
-        </div>
-
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className={`block text-xs font-medium ${theme.colors.text.secondary} mb-1.5`}>Workspace Name</label>
-            <input
-              type="text"
+    <Dialog
+      open={open}
+      onClose={close}
+      title="New workspace"
+      description="A workspace holds your team's projects, members and task history."
+      footer={
+        <>
+          <Button onClick={close}>Cancel</Button>
+          <Button variant="primary" type="submit" form="new-workspace-form" loading={saving}>
+            Create workspace
+          </Button>
+        </>
+      }
+    >
+      <form id="new-workspace-form" onSubmit={submit} className="flex flex-col gap-4">
+        <Alert message={error} />
+        <Field label="Name">
+          {(props) => (
+            <Input
+              {...props}
+              data-autofocus
               required
               value={name}
               onChange={(e) => {
                 setName(e.target.value);
-                setSlug(e.target.value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, ''));
+                if (!slugEdited) setSlug(toSlug(e.target.value));
               }}
-              className={`w-full ${theme.colors.bg.primary} border ${theme.colors.border.primary} rounded-md px-3 py-2 text-sm text-white focus:outline-none focus:${theme.colors.border.focus}`}
-              placeholder="Acme Inc."
+              placeholder="e.g. Acme Design Team"
             />
-          </div>
-
-          <div>
-            <label className={`block text-xs font-medium ${theme.colors.text.secondary} mb-1.5`}>Slug (URL friendly)</label>
-            <input
-              type="text"
-              required
-              value={slug}
-              onChange={(e) => setSlug(e.target.value)}
-              className={`w-full ${theme.colors.bg.primary} border ${theme.colors.border.primary} rounded-md px-3 py-2 text-sm text-white focus:outline-none focus:${theme.colors.border.focus} font-mono text-xs`}
-              placeholder="acme-inc"
-            />
-          </div>
-
-          <div className="flex justify-end space-x-2 pt-2">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-3 py-1.5 rounded-md text-xs text-zinc-400 hover:text-white transition-colors"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={creating}
-              className={`${theme.colors.accent.DEFAULT} text-xs font-medium px-4 py-1.5 rounded-md transition-colors disabled:opacity-50`}
-            >
-              {creating ? 'Creating...' : 'Create Workspace'}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+          )}
+        </Field>
+        <Field label="URL" hint="Lowercase letters, numbers and hyphens. Used in links to this workspace.">
+          {(props) => (
+            <div className="flex items-center rounded-control border border-line bg-subtle focus-within:border-accent">
+              <span className="pl-3 font-mono text-[13px] text-fg-subtle">/w/</span>
+              <Input
+                {...props}
+                required
+                pattern="[a-z0-9]+(-[a-z0-9]+)*"
+                value={slug}
+                onChange={(e) => {
+                  setSlugEdited(true);
+                  setSlug(e.target.value);
+                }}
+                className="border-0 bg-transparent pl-0.5 font-mono text-[13px] focus:ring-0"
+              />
+            </div>
+          )}
+        </Field>
+      </form>
+    </Dialog>
   );
 }

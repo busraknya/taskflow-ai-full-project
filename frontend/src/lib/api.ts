@@ -25,6 +25,24 @@ let failedQueue: Array<{
   reject: (err: any) => void;
 }> = [];
 
+const REFRESH_URL = `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api/v1'}/auth/refresh`;
+
+// Refresh token'lar tek kullanımlık. Başka bir sekme aynı token'ı bir an önce
+// yenilediyse backend REFRESH_TOKEN_ROTATED döner; tarayıcı yeni cookie'yi
+// kısa süre içinde alacağı için bir kez yeniden denenir.
+const requestRefresh = async (): Promise<string> => {
+  try {
+    const response = await axios.post(REFRESH_URL, {}, { withCredentials: true });
+    return response.data.accessToken;
+  } catch (err) {
+    const code = axios.isAxiosError(err) ? err.response?.data?.code : undefined;
+    if (code !== 'REFRESH_TOKEN_ROTATED') throw err;
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    const response = await axios.post(REFRESH_URL, {}, { withCredentials: true });
+    return response.data.accessToken;
+  }
+};
+
 const processQueue = (error: any, token: string | null = null) => {
   failedQueue.forEach((prom) => {
     if (error) {
@@ -62,14 +80,8 @@ api.interceptors.response.use(
 
       try {
         // Arka planda HttpOnly Cookie gönderilerek yeni access token istenir
-        const response = await axios.post(
-          `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api/v1'}/auth/refresh`,
-          {},
-          { withCredentials: true }
-        );
+        const newAccessToken = await requestRefresh();
 
-        const newAccessToken = response.data.accessToken;
-        
         // Yeni token'ı belleğe kaydet
         useAuthStore.getState().setAccessToken(newAccessToken);
 
@@ -77,12 +89,18 @@ api.interceptors.response.use(
 
         originalRequest.headers.Authorization = `Bearer ${newAccessToken}`;
         return api(originalRequest);
-      } catch (refreshError) {
+      } catch (refreshError: any) {
         processQueue(refreshError, null);
-        // Refresh de başarısız olduysa oturumu temizle ve login'e at
-        useAuthStore.getState().clearAuth();
-        if (typeof window !== 'undefined') {
-          window.location.href = '/login';
+
+        // Only a definitive authentication rejection means the refresh
+        // cookie is no longer valid. Network errors and 5xx responses are
+        // temporary; preserve the in-memory session and let later requests retry.
+        const status = refreshError.response?.status;
+        if (status === 401 || status === 403) {
+          useAuthStore.getState().clearAuth();
+          if (typeof window !== 'undefined') {
+            window.location.href = '/login';
+          }
         }
         return Promise.reject(refreshError);
       } finally {

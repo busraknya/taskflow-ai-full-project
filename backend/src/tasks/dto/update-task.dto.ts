@@ -1,12 +1,18 @@
-import { IsString, IsUUID, IsOptional, IsInt, Min, Max, IsDateString, IsEnum, IsNumber } from 'class-validator';
+import { IsString, IsUUID, IsOptional, IsInt, Min, Max, IsDateString, IsEnum, MaxLength } from 'class-validator';
 import { TaskStatus } from '@prisma/client';
+import {
+  TASK_DESCRIPTION_MAX_LENGTH,
+  TASK_TITLE_MAX_LENGTH,
+} from './create-task.dto';
 
 export class UpdateTaskDto {
   @IsString()
+  @MaxLength(TASK_TITLE_MAX_LENGTH)
   @IsOptional()
   title?: string;
 
   @IsString()
+  @MaxLength(TASK_DESCRIPTION_MAX_LENGTH)
   @IsOptional()
   description?: string;
 
@@ -32,6 +38,12 @@ export class UpdateTaskDto {
   @IsOptional()
   position?: number;
 
-  @IsNumber()
+  @IsInt()
+  @Min(0)
   version!: number;
+
+  /** Time the change was made on a client while offline (informational). */
+  @IsDateString()
+  @IsOptional()
+  clientOccurredAt?: string;
 }

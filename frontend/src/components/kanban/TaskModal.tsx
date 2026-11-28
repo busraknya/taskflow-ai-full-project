@@ -1,127 +1,114 @@
 'use client';
 
 import { useState } from 'react';
-import { theme } from '@/lib/theme';
+import { getErrorMessage, type ApiErrorBody } from '@/lib/errors';
+import { PRIORITY_LABEL } from '@/lib/labels';
+import type { Member } from '@/lib/tasks';
+import { Alert } from '@/components/ui/Alert';
+import { Button } from '@/components/ui/Button';
+import { Dialog } from '@/components/ui/Dialog';
+import { Field, Input, Select, Textarea } from '@/components/ui/Field';
 
-interface Member {
-  user: { id: string; fullName: string; email: string };
+export interface NewTask {
+  title: string;
+  description: string;
+  priority: number;
+  assigneeId: string;
+  dueDate: string;
 }
 
+const EMPTY: NewTask = { title: '', description: '', priority: 0, assigneeId: '', dueDate: '' };
+
 interface TaskModalProps {
-  isOpen: boolean;
+  open: boolean;
   onClose: () => void;
-  onSubmit: (taskData: { title: string; description: string; priority: number; assigneeId: string; dueDate: string }) => void;
+  /** Rejects with the API error; the form keeps its values. */
+  onSubmit: (task: NewTask) => Promise<void>;
   members: Member[];
 }
 
-export function TaskModal({ isOpen, onClose, onSubmit, members }: TaskModalProps) {
-  const [title, setTitle] = useState('');
-  const [description, setDescription] = useState('');
-  const [priority, setPriority] = useState(0);
-  const [assigneeId, setAssigneeId] = useState('');
-  const [dueDate, setDueDate] = useState('');
+export function TaskModal({ open, onClose, onSubmit, members }: TaskModalProps) {
+  const [task, setTask] = useState<NewTask>(EMPTY);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  const set = <K extends keyof NewTask>(key: K, value: NewTask[K]) => setTask((t) => ({ ...t, [key]: value }));
 
-  if (!isOpen) return null;
+  const close = () => {
+    setError('');
+    onClose();
+  };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    onSubmit({ title, description, priority: Number(priority), assigneeId, dueDate });
-    setTitle('');
-    setDescription('');
-    setPriority(0);
-    setAssigneeId('');
-    setDueDate('');
+    setSaving(true);
+    setError('');
+    try {
+      await onSubmit(task);
+      setTask(EMPTY);
+      onClose();
+    } catch (err) {
+      setError(getErrorMessage((err as { response?: { data?: ApiErrorBody } }).response?.data));
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-      <div className={`w-full max-w-md ${theme.colors.bg.secondary} border ${theme.colors.border.primary} rounded-xl p-6 space-y-4 shadow-2xl`}>
-        <div className="flex justify-between items-center">
-          <h2 className="text-sm font-medium text-white">Create New Task</h2>
-          <button onClick={onClose} className="text-zinc-400 hover:text-white text-xs">✕</button>
+    <Dialog
+      open={open}
+      onClose={close}
+      title="New task"
+      footer={
+        <>
+          <Button onClick={close}>Cancel</Button>
+          <Button variant="primary" type="submit" form="new-task-form" loading={saving}>
+            Create task
+          </Button>
+        </>
+      }
+    >
+      <form id="new-task-form" onSubmit={submit} className="flex flex-col gap-4">
+        <Alert message={error} />
+        <Field label="Title">
+          {(props) => (
+            <Input {...props} data-autofocus required maxLength={200} value={task.title} onChange={(e) => set('title', e.target.value)} placeholder="e.g. Review the onboarding emails" />
+          )}
+        </Field>
+        <Field label="Description" hint="Optional">
+          {(props) => <Textarea {...props} value={task.description} onChange={(e) => set('description', e.target.value)} />}
+        </Field>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <Field label="Priority">
+            {(props) => (
+              <Select {...props} value={task.priority} onChange={(e) => set('priority', Number(e.target.value))}>
+                {[3, 2, 0, 1].map((p) => (
+                  <option key={p} value={p}>
+                    {PRIORITY_LABEL[p]}
+                  </option>
+                ))}
+              </Select>
+            )}
+          </Field>
+          <Field label="Due date">
+            {(props) => <Input {...props} type="date" value={task.dueDate} onChange={(e) => set('dueDate', e.target.value)} />}
+          </Field>
         </div>
-
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className={`block text-xs font-medium ${theme.colors.text.secondary} mb-1.5`}>Task Title</label>
-            <input
-              type="text"
-              required
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              className={`w-full ${theme.colors.bg.primary} border ${theme.colors.border.primary} rounded-md px-3 py-2 text-sm text-white focus:outline-none`}
-              placeholder="Fix authentication bug..."
-            />
-          </div>
-
-          <div>
-            <label className={`block text-xs font-medium ${theme.colors.text.secondary} mb-1.5`}>Description</label>
-            <textarea
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              className={`w-full ${theme.colors.bg.primary} border ${theme.colors.border.primary} rounded-md px-3 py-2 text-sm text-white focus:outline-none`}
-              placeholder="Optional details..."
-              rows={2}
-            />
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className={`block text-xs font-medium ${theme.colors.text.secondary} mb-1.5`}>Priority (0-3)</label>
-              <select
-                value={priority}
-                onChange={(e) => setPriority(Number(e.target.value))}
-                className={`w-full ${theme.colors.bg.primary} border ${theme.colors.border.primary} rounded-md px-3 py-2 text-sm text-white focus:outline-none`}
-              >
-                <option value={0}>P0 - Normal</option>
-                <option value={1}>P1 - Low</option>
-                <option value={2}>P2 - Medium</option>
-                <option value={3}>P3 - Urgent</option>
-              </select>
-            </div>
-
-            <div>
-              <label className={`block text-xs font-medium ${theme.colors.text.secondary} mb-1.5`}>Due Date</label>
-              <input
-                type="date"
-                value={dueDate}
-                onChange={(e) => setDueDate(e.target.value)}
-                className={`w-full ${theme.colors.bg.primary} border ${theme.colors.border.primary} rounded-md px-3 py-2 text-sm text-white focus:outline-none`}
-              />
-            </div>
-          </div>
-
-          <div>
-            <label className={`block text-xs font-medium ${theme.colors.text.secondary} mb-1.5`}>Assignee</label>
-            <select
-              value={assigneeId}
-              onChange={(e) => setAssigneeId(e.target.value)}
-              className={`w-full ${theme.colors.bg.primary} border ${theme.colors.border.primary} rounded-md px-3 py-2 text-sm text-white focus:outline-none`}
-            >
+        <Field label="Assignee">
+          {(props) => (
+            <Select {...props} value={task.assigneeId} onChange={(e) => set('assigneeId', e.target.value)}>
               <option value="">Unassigned</option>
-              {members.map((m) => (
-                <option key={m.user.id} value={m.user.id}>{m.user.fullName} ({m.user.email})</option>
-              ))}
-            </select>
-          </div>
-
-          <div className="flex justify-end space-x-2 pt-2">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-3 py-1.5 rounded-md text-xs text-zinc-400 hover:text-white"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              className={`${theme.colors.accent.DEFAULT} text-xs font-medium px-4 py-1.5 rounded-md`}
-            >
-              Create Task
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+              {/* Pending invitees cannot be assigned until they accept. */}
+              {members
+                .filter((m) => m.status !== 'PENDING')
+                .map((m) => (
+                  <option key={m.user.id} value={m.user.id}>
+                    {m.user.fullName ?? m.user.email}
+                  </option>
+                ))}
+            </Select>
+          )}
+        </Field>
+      </form>
+    </Dialog>
   );
 }

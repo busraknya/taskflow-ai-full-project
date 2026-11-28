@@ -1,6 +1,6 @@
-> **`main` kapsam notu — 26 Kasım 2026:** Bu belge, `fix/go-live-blockers` dalındaki analiz belgesinin `main`'e yalnızca doküman olarak aktarılmış kopyasıdır (dal commit'i `01005bc`). 16–26 Kasım tarihli bölümlerde "düzeltildi", "kapandı", "kodda var" veya "doğrulandı" denen değişiklikler **`fix/go-live-blockers` dalında** uygulanmış ve test edilmiştir; dal henüz `main`'e merge edilmediği için bu düzeltmeler **`main`'in kodunda (`b5b4fb4`) mevcut değildir**. Bu tarihli bölümlerdeki README atıfları da dalın README'sine aittir; `main`'deki README bu bölümleri içermez. `main` için geçerli durum, belgenin sonundaki "Dal ve `main` durumu" tablosunda özetlenmiştir. İlk denetim bölümleri `main`'in mevcut koduna büyük ölçüde hâlâ uygundur.
+> **Güncel durum notu — 27 Kasım 2026:** C-1, H-1 ve M-5 `fix/go-live-blockers` dalında kapatıldı ve CI ile doğrulandı; ayrıntılar belgenin sonundaki **"27 Kasım 2026 — C-1, M-5 ve H-1 kapanışı"** bölümündedir. Güncel karar hâlâ **NO-GO**.
 
-> **Güncel durum notu — 26 Kasım 2026:** Bu sayfanın başındaki 18 Kasım bloğu ve sonraki tarihli bölümler tarihsel kayıttır; orada "açık" görünen bazı bulgular (refresh yarışı, parola sonrası oturum iptali, doğrudan ACTIVE davet, rate limit ve Helmet/CSP eksikliği) sonradan `fix/go-live-blockers` dalında kapatılmıştır; bu düzeltmeler henüz `main`'de değildir. En güncel değerlendirme ve kanıtlar için belgenin sonundaki **"26 Kasım 2026 — Güvenlik uygulamaları sonrası değerlendirme"** bölümüne bakın. Güncel karar: **NO-GO**.
+> **Güncel durum notu — 26 Kasım 2026:** Bu sayfanın başındaki 18 Kasım bloğu ve sonraki tarihli bölümler tarihsel kayıttır; orada "açık" görünen bazı bulgular (refresh yarışı, parola sonrası oturum iptali, doğrudan ACTIVE davet, rate limit ve Helmet/CSP eksikliği) sonradan kapatılmıştır. En güncel değerlendirme ve kanıtlar için belgenin sonundaki **"26 Kasım 2026 — Güvenlik uygulamaları sonrası değerlendirme"** bölümüne bakın. Güncel karar: **NO-GO**.
 
 > **Kaynak kod yeniden kontrolü — 18 Kasım 2026 (latest branch):**
 >
@@ -687,7 +687,7 @@ Bu run tamamlanmadan CI PASS denmeyecek. Backend lint non-blocking kalmaya devam
 
 # 26 Kasım 2026 — Güvenlik uygulamaları sonrası değerlendirme
 
-> Bu bölüm önceki tarihli bölümleri silmez veya değiştirmez. Dal: `fix/go-live-blockers`. Teknik ayrıntılar (politika değerleri, yapılandırma, API sözleşmesi) bu belgede tekrarlanmaz; `fix/go-live-blockers` dalındaki README.md içindeki "Production deployment notes", "Security controls" ve "Authentication API contract" bölümlerinde tutulur. Bu bölümler henüz `main`'deki README'de yoktur.
+> Bu bölüm önceki tarihli bölümleri silmez veya değiştirmez. Dal: `fix/go-live-blockers`. Teknik ayrıntılar (politika değerleri, yapılandırma, API sözleşmesi) bu belgede tekrarlanmaz; README.md içindeki "Production deployment notes", "Security controls" ve "Authentication API contract" bölümlerinde tutulur.
 
 ## Bu turda dala eklenen değişiklikler
 
@@ -710,7 +710,7 @@ Bu run tamamlanmadan CI PASS denmeyecek. Backend lint non-blocking kalmaya devam
 | Davet doğrudan ACTIVE üyelik veriyor (18 Kasım bloğu) | Kapandı (PENDING akışı önceki remediation commit'lerinde); gizlilik kuralları eklendi | `2b30009`; PostgreSQL E2E |
 | Rate limiting yok (§2.5) | Kapandı (kodda var, yerel E2E ile doğrulandı) | Önceki remediation + `20ecec7` |
 | Helmet/CSP/security headers yok (§2.5) | Kapandı (kodda var, tarayıcıda doğrulandı) | `20ecec7` |
-| Exception filter beklenmeyen `Error.message` değerini döndürüyor (§2.5) | **Açık** | `backend/src/common/filters/http-exception.filter.ts:47-48` |
+| Exception filter beklenmeyen `Error.message` değerini döndürüyor (§2.5) | **Açık** (26 Kasım); 27 Kasım'da `0802f3d` ile kapandı | `backend/src/common/filters/http-exception.filter.ts:47-48` (26 Kasım) |
 | Docker build context'ine yerel `.env` giriyor (SEC-04 denetim bulgusu; bu belgede daha önce bulgu olarak kayıtlı değildi) | Kapandı | `761f03a`; imaj içerik taraması |
 | ML Dockerfile tek aşamalı ve root çalışıyor (tarihsel bulgu) | Yalnız `.dockerignore` kısmı karşılandı; multi-stage build, non-root çalışma ve bind mount konuları yeniden değerlendirilmedi ve **kapanmış sayılmamalı** | `761f03a` (`ml-service/.dockerignore`) |
 
@@ -733,8 +733,8 @@ Bu kanıtlar gerçek tarayıcı ve Android kullanıcı yolculuklarını, SMTP te
 
 | ID | Önem | Bulgu | Durum |
 |---|---|---|---|
-| C-1 | Critical (yapılandırmaya bağlı) | `.env.example` içindeki `JWT_SECRET` yer tutucusu 32 byte kontrolünü geçiyor; değiştirilmezse access token sahteciliği mümkün. Dalın README'si uyarıyor, kod tespit etmiyor. `main`'de durum daha ağır: AuthModule'de sabit fallback secret hâlâ var. | Açık |
-| H-1 | High | CI E2E adımı `taskflow.e2e-spec.ts` 403/404 uyuşmazlığı nedeniyle büyük olasılıkla başarısız (yerelde doğrulandı, CI'da doğrulanamadı). | Açık |
+| C-1 | Critical (yapılandırmaya bağlı) | `.env.example` içindeki `JWT_SECRET` yer tutucusu 32 byte kontrolünü geçiyor; değiştirilmezse access token sahteciliği mümkün. README uyarıyor, kod tespit etmiyor. | Kapandı (27 Kasım, `1961f0b` + `eb7f162`) |
+| H-1 | High | CI E2E adımı `taskflow.e2e-spec.ts` 403/404 uyuşmazlığı nedeniyle büyük olasılıkla başarısız (yerelde doğrulandı, CI'da doğrulanamadı). | Kapandı (27 Kasım, `01005bc`; gerekli CI job'ları başarılı) |
 | H-2 | High | Repoda TLS/reverse proxy yok; production'da refresh cookie `Secure` olduğundan HTTP üzerinden web oturumu yenilenemez. | Açık |
 | H-3 | High (yapılandırmaya bağlı) | `TRUST_PROXY_HOPS` yanlış ayarlanırsa veya backend portu proxy dışında erişilebilir kalırsa IP sahteciliği ya da paylaşılan auth limitleri. | Açık |
 | H-4 | High | Hesap başına login limiti (20 / 15 dk) başkası tarafından tüketilebilir; hedef hesabın girişi sürekli engellenebilir. | Açık, karar gerekli |
@@ -742,21 +742,156 @@ Bu kanıtlar gerçek tarayıcı ve Android kullanıcı yolculuklarını, SMTP te
 | M-2 | Medium (teorik) | Redis'e paketlerin düştüğü kesintide istek başına yaklaşık 3,5 sn ek gecikme. | Test edilmedi |
 | M-3 | Medium | Refresh token ailelerinin mutlak ömrü yok. | Açık |
 | M-4 | Medium | 30 sn grace penceresi theft detection'ı daraltıyor (R-2). | Açık |
-| M-5 | Medium | Exception filter iç hata mesajını döndürüyor (SEC-06). | Açık |
+| M-5 | Medium | Exception filter iç hata mesajını döndürüyor (SEC-06). | Kapandı (27 Kasım, `0802f3d`) |
 | M-6 | Medium (yapılandırmaya bağlı) | `REDIS_PASSWORD` varsayılanı boş. | Açık |
 | M-7 | Medium | Ortak IP (NAT/CGNAT) arkasındaki kullanıcılar IP başına auth limitlerini paylaşır. | Açık |
 | M-8 | Medium | CI `prisma migrate deploy` komutunu `--config` olmadan çalıştırıyor. Yerel gözleme göre CLI bu durumda kullanılmayan `prisma7.config.ts` dosyasını yüklüyor; CI'da aynı davranış olası, ancak bağımsız olarak doğrulanmadı. | Açık |
 
-**H-1 durum güncellemesi (26 Kasım 2026, sonraki tur):** Başka workspace'e erişimde **404 Not Found** dönülmesine ürün sahibi karar verdi (`product_workflows_requirements.md` §10, karar 14); workspace'in varlığı yetkisiz kullanıcıdan gizlenir. `fix/go-live-blockers` dalında `test/taskflow.e2e-spec.ts` içindeki iki eski 403 beklentisi `01005bc` ile 404 olarak düzeltildi; guard davranışı değişmedi. Yerel PostgreSQL 16 + Redis 7 koşusunda backend E2E 5/5 suite, 32/32 test geçti. GitHub Actions'ta `01005bc` için Backend, Frontend, ML ve Docker job'ları başarılı; **Android job'u bu kayıt yazılırken hâlâ çalışıyordu (sonuç bekleniyor)**. H-1, gerekli bütün CI check'leri başarıyla tamamlanana kadar **açık** kalır. Bu düzeltme yalnızca dalda; `main`'de CI workflow'u yok.
-
 Düşük önemli açıklar: davetlerde kısmi hesap tespiti (bekleyen satır ve yanıt süresi), Redis dönüşünden sonraki ilk auth isteğinin 503 alması, loglarda e-posta adresleri, SMTP için `requireTLS` bulunmaması, `FRONTEND_URL` varsayılanının localhost olması, CSP ihlal raporlamasının olmaması, `RefreshToken` tablosunun temizlenmemesi.
+
+## Karar
+
+**Güncel karar: NO-GO.** Uygulama kodundaki kimlik, oturum, davet, rate limit ve header kontrolleri kodda mevcut ve yerel testlerle doğrulandı. C-1, H-1, H-2, H-3 ve M-5 go-live engelleyicisidir; bunlar kapatılmadan ve TLS'li, doğru proxy topolojisine sahip bir ortamda gerçek kullanıcı akışları doğrulanmadan ticari production dağıtımı yapılmamalı. Karar, yalnız bu onaylı engelleyicilere dayanarak da NO-GO'dur.
+
+H-4 (hesap başına login limiti politikası) ve M-1 (Redis kesintisinde logout ve parola değişimi davranışı) ürün sahibi kararını bekliyor (`product_workflows_requirements.md` §10, karar 11 ve 12). Ürün sahibi bunları go-live kapısı olarak onaylarsa P0 engelleyici olarak kalırlar; onaylamazsa P1'e taşınmaları önerilir. Bu belge iki karardan hiçbirini vermez; aynı koşul `sales_readiness_plan.md` içinde de geçerlidir.
+
+
+---
+
+# 27 Kasım 2026 — C-1, M-5 ve H-1 kapanışı
+
+> Bu bölüm önceki tarihli bölümleri silmez. 26 Kasım "Karar" paragrafı o tarihteki durumu anlatan tarihsel kayıttır; güncel karar aşağıdadır. Dal: `fix/go-live-blockers`. Bu değişiklikler henüz `main`'e merge edilmedi.
+
+## Bu turda dala eklenen commit'ler
+
+| Commit | Kapsam |
+|---|---|
+| `01005bc` | H-1: `test/taskflow.e2e-spec.ts` içindeki iki eski 403 beklentisi 404 olarak düzeltildi (ürün sahibinin 404 kararı; guard davranışı değişmedi) |
+| `1961f0b` | C-1: backend açılışta bilinen `JWT_SECRET` yer tutucularını (şu anki ve eski `.env.example` değerleri), yer tutucu işaretlerini (`replace_with`, `change_me`, `your-secret`, `placeholder` vb.), tamamı köşeli parantezli şablonları ve en fazla 8 karakterlik bir parçanın tekrarından oluşan değerleri reddediyor; hata mesajı secret'ı içermiyor |
+| `eb7f162` | C-1 CI uyumluluğu: Compose smoke testi `.env.example` kopyasındaki yer tutucuyu her çalışmada `openssl rand -hex 32` ile üretilen bir secret ile değiştiriyor |
+| `0802f3d` | M-5: `HttpException` olmayan hatalar istemciye yalnızca genel 500 mesajıyla dönüyor; hatalar sunucu tarafında method ve query string'siz path ile loglanıyor; Prisma hatalarında mesaj loglanmıyor (yalnızca sınıf, `code` ve stack frame'leri); `expose: true` olan 4xx `http-errors` hataları kendi status'ünü koruyor (çok büyük gövde artık 413) |
+
+## Doğrulama kanıtı
+
+- **GitHub Actions (TaskFlow CI, beş job: Backend, Frontend, ML, Docker Compose, Android):**
+  - `01005bc`: run `45878677241` (`push`) ve run `45878686268` (`pull_request`) — beş job başarılı.
+  - `1961f0b`: run `45949820235` — **başarısız**. Docker Compose job'u, CI'ın `.env.example` yer tutucusunu kullanması nedeniyle kırıldı (C-1'in beklenen etkisi; `eb7f162` ile düzeltildi). Android unit test adımı da başarısızdı; commit Android'e dokunmuyor.
+  - `eb7f162`: run `45952276417` — ilk denemede Android unit test adımı başarısız; Android kodu değişmeden yeniden çalıştırılan **ikinci denemede beş job başarılı**. İlk denemedeki hata geçici altyapı sorunu olarak değerlendirildi, kök nedeni log'a erişilemediği için doğrulanmadı.
+  - `0802f3d`: run `45959034137`, ilk deneme — beş job başarılı.
+- **Yerel koşular:** C-1 için `jwt-config.spec.ts` (42 test) ve mutasyon kontrolleri; M-5 için `http-exception.filter.spec.ts` (21 test) ve mutasyon kontrolleri; backend unit suite 20/20 suite, 220/220 test; tek kullanımlık PostgreSQL 16 + Redis 7 ile backend E2E 5/5 suite, 32/32 test; düzeltilmiş Compose adımıyla yerel `docker compose up --wait` beş servis healthy.
+- **Not:** Bu commit'ler için `pull_request` CI çalışması yok; PR #1'in `main` ile doküman conflict'i bulunduğu için GitHub `pull_request` workflow'unu tetiklemiyor. Yukarıdaki sonuçlar `push` çalışmalarına aittir.
+- **Bilinen aralıklı durum:** `src/auth/auth-session.spec.ts` M-5 çalışması sırasında yerelde iki kez aralıklı başarısız oldu, sonraki 16 yerel koşuda ve CI'da geçti; kök nedeni belirlenmedi.
+
+## Bulgu durumu (27 Kasım)
+
+| ID | Önem | Durum | Kanıt / bağımlılık |
+|---|---|---|---|
+| C-1 | Critical | **Kapandı (dalda)** | `1961f0b`, `eb7f162`; CI run `45952276417` (deneme 2) ve `45959034137` |
+| H-1 | High | **Kapandı (dalda)** | `01005bc`; gerekli beş CI job'u `01005bc`, `eb7f162` (deneme 2) ve `0802f3d` üzerinde başarılı |
+| M-5 | Medium | **Kapandı (dalda)** | `0802f3d`; CI run `45959034137` |
+| H-2 | High | Açık | Repoda TLS/reverse proxy yok; deploy topolojisi kararına (karar 13) bağlı |
+| H-3 | High (yapılandırmaya bağlı) | Açık | `TRUST_PROXY_HOPS` değeri deploy topolojisi kararına (karar 13) bağlı |
+| H-4 | High | Açık, ürün sahibi kararı bekleniyor | `product_workflows_requirements.md` §10, karar 11 |
+| M-1 | Medium | Açık, ürün sahibi kararı bekleniyor | `product_workflows_requirements.md` §10, karar 12 |
+| M-2, M-3, M-4, M-6, M-7, M-8 | Medium | Açık / doğrulanmadı | 26 Kasım tablosundaki durum geçerli |
+
+C-1 kalan sınırlaması: işaret içermeyen, tahmin edilebilir insan yazımı secret'lar (ör. şirket adı + yıl) güvenilir biçimde tespit edilemez; README'deki `openssl rand -hex 32` yönergesi geçerlidir. M-5 kalan sınırlaması: Prisma dışı hataların stack'i mesajıyla birlikte loglanır (loglarda kişisel veri riskine ilişkin düşük önemli bulgu açık kalır).
+
+## Doğrulanmamış olanlar
+
+Gerçek backend ile Web UI ve Android E2E, gerçek SMTP teslimatı, TLS'li production ortamı ve backup/restore hâlâ doğrulanmadı. Başarılı ret akışının E2E'si ve M-2 de doğrulanmadı.
+
+## Güncel karar
+
+**Güncel karar: NO-GO.** C-1, H-1 ve M-5 `fix/go-live-blockers` dalında kapandı ve CI ile doğrulandı. Buna karşın H-2 ve H-3 (TLS/reverse proxy ve proxy topolojisi) açık go-live engelleyicileridir ve deploy topolojisi kararına (karar 13) bağlıdır. H-4 ve M-1 ürün sahibi kararını bekliyor; go-live kapısı olarak onaylanırlarsa P0 engelleyici olarak kalırlar, onaylanmazlarsa P1'e taşınmaları önerilir. Ayrıca bu düzeltmeler `main`'de değildir ve yukarıdaki doğrulanmamış kullanıcı/operasyon akışları tamamlanmadan ticari production dağıtımı yapılmamalıdır.
+
+---
+
+# 27 Kasım 2026 — E-posta davetleri ve SMTP varsayılanı (henüz commit edilmedi)
+
+- **Dış SMTP varsayılanı kaldırıldı:** `SMTP_HOST` boşken e-posta işlemcisi dışarıdaki `smtp.mailtrap.io` sunucusuna bağlanmaya çalışıyordu. Lokal kurulumda bu doğrulandı: davet e-postaları bu sunucuda `EAUTH` hatası aldı. Artık e-posta varsayılan olarak kapalı; hiçbir sunucuya bağlanılmıyor ve açılışta tek bir uyarı loglanıyor. SMTP ayarlıysa açılışta bağlantı doğrulanıyor. Geliştirme için isteğe bağlı Mailpit profili (`dev-mail`) eklendi.
+- **E-posta adresine davet:** Yeni `WorkspaceInvitation` modeli, yalnız hash'i saklanan tek kullanımlık token, URL fragment'ında (`/invite#token`) taşınan bağlantı, 7 gün süre, yeniden gönderme (eski bağlantıyı geçersiz kılar), iptal ve bekleyen davet listesi. Kayıtlı olmayan adresler de davet edilebiliyor; kişi bağlantıdan kayıt olup katılıyor.
+- **Kapanan düşük önemli açık:** "Davetlerde kısmi hesap tespiti" kapandı. Davet yanıtı ve bekleyen liste, hesabı olan ve olmayan adresler için aynı; davet sırasında hesap araması yapılmıyor.
+- **Kalan sınırlama:** E-posta doğrulaması olmadığı için davet bağlantısı tek başına katılma yetkisi veriyor. Bağlantı yalnızca hedef kişiyle paylaşılmalı.
+- **Doğrulama:** backend 35 suite / 379 birim testi; E2E 8 suite / 52 test (yeni davet akışı ve eski bekleyen davetlerin kabulü dahil); lokal Compose + Mailpit ile uçtan uca davet → e-posta → kayıt → kabul akışı; web `tsc`, ESLint ve build.
+
+---
+
+# 28 Kasım 2026 — API mesajları İngilizceye çevrildi (Y-2, backend kısmı; henüz commit edilmedi)
+
+- Backend'in kullanıcıya döndürdüğü tüm Türkçe hata/yanıt mesajları (yaklaşık 40 metin, 15 kaynak dosya) İngilizceye çevrildi. Bunlar exception mesajları, DTO validasyon mesajları, genel 500 mesajı ve çıkış/şifre değişikliği yanıtları. Hata kodları (`INVALID_CREDENTIALS`, `STALE_VERSION` vb.) ve HTTP durumları değişmedi; istemciler kodlara bakmaya devam ediyor.
+- Web arayüzü ve Android zaten İngilizceydi. Frontend `errors.ts` içindeki, artık backend'de bulunmayan üç Türkçe mesaj eşlemesi kaldırıldı.
+- Kapsam dışında kalanlar: Türkçe kod yorumları (kullanıcıya görünmüyor) ve çok dilli destek (i18n) yok; arayüz ve API tek dilli, İngilizce.
+- **Doğrulama:** backend 35 suite / 379 birim testi; `tsc`; değişen dosyalarda ESLint 0 sorun (HEAD'de de 0); Prettier'da yeni sorun yok (7 dosyadaki eski biçim farkları değişiklikten önce de vardı); gerçek PostgreSQL 16 + Redis 7 ile E2E 8 suite / 52 test; frontend `tsc`, ESLint ve build.
+
+---
+
+# 28 Kasım 2026 — Görev ve audit listelerinde sayfalama (TASK-06, AUD-06'nın sayfalama kısmı)
+
+- **API (uyumsuz değişiklik):** `GET /workspaces/:id/tasks` ve `GET /workspaces/:id/audit` artık dizi yerine `{ items, nextCursor }` döndürüyor. Keyset (cursor) sayfalama kullanılıyor; offset yok. Görevler `(position, id)` sırasıyla, audit kayıtları `(createdAt, id)` azalan sırayla geliyor. Bu sayede eşit `position` veya eşit zaman damgalı kayıtlar sayfalar arasında atlanmıyor ya da tekrarlanmıyor. Parametreler: `limit` (varsayılan 50, en fazla 200), `cursor`; görevlerde ayrıca `projectId` (UUID) ve `status`. Bozuk veya başka bir listeye ait cursor `400 INVALID_CURSOR` döndürüyor. Ürün henüz yayında olmadığından eski istemci yok; web ve Android aynı değişiklikte güncellendi.
+- **Web ve Android:** Kanban sütunları ve Android durum sekmeleri ilk 50 görevi yüklüyor; devamı sütun/sekme altındaki "Load more" ile geliyor. Daha fazla görev varsa sayaç "50+" gibi gösteriliyor. Activity sayfasında da "Load more" var. Görev ekleme veya taşıma sonrasında dört sütunun ilk sayfası yeniden yükleniyor. Bu arada `position` değeri değiştiği için tekrar gelen görev listeye ikinci kez eklenmiyor.
+- **İndeksler (migration `20261128060000_list_pagination_indexes`):** `Task(projectId, status, position, id)` ve `AuditLogEntry(workspaceId, createdAt, id)` eklendi. Bunların öneki olan `Task(projectId)` ve `AuditLogEntry(workspaceId)` kaldırıldı. Sorgulara aynı anlamı taşıyan ama indeks sınırı olarak kullanılabilen bir koşul (`position >=` / `createdAt <=`) eklendi.
+- **Ölçüm** (PostgreSQL 16, 99.200 görev, 100.000 audit kaydı; sütunda 5.000, workspace'te 5.000 eşleşen satır; `EXPLAIN ANALYZE`):
+
+  | Sorgu | Önce | Sonra |
+  |---|---|---|
+  | Görev sütunu, ilk sayfa | 4,1 ms (5.000 satır okunup sıralanıyor) | 0,18 ms (indeks taraması, 51 satır) |
+  | Görev sütunu, derin sayfa | 1,2 ms | 0,09 ms |
+  | Audit, ilk sayfa | 2,6 ms | 0,06 ms |
+  | Audit, derin sayfa | 1,4 ms | 0,07 ms |
+
+  Önceki maliyet eşleşen satır sayısıyla doğrusal artıyordu; şimdi sayfa boyutuna bağlı. Migration bu veri üzerinde 1 saniyenin altında uygulandı. Çok büyük kurulumlarda `CREATE INDEX` yazmaları kısa süre bekletebilir; yükseltmeyi düşük trafikli bir zamanda yapmak gerekir.
+- **Kapsam dışı:** Üye listesi sayfalanmadı. Bir workspace'te genelde onlarca üye olur; üst sınır koymak da kayıtları kullanıcıya haber vermeden kesmek anlamına gelirdi. Audit için tarih aralığı filtresi (AUD-06'nın diğer kısmı) ve yorum sayfalaması yapılmadı.
+- **Doğrulama:** backend 36 suite / 385 birim testi; E2E 9 suite / 61 test (yeni `pagination.e2e-spec.ts`: eşit `position`/zaman damgasında sıranın doğruluğu, silinmiş ve başka projedeki görevlerin hariç tutulması, başka workspace'in audit kayıtlarının hariç tutulması, geçersiz `cursor`/`limit`/`status` için 400). Mutasyon kontrolü: id karşılaştırması `gt` yerine `gte` yapılınca E2E başarısız oluyor. Ayrıca `tsc`, değişen dosyalarda ESLint'te yeni sorun yok, Prettier, web `tsc`/build, Android `testDebugUnitTest assembleDebug`. Not: Android'deki sayfalama mantığı için birim testi yok. `auth-session.spec.ts` içindeki bilinen kararsız test paralel çalıştırmada 10'da 3 kez "socket hang up" ile düştü; CI'ın kullandığı `--runInBand` modunda 5/5 temiz geçti.
+
+---
+
+# 28 Kasım 2026 — Tutarlı hata kodları
+
+- **Sorun:** Hata yanıtındaki `code` alanında özel kod verilmişse `STALE_VERSION` gibi bir değer, verilmemişse Nest'in insan için yazılmış durum metni (`'Not Found'`, `'Forbidden'`, `'Bad Request'`) dönüyordu. Yaklaşık 80 exception'ın çoğunda özel kod yok. Web login/register ekranları `code || message` kullandığından, kodu olmayan hatalarda kullanıcı gerçek mesaj yerine "Bad Request" gibi bir metin görüyordu.
+- **Düzeltme:** Özel kod yoksa kod artık HTTP durumundan büyük harf ve alt çizgiyle üretiliyor (`NOT_FOUND`, `FORBIDDEN`, `CONFLICT`, `PAYLOAD_TOO_LARGE`; bilinmeyen durumlarda `HTTP_<durum>`). DTO validasyon hataları `VALIDATION_FAILED` döndürüyor. Özel kodlar (`STALE_VERSION`, `INVITATION_*`, `REFRESH_TOKEN_*` vb.) değişmedi; istemcilerin baktığı kodlar etkilenmedi. Yanıt formatı aynı: `{ statusCode, code, message, details }`.
+- **Web:** `getErrorMessage` artık hata gövdesini alıyor. Bilinen kod için kullanıcı dostu metni, yoksa ilk validasyon hatasını, o da yoksa API mesajını gösteriyor; kod metni hiç gösterilmiyor.
+- **Doğrulama:** backend 36 suite / 392 birim testi (`--runInBand`; filtre testine durumdan kod üretimi ve kodsuz `ForbiddenException` → `FORBIDDEN` eklendi); E2E 9 suite / 61 test; `tsc`, değişen dosyalarda ESLint'te yeni sorun yok; web `tsc` ve build.
+
+---
+
+# 28 Kasım 2026 — Web ve Android yeniden tasarım
+
+- **Kararlar (ürün sahibi):** Açık ve koyu tema cihaz ayarını izliyor. Vurgu rengi doygunluğu düşük arduvaz mavisi; gradyan, neon ve mor kullanılmıyor. Android'e tasarımla birlikte temel akışlar ekleniyor. E-posta ile üye daveti ve diğer yönetim ekranları web'de kalıyor.
+- **Ortak tasarım sistemi:** Web (`globals.css`, Tailwind 4 `@theme`) ve Android (`Color.kt`/`Theme.kt`/`Type.kt`) aynı renk token'larını, tip ölçeğini, köşe yarıçaplarını ve etiketleri kullanıyor. Paletteki 34 metin/zemin çiftinin hepsi WCAG AA kontrast eşiğini geçiyor (ölçüldü; en düşük 4,87:1). Android'de dinamik (duvar kağıdı) renk kapatıldı; marka her cihazda aynı görünüyor.
+- **Web:** Kenar çubuklu iskelet ve ortak workspace context'i. Board, Members ve Activity artık workspace bilgisini tek yerden alıyor. Erişilebilir modal ve yan panel (Escape ile kapanma, odak hapsi, odağın geri dönmesi). `window.confirm`/`alert` yerine uygulama içi onay penceresi ve bildirimler. Görev taşımada onay sorulmuyor; görev detayından her yöne durum değiştirilebiliyor. Activity kayıtları kişi adlarıyla ve günlere göre gruplu gösteriliyor. Tarihler İngilizce. Board telefon genişliğinde de kullanılabiliyor. Web lint uyarıları 31'den 4'e indi (kalan 4'ü dokunulmayan `api.ts` dosyasında).
+- **Bu sırada düzeltilen hatalar:** (1) Sayfa yenilendikten sonra kullanıcı bilgisi kayboluyordu, bu yüzden kendi yorumunu silme butonu çıkmıyordu; yeni `GET /users/me` (yalnızca id, e-posta, ad, avatar) ile düzeldi. (2) Parola değişikliğinde backend'in döndürdüğü yeni access token web'de saklanmıyordu. (3) Hızlı proje değişiminde geç gelen eski yanıt panonun üzerine yazabiliyordu. (4) Android uygulaması her açılışta oturum kayıtlı olsa bile giriş ekranıyla başlıyordu.
+- **Android'e yeni eklenenler:** Kayıt (sonrasında otomatik giriş), görev detayı (durum değiştirme, risk paneli, yorum ekleme/silme), görev oluşturma (öncelik, atanan kişi, takvimden son tarih). Board'a proje çipleri, sayılı durum sekmeleri ve aşağı çekerek yenileme eklendi. Backend'in hata mesajları kullanıcıya gösteriliyor.
+- **Doğrulama:** backend 392 birim testi; E2E 9 suite / 61 test (`/users/me` kontrolü dahil); web `tsc`, ESLint (0 hata) ve build. Android'de 14 birim testi (9'u yeni: etiketler, tarih biçimleri, hata gövdesi ayrıştırma) ve `assembleDebug`. Yerel Compose stack'inde headless Chrome ile web ekranlarının açık/koyu tema ve masaüstü/telefon genişliğinde görsel kontrolü. Android emülatöründe (Pixel 6) giriş → workspace → board → görev detayı → görev oluşturma → yorum gönderme akışı uçtan uca çalıştırıldı; görev oluşturma audit kaydıyla doğrulandı.
+- **Doğrulanmadı:** Android çevrimdışı kuyruğunun yeni arayüzle cihazda denenmesi; görev detayındaki durum değişikliği çevrimdışıyken kuyruğa alınmıyor, hata mesajı gösteriyor (board'daki hızlı taşıma kuyruğa almaya devam ediyor). Android'de arayüz (instrumented) testi yok. Gerçek ekran okuyucuyla (TalkBack/VoiceOver) test yapılmadı.
+
+---
+
+# 28 Kasım 2026 — `main` dalına birleştirme notu
+
+`fix/go-live-blockers` dalı bu tarihte `main`'e birleştirildi. Bu belgede daldaki güncel sürüm esas alındı. Aşağıdaki satırlar yalnızca `main`'deki sürümde vardı (son `main` doküman commit'i `c9f11dd`, 26 Kasım 2026); geçmiş kaybolmasın diye aynen korunuyor. Bu satırlardaki "`main`'e merge edilmedi", "`main`'de değil" gibi ifadeler birleştirmeden önceki durumu anlatır; dalın tüm kod değişiklikleri artık `main`'dedir. Go-live kararı değişmedi: güncel durum yukarıdaki en son tarihli bölümlerdedir.
+
+> **`main` kapsam notu — 26 Kasım 2026:** Bu belge, `fix/go-live-blockers` dalındaki analiz belgesinin `main`'e yalnızca doküman olarak aktarılmış kopyasıdır (dal commit'i `01005bc`). 16–26 Kasım tarihli bölümlerde "düzeltildi", "kapandı", "kodda var" veya "doğrulandı" denen değişiklikler **`fix/go-live-blockers` dalında** uygulanmış ve test edilmiştir; dal henüz `main`'e merge edilmediği için bu düzeltmeler **`main`'in kodunda (`b5b4fb4`) mevcut değildir**. Bu tarihli bölümlerdeki README atıfları da dalın README'sine aittir; `main`'deki README bu bölümleri içermez. `main` için geçerli durum, belgenin sonundaki "Dal ve `main` durumu" tablosunda özetlenmiştir. İlk denetim bölümleri `main`'in mevcut koduna büyük ölçüde hâlâ uygundur.
+
+> **Güncel durum notu — 26 Kasım 2026:** Bu sayfanın başındaki 18 Kasım bloğu ve sonraki tarihli bölümler tarihsel kayıttır; orada "açık" görünen bazı bulgular (refresh yarışı, parola sonrası oturum iptali, doğrudan ACTIVE davet, rate limit ve Helmet/CSP eksikliği) sonradan `fix/go-live-blockers` dalında kapatılmıştır; bu düzeltmeler henüz `main`'de değildir. En güncel değerlendirme ve kanıtlar için belgenin sonundaki **"26 Kasım 2026 — Güvenlik uygulamaları sonrası değerlendirme"** bölümüne bakın. Güncel karar: **NO-GO**.
+
+> Bu bölüm önceki tarihli bölümleri silmez veya değiştirmez. Dal: `fix/go-live-blockers`. Teknik ayrıntılar (politika değerleri, yapılandırma, API sözleşmesi) bu belgede tekrarlanmaz; `fix/go-live-blockers` dalındaki README.md içindeki "Production deployment notes", "Security controls" ve "Authentication API contract" bölümlerinde tutulur. Bu bölümler henüz `main`'deki README'de yoktur.
+
+| Exception filter beklenmeyen `Error.message` değerini döndürüyor (§2.5) | **Açık** | `backend/src/common/filters/http-exception.filter.ts:47-48` |
+
+| C-1 | Critical (yapılandırmaya bağlı) | `.env.example` içindeki `JWT_SECRET` yer tutucusu 32 byte kontrolünü geçiyor; değiştirilmezse access token sahteciliği mümkün. Dalın README'si uyarıyor, kod tespit etmiyor. `main`'de durum daha ağır: AuthModule'de sabit fallback secret hâlâ var. | Açık |
+| H-1 | High | CI E2E adımı `taskflow.e2e-spec.ts` 403/404 uyuşmazlığı nedeniyle büyük olasılıkla başarısız (yerelde doğrulandı, CI'da doğrulanamadı). | Açık |
+
+| M-5 | Medium | Exception filter iç hata mesajını döndürüyor (SEC-06). | Açık |
+
+**H-1 durum güncellemesi (26 Kasım 2026, sonraki tur):** Başka workspace'e erişimde **404 Not Found** dönülmesine ürün sahibi karar verdi (`product_workflows_requirements.md` §10, karar 14); workspace'in varlığı yetkisiz kullanıcıdan gizlenir. `fix/go-live-blockers` dalında `test/taskflow.e2e-spec.ts` içindeki iki eski 403 beklentisi `01005bc` ile 404 olarak düzeltildi; guard davranışı değişmedi. Yerel PostgreSQL 16 + Redis 7 koşusunda backend E2E 5/5 suite, 32/32 test geçti. GitHub Actions'ta `01005bc` için Backend, Frontend, ML ve Docker job'ları başarılı; **Android job'u bu kayıt yazılırken hâlâ çalışıyordu (sonuç bekleniyor)**. H-1, gerekli bütün CI check'leri başarıyla tamamlanana kadar **açık** kalır. Bu düzeltme yalnızca dalda; `main`'de CI workflow'u yok.
 
 ## Dal ve `main` durumu
 
 `fix/go-live-blockers` dalı `main`'e merge edilmedi. Aşağıdaki tablo, dalda yapılanlarla `main`'in mevcut kodunu (`b5b4fb4`) ayırır. `main` sütunu `origin/main` üzerindeki dosyalar incelenerek yazıldı.
 
 | Konu | `fix/go-live-blockers` (`01005bc`) | `main` (`b5b4fb4`) |
-|---|---|---|
+
 | Refresh token güvenliği (SEC-01, R-1) | Uygulandı, yerel unit + PostgreSQL E2E ile test edildi (`675246a`) | Yok: bcrypt hash'li refresh token, eski rotasyon akışı |
 | JWT fallback secret | Kaldırıldı, `JWT_SECRET` en az 32 byte zorunlu (`675246a`) | AuthModule'de sabit fallback secret hâlâ var |
 | Rate limiting ve Helmet/CSP (SEC-02) | Uygulandı, yerel E2E ve tarayıcı kontrolü (`20ecec7`) | Yok |
@@ -768,8 +903,4 @@ Düşük önemli açıklar: davetlerde kısmi hesap tespiti (bekleyen satır ve 
 
 **Kalan blocker'lar ve kararlar (dalın durumuna göre):** C-1, H-1 (CI tamamlanana kadar), H-2, H-3 ve M-5 açık; H-4 ve M-1 ürün sahibi kararını bekliyor (karar 11 ve 12); karar 13, 15 ve 16 açık; karar 14 verildi (404). H-3, H-4, M-1 ve M-7 dalda eklenen rate limit davranışıyla ilgilidir; `main`'de rate limit hiç yoktur. `main` için ayrıca bu tablodaki bütün dal düzeltmeleri, dal merge edilene kadar eksik kabul edilmelidir.
 
-## Karar
-
 **Güncel karar: NO-GO.** Kimlik, oturum, davet, rate limit ve header kontrolleri `fix/go-live-blockers` dalının kodunda mevcut ve yerel testlerle doğrulandı; bu kod henüz `main`'de değildir. C-1, H-1, H-2, H-3 ve M-5 go-live engelleyicisidir; bunlar kapatılmadan ve TLS'li, doğru proxy topolojisine sahip bir ortamda gerçek kullanıcı akışları doğrulanmadan ticari production dağıtımı yapılmamalı. Karar, yalnız bu onaylı engelleyicilere dayanarak da NO-GO'dur.
-
-H-4 (hesap başına login limiti politikası) ve M-1 (Redis kesintisinde logout ve parola değişimi davranışı) ürün sahibi kararını bekliyor (`product_workflows_requirements.md` §10, karar 11 ve 12). Ürün sahibi bunları go-live kapısı olarak onaylarsa P0 engelleyici olarak kalırlar; onaylamazsa P1'e taşınmaları önerilir. Bu belge iki karardan hiçbirini vermez; aynı koşul `sales_readiness_plan.md` içinde de geçerlidir.

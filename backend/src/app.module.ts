@@ -1,7 +1,8 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
-import { BullModule } from '@nestjs/bullmq'; 
+import { BullModule } from '@nestjs/bullmq';
 import { EventEmitterModule } from '@nestjs/event-emitter';
+import { RiskModelModule } from './risk-model/risk-model.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { PrismaModule } from './prisma/prisma.module';
@@ -13,28 +14,32 @@ import { AuditModule } from './common/audit/audit.module';
 import { AiModule } from './ai/ai.module';
 import { UsersModule } from './users/users.module';
 import { CommentsModule } from './comments/comments.module';
+import { NotificationsModule } from './notifications/notifications.module';
+import { RateLimitModule } from './common/rate-limit/rate-limit.module';
 
 @Module({
   imports: [
-    ConfigModule.forRoot({
-      isGlobal: true, 
-    }),
+    ConfigModule.forRoot({ isGlobal: true }),
     EventEmitterModule.forRoot(),
     BullModule.forRootAsync({
       imports: [ConfigModule],
-      useFactory: async (configService: ConfigService) => {
+      useFactory: (configService: ConfigService) => {
         const host = configService.get<string>('REDIS_HOST');
         const port = configService.get<string>('REDIS_PORT');
 
         if (!host || !port) {
-          throw new Error('FATAL: REDIS_HOST or REDIS_PORT is missing in environment variables!');
+          throw new Error(
+            'FATAL: REDIS_HOST or REDIS_PORT is missing in environment variables!',
+          );
         }
 
+        const password = configService.get<string>('REDIS_PASSWORD');
         return {
           connection: {
-            host: host,
-            port: parseInt(port, 10),
-            protocol: 'resp2'
+            host,
+            port: Number(port),
+            ...(password ? { password } : {}),
+            protocol: 'resp2',
           },
         };
       },
@@ -47,8 +52,11 @@ import { CommentsModule } from './comments/comments.module';
     ProjectsModule,
     TasksModule,
     AiModule,
+    RiskModelModule,
     UsersModule,
     CommentsModule,
+    NotificationsModule,
+    RateLimitModule,
   ],
   controllers: [AppController],
   providers: [AppService],

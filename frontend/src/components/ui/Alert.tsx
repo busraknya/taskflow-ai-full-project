@@ -1,18 +1,25 @@
-import { theme } from '@/lib/theme';
+import { AlertCircle, CheckCircle2 } from 'lucide-react';
+import { cn } from '@/lib/cn';
 
 interface AlertProps {
   message: string;
   type?: 'error' | 'success';
 }
 
+/** Inline message for a page or form; renders nothing when empty. */
 export function Alert({ message, type = 'error' }: AlertProps) {
   if (!message) return null;
-
-  const style = type === 'error' ? theme.colors.accent.danger : 'bg-emerald-950/50 border-emerald-900/50 text-emerald-400';
-
+  const Icon = type === 'error' ? AlertCircle : CheckCircle2;
   return (
-    <div className={`p-3 text-xs border rounded-md transition-all ${style}`}>
-      {message}
+    <div
+      role={type === 'error' ? 'alert' : 'status'}
+      className={cn(
+        'flex items-start gap-2 rounded-control px-3 py-2.5 text-[13px]',
+        type === 'error' ? 'bg-danger-soft text-danger' : 'bg-success-soft text-success',
+      )}
+    >
+      <Icon size={16} className="mt-px shrink-0" aria-hidden="true" />
+      <span>{message}</span>
     </div>
   );
 }

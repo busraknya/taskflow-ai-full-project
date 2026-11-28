@@ -6,8 +6,6 @@
 **İlk denetim tarihi:** 22 Kasım 2026  
 **Yayın kararı:** NO-GO — bu belge bir çalışma planıdır; ürünün hazır olduğunu iddia etmez.
 
-> **`main` kapsam notu — 26 Kasım 2026:** Bu plan `fix/go-live-blockers` dalı üzerinde hazırlandı ve `main`'e yalnızca doküman olarak aktarıldı (dal commit'i `01005bc`). Listede `[x]` ile işaretli, "kapandı", "kodda var" veya "eklendi" denen maddeler **`fix/go-live-blockers` dalındaki** uygulamayı anlatır; dal henüz `main`'e merge edilmediği için bu değişiklikler **`main`'in kodunda (`b5b4fb4`) mevcut değildir**. Belgedeki README atıfları dalın README'sine aittir. `main` ile dal arasındaki farkın özeti için [go_live.md](go_live.md) içindeki "Dal ve `main` durumu" tablosuna bakın.
-
 ## 1. Satış modelinin anlamı
 
 Alıcı kaynak kodu, kurulum dosyalarını ve dokümantasyonu satın alır; kendi sunucusunda çalıştırır, markasına göre özelleştirir ve bakımını yapar. Bu nedenle teslimat yalnızca çalışan bir demo değildir. Temiz bir sunucuda tekrarlanabilir kurulum, güvenli varsayılanlar, anlaşılır yapılandırma, migration/backup/restore yönergeleri, lisans ve destek sınırları gerekir.
@@ -19,15 +17,15 @@ Alıcı kaynak kodu, kurulum dosyalarını ve dokümantasyonu satın alır; kend
 ### P0 — satış öncesi engelleyiciler
 
 - [ ] **Android oturum yenileme E2E doğrulaması:** Kodda /auth/mobile/login, /auth/mobile/refresh, /auth/mobile/logout uçları mevcut. Android tarafında refresh token EncryptedSharedPreferences içinde saklanıyor; TokenAuthenticator 401 sonrasında refresh yapıp dönen access/refresh token çiftini kaydediyor. Bu akışın gerçek backend ile fiziksel cihaz/emülatörde; access token süresi dolması, eşzamanlı 401, refresh token rotation, logout sonrası eski token reddi ve ağ hatası senaryolarıyla E2E doğrulanması hâlâ gerekiyor.
-- [ ] **Üretim sırları ve yapılandırma:** `AuthModule` içinde `JWT_SECRET` yoksa kullanılabilecek sabit bir fallback secret bulunuyor. JWT stratejisi ayrıca secret zorunlu tutsa da satış paketinde sabit fallback kabul edilemez; tüm servislerde güvenli fail-fast yapılandırma doğrulanmalı. *26 Kasım: sabit fallback `675246a` ile kaldırıldı, `JWT_SECRET` en az 32 byte zorunlu. `.env.example` yer tutucusunun tespiti ve diğer servislerin fail-fast doğrulaması açık.*
+- [ ] **Üretim sırları ve yapılandırma:** `AuthModule` içinde `JWT_SECRET` yoksa kullanılabilecek sabit bir fallback secret bulunuyor. JWT stratejisi ayrıca secret zorunlu tutsa da satış paketinde sabit fallback kabul edilemez; tüm servislerde güvenli fail-fast yapılandırma doğrulanmalı. *26 Kasım: sabit fallback `675246a` ile kaldırıldı, `JWT_SECRET` en az 32 byte zorunlu. `.env.example` yer tutucusunun tespiti ve diğer servislerin fail-fast doğrulaması açık. 27 Kasım: yer tutucu tespiti `1961f0b` ile eklendi (aşağıdaki JWT secret yer tutucusu maddesi); diğer servislerin fail-fast doğrulaması açık.*
 - [ ] **Temiz kurulum / gerçek çalışma:** Son CI Docker Compose yapılandırmasını doğrulayıp image'ları build ediyor; temiz makinede servisleri başlatma, migration, kayıt/giriş, görev akışı ve servisler arası gerçek bağlantıyı tek uçtan uca senaryo ile kanıtlamıyor.
 - [ ] **Lisans ve ürün teslimi:** Depoda kök seviyede alıcıya yönelik README ve lisans dosyası bulunmuyor. Backend ve frontend README dosyaları hâlâ framework başlangıç şablonları.
-- [ ] **Production ağ sınırı:** Compose backend ve frontend portlarını doğrudan host'a yayımlıyor; HTTPS/reverse proxy/sertifika ve güvenli dış erişim kurulum rehberi teslimatın parçası değil. *26 Kasım: dalın README'si artık `TRUST_PROXY_HOPS`, HTTPS/cookie ve aynı site gereksinimlerini belgeliyor (`main`'deki README'de yok); çalışan bir reverse proxy/TLS yapılandırması hâlâ yok (go_live H-2, H-3).*
-- [ ] **JWT secret yer tutucusu:** `.env.example` içindeki `JWT_SECRET` örnek değeri 32 byte kontrolünü geçiyor; değiştirilmezse token sahteciliği mümkün. Açılışta bilinen yer tutucular reddedilmeli (go_live C-1).
-- [ ] **CI kapısı:** `test/taskflow.e2e-spec.ts` başka workspace erişiminde 403 beklerken backend 404 döndürüyor; CI E2E adımı büyük olasılıkla başarısız. 403/404 kararı verilip test ve guard uyumlu hale getirilmeli (go_live H-1). *26 Kasım (sonraki tur): karar verildi, 404 dönülecek (§10, karar 14). Dalda test `01005bc` ile 404 bekleyecek şekilde düzeltildi; CI'da Backend job'u başarılı, Android job'u bekleniyor. Gerekli bütün CI check'leri başarıyla tamamlanana kadar madde açık kalır. `main`'de CI workflow'u yok.*
+- [ ] **Production ağ sınırı:** Compose backend ve frontend portlarını doğrudan host'a yayımlıyor; HTTPS/reverse proxy/sertifika ve güvenli dış erişim kurulum rehberi teslimatın parçası değil. *26 Kasım: README artık `TRUST_PROXY_HOPS`, HTTPS/cookie ve aynı site gereksinimlerini belgeliyor; çalışan bir reverse proxy/TLS yapılandırması hâlâ yok (go_live H-2, H-3).*
+- [x] **JWT secret yer tutucusu:** `.env.example` içindeki `JWT_SECRET` örnek değeri 32 byte kontrolünü geçiyor; değiştirilmezse token sahteciliği mümkün. Açılışta bilinen yer tutucular reddedilmeli (go_live C-1). *Kapandı (27 Kasım): backend bilinen yer tutucuları ve açıkça zayıf değerleri açılışta reddediyor (`1961f0b`); CI Compose testi rastgele secret üretiyor (`eb7f162`); CI beş job başarılı. İşaret içermeyen tahmin edilebilir değerler tespit edilemez.*
+- [x] **CI kapısı:** `test/taskflow.e2e-spec.ts` başka workspace erişiminde 403 beklerken backend 404 döndürüyor; CI E2E adımı büyük olasılıkla başarısız. 403/404 kararı verilip test ve guard uyumlu hale getirilmeli (go_live H-1). *Kapandı (27 Kasım): ürün sahibi 404 kararını verdi; test `01005bc` ile uyarlandı, guard değişmedi; gerekli beş CI job'u `01005bc`, `eb7f162` ve `0802f3d` üzerinde başarılı.*
 - [ ] **Login hesap kilitleme politikası (karar bekliyor):** Hesap başına login limiti başkası tarafından tüketilebiliyor (go_live H-4). Önce ürün/güvenlik kararı verilmeli ([product_workflows_requirements.md](product_workflows_requirements.md) §10, karar 11), uygulama bu karara göre yapılmalı. Herhangi bir politika değişikliği henüz onaylanmadı. *P0 durumu, ürün sahibinin bunu go-live kapısı olarak onaylamasına bağlıdır; onaylanmazsa P1'e taşınması önerilir.*
 - [ ] **Redis kesintisinde logout ve parola değişimi (karar bekliyor):** Redis erişilemezken logout ve parola değişimi `503` dönüyor; kesinti sırasında oturum iptal edilemiyor (go_live M-1). Önce ürün/güvenlik kararı verilmeli (§10, karar 12), uygulama bu karara göre yapılmalı; mevcut davranışın değiştirilmesi henüz onaylanmadı. *go_live önemi Medium; go-live kapısı olarak önerildiği için P0'da. Bu P0 durumu ürün sahibinin onayına bağlıdır; onaylanmazsa P1'e taşınması önerilir.*
-- [ ] **Hata mesajı sızıntısı:** Exception filter beklenmeyen hatalarda iç mesajı istemciye döndürüyor (go_live M-5, SEC-06). *go_live önemi Medium; go_live.md 26 Kasım kararında go-live kapısı olarak sayıldığı için P0'da.*
+- [x] **Hata mesajı sızıntısı:** Exception filter beklenmeyen hatalarda iç mesajı istemciye döndürüyor (go_live M-5, SEC-06). *go_live önemi Medium; go_live.md 26 Kasım kararında go-live kapısı olarak sayıldığı için P0'da. Kapandı (27 Kasım, `0802f3d`): beklenmeyen hatalarda istemciye genel 500 mesajı dönüyor, hata sunucu tarafında loglanıyor; CI run `45959034137` başarılı.*
 
 ### P1 — ürün güvenilirliği ve tamamlanmamış akışlar
 
@@ -42,7 +40,7 @@ Alıcı kaynak kodu, kurulum dosyalarını ve dokümantasyonu satın alır; kend
 
 - [ ] Backend genel lint borcu sıfırlanmalı; CI'da non-blocking lint adımı blocking hale getirilmeli.
 - [ ] Unit/integration/e2e test kapsamı, coverage raporu ve kritik tenant izolasyonu testleri genişletilmeli.
-- [ ] Root README, kurulum, yapılandırma referansı, mimari, API, troubleshooting, upgrade, backup/restore ve release notları hazırlanmalı. *26 Kasım: dalın README'sine deployment gereksinimleri, güvenlik kontrolleri, auth API sözleşmesi ve yükseltme notu eklendi (`main`'deki README'de yok); mimari, troubleshooting, backup/restore ve release notları açık.*
+- [ ] Root README, kurulum, yapılandırma referansı, mimari, API, troubleshooting, upgrade, backup/restore ve release notları hazırlanmalı. *26 Kasım: README'ye deployment gereksinimleri, güvenlik kontrolleri, auth API sözleşmesi ve yükseltme notu eklendi; mimari, troubleshooting, backup/restore ve release notları açık.*
 - [ ] Lisans, üçüncü taraf lisans/attribution envanteri, destek politikası ve sürümleme hazırlanmalı.
 - [ ] Release artefact'ları (web/backend/ML container'ları, Android release APK/AAB gerekiyorsa) tekrarlanabilir şekilde üretilip kontrol edilmeli.
 - [ ] Demo verisi ve demo hesapları güvenli, isteğe bağlı ve production sırlarından ayrı olmalı.
@@ -279,7 +277,37 @@ Bu run tamamlanmadan CI PASS denmeyecek. Backend lint non-blocking kalmaya devam
 
 - `fix/go-live-blockers` dalına SEC-01/R-1 (`675246a`), SEC-04-A (`761f03a`), SEC-05 (`2b30009`) ve SEC-02 (`20ecec7`) eklendi ve `main` dalındaki doküman commit'leri dala birleştirildi.
 - Kapanan ve kısmen ilerleyen maddeler yukarıdaki listede commit referanslarıyla işaretlendi; yeni P0 engelleyiciler (JWT yer tutucusu, CI kapısı, login hesap kilitleme politikası, Redis kesintisinde logout/parola değişimi, hata mesajı sızıntısı) eklendi. M-1 ve M-5 go_live.md'de Medium önemdedir. M-5, go_live.md 26 Kasım kararında go-live engelleyicisi sayıldığı için P0'dadır. H-4 ve M-1 ise ürün sahibi kararını bekliyor (§10, karar 11 ve 12): go-live kapısı olarak onaylanırlarsa P0'da kalır, onaylanmazlarsa P1'e taşınmaları önerilir.
-- Doğrulama kanıtları ve açık bulguların ayrıntısı [go_live.md](go_live.md) içindeki "26 Kasım 2026 — Güvenlik uygulamaları sonrası değerlendirme" bölümündedir; deployment ve yapılandırma gereksinimleri `fix/go-live-blockers` dalındaki README.md içindedir (`main`'deki README henüz bu bölümleri içermez).
-- Bu plan ve ilgili analiz belgeleri `main`'e yalnızca doküman olarak aktarıldı; dalın uygulama kodu `main`'e merge edilmedi.
+- Doğrulama kanıtları ve açık bulguların ayrıntısı [go_live.md](go_live.md) içindeki "26 Kasım 2026 — Güvenlik uygulamaları sonrası değerlendirme" bölümündedir; deployment ve yapılandırma gereksinimleri [README.md](../README.md) içindedir.
 
 **Durum:** Production/sales readiness **NO-GO**.
+
+
+## 27 Kasım 2026 — C-1, M-5 ve H-1 kapanışı
+
+- `fix/go-live-blockers` dalına H-1 (`01005bc`), C-1 (`1961f0b` ve CI uyumluluğu için `eb7f162`) ve M-5 (`0802f3d`) eklendi. TaskFlow CI'daki beş job (Backend, Frontend, ML, Docker Compose, Android) `eb7f162` (run `45952276417`, ikinci deneme) ve `0802f3d` (run `45959034137`) üzerinde başarılı.
+- P0 listesinde JWT secret yer tutucusu, CI kapısı ve hata mesajı sızıntısı maddeleri `[x]` olarak işaretlendi. Üretim sırları maddesi diğer servislerin fail-fast doğrulaması nedeniyle açık kalıyor.
+- Açık P0 maddeleri: Android oturum yenileme E2E, temiz kurulum, lisans ve ürün teslimi, production ağ sınırı (H-2, H-3; deploy topolojisi kararına bağlı), login hesap kilitleme politikası (H-4, karar 11) ve Redis kesintisinde logout/parola değişimi (M-1, karar 12). H-4 ve M-1'in P0 durumu ürün sahibinin onayına bağlıdır.
+- Kanıtlar ve güncel bulgu tablosu [go_live.md](go_live.md) içindeki "27 Kasım 2026 — C-1, M-5 ve H-1 kapanışı" bölümündedir. Bu değişiklikler henüz `main`'e merge edilmedi.
+
+**Durum:** Production/sales readiness **NO-GO**.
+
+---
+
+# 28 Kasım 2026 — `main` dalına birleştirme notu
+
+`fix/go-live-blockers` dalı bu tarihte `main`'e birleştirildi. Bu belgede daldaki güncel sürüm esas alındı. Aşağıdaki satırlar yalnızca `main`'deki sürümde vardı (son `main` doküman commit'i `c9f11dd`, 26 Kasım 2026); geçmiş kaybolmasın diye aynen korunuyor. Bu satırlardaki "`main`'e merge edilmedi", "`main`'de değil" gibi ifadeler birleştirmeden önceki durumu anlatır; dalın tüm kod değişiklikleri artık `main`'dedir. Go-live kararı değişmedi: güncel durum yukarıdaki en son tarihli bölümlerdedir.
+
+> **`main` kapsam notu — 26 Kasım 2026:** Bu plan `fix/go-live-blockers` dalı üzerinde hazırlandı ve `main`'e yalnızca doküman olarak aktarıldı (dal commit'i `01005bc`). Listede `[x]` ile işaretli, "kapandı", "kodda var" veya "eklendi" denen maddeler **`fix/go-live-blockers` dalındaki** uygulamayı anlatır; dal henüz `main`'e merge edilmediği için bu değişiklikler **`main`'in kodunda (`b5b4fb4`) mevcut değildir**. Belgedeki README atıfları dalın README'sine aittir. `main` ile dal arasındaki farkın özeti için [go_live.md](go_live.md) içindeki "Dal ve `main` durumu" tablosuna bakın.
+
+- [ ] **Üretim sırları ve yapılandırma:** `AuthModule` içinde `JWT_SECRET` yoksa kullanılabilecek sabit bir fallback secret bulunuyor. JWT stratejisi ayrıca secret zorunlu tutsa da satış paketinde sabit fallback kabul edilemez; tüm servislerde güvenli fail-fast yapılandırma doğrulanmalı. *26 Kasım: sabit fallback `675246a` ile kaldırıldı, `JWT_SECRET` en az 32 byte zorunlu. `.env.example` yer tutucusunun tespiti ve diğer servislerin fail-fast doğrulaması açık.*
+
+- [ ] **Production ağ sınırı:** Compose backend ve frontend portlarını doğrudan host'a yayımlıyor; HTTPS/reverse proxy/sertifika ve güvenli dış erişim kurulum rehberi teslimatın parçası değil. *26 Kasım: dalın README'si artık `TRUST_PROXY_HOPS`, HTTPS/cookie ve aynı site gereksinimlerini belgeliyor (`main`'deki README'de yok); çalışan bir reverse proxy/TLS yapılandırması hâlâ yok (go_live H-2, H-3).*
+- [ ] **JWT secret yer tutucusu:** `.env.example` içindeki `JWT_SECRET` örnek değeri 32 byte kontrolünü geçiyor; değiştirilmezse token sahteciliği mümkün. Açılışta bilinen yer tutucular reddedilmeli (go_live C-1).
+- [ ] **CI kapısı:** `test/taskflow.e2e-spec.ts` başka workspace erişiminde 403 beklerken backend 404 döndürüyor; CI E2E adımı büyük olasılıkla başarısız. 403/404 kararı verilip test ve guard uyumlu hale getirilmeli (go_live H-1). *26 Kasım (sonraki tur): karar verildi, 404 dönülecek (§10, karar 14). Dalda test `01005bc` ile 404 bekleyecek şekilde düzeltildi; CI'da Backend job'u başarılı, Android job'u bekleniyor. Gerekli bütün CI check'leri başarıyla tamamlanana kadar madde açık kalır. `main`'de CI workflow'u yok.*
+
+- [ ] **Hata mesajı sızıntısı:** Exception filter beklenmeyen hatalarda iç mesajı istemciye döndürüyor (go_live M-5, SEC-06). *go_live önemi Medium; go_live.md 26 Kasım kararında go-live kapısı olarak sayıldığı için P0'da.*
+
+- [ ] Root README, kurulum, yapılandırma referansı, mimari, API, troubleshooting, upgrade, backup/restore ve release notları hazırlanmalı. *26 Kasım: dalın README'sine deployment gereksinimleri, güvenlik kontrolleri, auth API sözleşmesi ve yükseltme notu eklendi (`main`'deki README'de yok); mimari, troubleshooting, backup/restore ve release notları açık.*
+
+- Doğrulama kanıtları ve açık bulguların ayrıntısı [go_live.md](go_live.md) içindeki "26 Kasım 2026 — Güvenlik uygulamaları sonrası değerlendirme" bölümündedir; deployment ve yapılandırma gereksinimleri `fix/go-live-blockers` dalındaki README.md içindedir (`main`'deki README henüz bu bölümleri içermez).
+- Bu plan ve ilgili analiz belgeleri `main`'e yalnızca doküman olarak aktarıldı; dalın uygulama kodu `main`'e merge edilmedi.

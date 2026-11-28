@@ -17,6 +17,15 @@ data class ProjectDto(
     val description: String?
 )
 
+data class MemberUserDto(val id: String, val fullName: String?, val email: String)
+
+data class MemberDto(
+    val id: String,
+    val role: String,
+    val status: String,
+    val user: MemberUserDto
+)
+
 interface WorkspaceApiService {
     @GET("workspaces")
     suspend fun getWorkspaces(): Response<List<WorkspaceDto>>
@@ -25,4 +34,9 @@ interface WorkspaceApiService {
     suspend fun getProjects(
         @Path("workspaceId") workspaceId: String
     ): Response<List<ProjectDto>>
+
+    @GET("workspaces/{workspaceId}/members")
+    suspend fun getMembers(
+        @Path("workspaceId") workspaceId: String
+    ): Response<List<MemberDto>>
 }

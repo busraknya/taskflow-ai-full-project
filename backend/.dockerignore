@@ -1,0 +1,53 @@
+# Build context: ./backend (docker-compose services `migrate` and `backend`).
+# Docker reads .dockerignore only from the context root, so the repository
+# root .dockerignore does NOT apply here.
+#
+# Required by the image and kept: package*.json, tsconfig*.json,
+# nest-cli.json, src/, prisma/ (schema, migrations, seed.ts), prisma.config.ts.
+
+# Secrets and local environment files (configuration is injected at runtime)
+.env
+.env.*
+**/.env
+**/.env.*
+*.pem
+*.key
+*.p12
+*.pfx
+*.crt
+*.jks
+*.keystore
+secrets/
+.npmrc
+
+# Dependencies and build output (installed/generated inside the image)
+node_modules/
+dist/
+generated/
+*.tsbuildinfo
+coverage/
+.nyc_output/
+
+# Unused Prisma init leftover; keeping it out of the image ensures the Prisma
+# CLI in the migrate image loads prisma.config.ts.
+prisma7.config.ts
+
+# Tests and development tooling (not needed to build or run the service)
+test/
+**/*.spec.ts
+eslint.config.mjs
+.prettierrc
+skills-lock.json
+README.md
+
+# VCS, editor, OS and Docker metadata
+.git
+.gitignore
+.dockerignore
+Dockerfile*
+.idea/
+.vscode/
+*.swp
+.DS_Store
+*.log
+npm-debug.log*

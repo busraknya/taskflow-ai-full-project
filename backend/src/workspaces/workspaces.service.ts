@@ -1,14 +1,43 @@
-import { Injectable, ConflictException, ForbiddenException, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  ConflictException,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateWorkspaceDto } from './dto/create-workspace.dto';
-import { WorkspaceRole, MembershipStatus } from '@prisma/client';
+import { UpdateWorkspaceSettingsDto } from './dto/update-workspace-settings.dto';
+import { WorkspaceRole, MembershipStatus, Prisma } from '@prisma/client';
 import { EventEmitter2 } from '@nestjs/event-emitter';
+import {
+  decodeCursor,
+  DEFAULT_PAGE_SIZE,
+  invalidCursor,
+  PaginationQueryDto,
+  toPage,
+} from '../common/pagination/pagination';
+
+function decodeAuditCursor(cursor: string): { createdAt: Date; id: string } {
+  const [createdAt, id] = decodeCursor(cursor);
+  const date = typeof createdAt === 'string' ? new Date(createdAt) : undefined;
+  if (!date || Number.isNaN(date.getTime()) || typeof id !== 'string') {
+    throw invalidCursor();
+  }
+  return { createdAt: date, id };
+}
+
+function isUniqueConstraintViolation(error: unknown): boolean {
+  return (
+    error instanceof Prisma.PrismaClientKnownRequestError &&
+    error.code === 'P2002'
+  );
+}
 
 @Injectable()
 export class WorkspacesService {
   constructor(
     private prisma: PrismaService,
-    private eventEmitter: EventEmitter2
+    private eventEmitter: EventEmitter2,
   ) {}
 
   async create(userId: string, dto: CreateWorkspaceDto) {
@@ -19,122 +48,219 @@ export class WorkspacesService {
     if (existing) {
       throw new ConflictException({
         code: 'SLUG_ALREADY_EXISTS',
-        message: 'Bu slug (adres adı) zaten kullanımda.',
+        message: 'This workspace URL (slug) is already in use.',
       });
     }
 
-    const workspace = await this.prisma.$transaction(async (tx) => {
-      const newWorkspace = await tx.workspace.create({
-        data: {
-          name: dto.name,
-          slug: dto.slug,
-        },
+    return this.prisma.$transaction(async (tx) => {
+      const workspace = await tx.workspace.create({
+        data: { name: dto.name, slug: dto.slug, timezone: dto.timezone },
       });
 
-      
       await tx.workspaceMembership.create({
         data: {
-          workspaceId: newWorkspace.id,
-          userId: userId,
+          workspaceId: workspace.id,
+          userId,
           role: WorkspaceRole.OWNER,
           status: MembershipStatus.ACTIVE,
           joinedAt: new Date(),
         },
       });
 
-      return newWorkspace;
+      return workspace;
     });
+  }
 
-    return workspace;
+  /** Workspace settings; only OWNER and ADMIN may change them. */
+  async updateSettings(
+    workspaceId: string,
+    actorRole: WorkspaceRole,
+    dto: UpdateWorkspaceSettingsDto,
+  ) {
+    if (
+      actorRole !== WorkspaceRole.OWNER &&
+      actorRole !== WorkspaceRole.ADMIN
+    ) {
+      throw new ForbiddenException(
+        'Only workspace owners and admins can change settings.',
+      );
+    }
+    return this.prisma.workspace.update({
+      where: { id: workspaceId },
+      data: { timezone: dto.timezone },
+    });
   }
 
   async findAllForUser(userId: string) {
-    
     const memberships = await this.prisma.workspaceMembership.findMany({
-      where: {
-        userId,
-        status: MembershipStatus.ACTIVE,
-      },
-      include: {
-        workspace: true,
-      },
+      where: { userId, status: MembershipStatus.ACTIVE },
+      include: { workspace: true },
     });
 
-    return memberships.map((m) => ({
-      ...m.workspace,
-      role: m.role,
+    return memberships.map((membership) => ({
+      ...membership.workspace,
+      role: membership.role,
     }));
   }
 
   async findOne(workspaceId: string) {
-    return this.prisma.workspace.findUnique({
-      where: { id: workspaceId },
-    });
+    return this.prisma.workspace.findUnique({ where: { id: workspaceId } });
   }
 
   async getWorkspaceMembers(workspaceId: string) {
-    return this.prisma.workspaceMembership.findMany({
-      where: { workspaceId, status: MembershipStatus.ACTIVE },
+    await this.prisma.workspaceMembership.updateMany({
+      where: {
+        workspaceId,
+        status: MembershipStatus.PENDING,
+        invitationExpiresAt: { lte: new Date() },
+      },
+      data: { status: MembershipStatus.EXPIRED },
+    });
+
+    const memberships = await this.prisma.workspaceMembership.findMany({
+      where: {
+        workspaceId,
+        status: { in: [MembershipStatus.ACTIVE, MembershipStatus.PENDING] },
+      },
       include: {
         user: {
           select: { id: true, fullName: true, email: true, avatarUrl: true },
         },
       },
     });
+
+    // Until an invitation is accepted, only the address the inviter typed is
+    // shown; the invitee's profile (name, avatar) is not disclosed.
+    return memberships.map((membership) =>
+      membership.status === MembershipStatus.PENDING
+        ? {
+            ...membership,
+            user: {
+              id: membership.user.id,
+              email: membership.user.email,
+              fullName: null,
+              avatarUrl: null,
+            },
+          }
+        : membership,
+    );
   }
 
-  async inviteMember(workspaceId: string, inviterUserId: string, email: string, role: WorkspaceRole) {
-    const inviterMembership = await this.prisma.workspaceMembership.findUnique({
-      where: { workspaceId_userId: { workspaceId, userId: inviterUserId } },
-    });
-
-    if (!inviterMembership || (inviterMembership.role !== 'OWNER' && inviterMembership.role !== 'ADMIN')) {
-      throw new ForbiddenException('Bu işlem için yetkiniz yok.');
-    }
-
-    let targetUser = await this.prisma.user.findUnique({ where: { email } });
-
-    if (!targetUser) {
-      throw new NotFoundException('Bu e-posta adresine sahip bir kullanıcı sistemde bulunamadı.');
-    }
-
-    const existingMembership = await this.prisma.workspaceMembership.findUnique({
-      where: { workspaceId_userId: { workspaceId, userId: targetUser.id } },
-    });
-
-    if (existingMembership) {
-      throw new ConflictException('Bu kullanıcı zaten bu workspace\'in üyesi.');
-    }
-
-    const membership = await this.prisma.workspaceMembership.create({
-      data: {
-        workspaceId,
-        userId: targetUser.id,
-        role,
-        status: MembershipStatus.ACTIVE, 
-        invitedById: inviterUserId,
+  async getPendingInvitations(userId: string) {
+    await this.prisma.workspaceMembership.updateMany({
+      where: {
+        userId,
+        status: MembershipStatus.PENDING,
+        invitationExpiresAt: { lte: new Date() },
       },
-      include: { user: { select: { id: true, fullName: true, email: true } } },
+      data: { status: MembershipStatus.EXPIRED },
     });
 
-    // E-posta kuyruğunu tetikle (Notification Spec)
-    const ws = await this.prisma.workspace.findUnique({ where: { id: workspaceId } });
-    this.eventEmitter.emit('workspace.member_invited', {
-      email: targetUser.email,
-      fullName: targetUser.fullName,
-      workspaceName: ws?.name || 'Workspace',
+    return this.prisma.workspaceMembership.findMany({
+      where: {
+        userId,
+        status: MembershipStatus.PENDING,
+        workspace: { deletedAt: null },
+      },
+      include: {
+        workspace: {
+          select: { id: true, name: true, slug: true },
+        },
+        invitedBy: {
+          select: { id: true, fullName: true, email: true },
+        },
+      },
+      orderBy: { invitedAt: 'desc' },
     });
-
-    return membership;
   }
 
-  async updateMemberRole(workspaceId: string, actorUserId: string, targetMembershipId: string, newRole: WorkspaceRole) {
+  /**
+   * Single-use, atomic acceptance: one conditional UPDATE consumes the
+   * invitation only if it belongs to the caller, is still PENDING, has not
+   * expired and its workspace still exists. Concurrent accepts therefore have
+   * exactly one winner; (workspaceId, userId) is unique, so no duplicate
+   * membership can be created.
+   */
+  async acceptInvitation(workspaceId: string, userId: string) {
+    const now = new Date();
+    const result = await this.prisma.workspaceMembership.updateMany({
+      where: {
+        workspaceId,
+        userId,
+        status: MembershipStatus.PENDING,
+        invitationExpiresAt: { gt: now },
+        // Defence in depth: ownership is never granted through an invitation.
+        role: { not: WorkspaceRole.OWNER },
+        workspace: { deletedAt: null },
+      },
+      data: {
+        status: MembershipStatus.ACTIVE,
+        joinedAt: now,
+        invitationExpiresAt: null,
+      },
+    });
+
+    if (result.count !== 1) {
+      const membership = await this.prisma.workspaceMembership.findUnique({
+        where: { workspaceId_userId: { workspaceId, userId } },
+      });
+
+      if (
+        membership?.status === MembershipStatus.PENDING &&
+        (!membership.invitationExpiresAt ||
+          membership.invitationExpiresAt <= now)
+      ) {
+        await this.prisma.workspaceMembership.update({
+          where: { id: membership.id },
+          data: { status: MembershipStatus.EXPIRED },
+        });
+        throw new ForbiddenException('This workspace invitation has expired.');
+      }
+
+      throw new NotFoundException('No pending workspace invitation found.');
+    }
+
+    return { message: 'Workspace invitation accepted.' };
+  }
+
+  async declineInvitation(workspaceId: string, userId: string) {
+    const result = await this.prisma.workspaceMembership.deleteMany({
+      where: {
+        workspaceId,
+        userId,
+        status: MembershipStatus.PENDING,
+      },
+    });
+
+    if (result.count !== 1) {
+      throw new NotFoundException('No pending workspace invitation found.');
+    }
+
+    return { message: 'Workspace invitation declined.' };
+  }
+
+  async updateMemberRole(
+    workspaceId: string,
+    actorUserId: string,
+    targetMembershipId: string,
+    newRole: WorkspaceRole,
+  ) {
     const actorMembership = await this.prisma.workspaceMembership.findUnique({
       where: { workspaceId_userId: { workspaceId, userId: actorUserId } },
     });
 
-    if (!actorMembership || actorMembership.role !== 'OWNER') {
-      throw new ForbiddenException('Sadece Workspace sahibi (OWNER) rolleri değiştirebilir.');
+    if (!actorMembership || actorMembership.role !== WorkspaceRole.OWNER) {
+      throw new ForbiddenException(
+        'Only the workspace owner can change roles.',
+      );
+    }
+
+    // Ownership changes require a dedicated transfer flow so that assigning
+    // OWNER cannot accidentally create ambiguous ownership.
+    if (newRole === WorkspaceRole.OWNER) {
+      throw new ForbiddenException(
+        'The OWNER role cannot be assigned here; ownership transfer is a separate operation.',
+      );
     }
 
     const targetMembership = await this.prisma.workspaceMembership.findUnique({
@@ -142,17 +268,22 @@ export class WorkspacesService {
     });
 
     if (!targetMembership || targetMembership.workspaceId !== workspaceId) {
-      throw new NotFoundException('Üyelik bulunamadı.');
+      throw new NotFoundException('Membership not found.');
     }
 
-    if (targetMembership.role === 'OWNER' && newRole !== 'OWNER') {
+    if (targetMembership.role === WorkspaceRole.OWNER) {
       const ownerCount = await this.prisma.workspaceMembership.count({
-        where: { workspaceId, role: 'OWNER', status: 'ACTIVE' },
+        where: {
+          workspaceId,
+          role: WorkspaceRole.OWNER,
+          status: MembershipStatus.ACTIVE,
+        },
       });
+
       if (ownerCount <= 1) {
         throw new ConflictException({
           code: 'LAST_OWNER_PROTECTION',
-          message: 'Workspace\'in son OWNER\'ının rolü düşürülemez.',
+          message: 'The last owner of a workspace cannot be demoted.',
         });
       }
     }
@@ -163,13 +294,23 @@ export class WorkspacesService {
     });
   }
 
-  async removeMember(workspaceId: string, actorUserId: string, targetMembershipId: string) {
+  async removeMember(
+    workspaceId: string,
+    actorUserId: string,
+    targetMembershipId: string,
+  ) {
     const actorMembership = await this.prisma.workspaceMembership.findUnique({
       where: { workspaceId_userId: { workspaceId, userId: actorUserId } },
     });
 
-    if (!actorMembership || (actorMembership.role !== 'OWNER' && actorMembership.role !== 'ADMIN')) {
-      throw new ForbiddenException('Bu işlem için yetkiniz yok.');
+    if (
+      !actorMembership ||
+      (actorMembership.role !== WorkspaceRole.OWNER &&
+        actorMembership.role !== WorkspaceRole.ADMIN)
+    ) {
+      throw new ForbiddenException(
+        'You do not have permission to perform this action.',
+      );
     }
 
     const targetMembership = await this.prisma.workspaceMembership.findUnique({
@@ -177,23 +318,28 @@ export class WorkspacesService {
     });
 
     if (!targetMembership || targetMembership.workspaceId !== workspaceId) {
-      throw new NotFoundException('Üyelik bulunamadı.');
+      throw new NotFoundException('Membership not found.');
     }
 
-    if (targetMembership.role === 'OWNER') {
+    if (targetMembership.role === WorkspaceRole.OWNER) {
+      if (actorMembership.role !== WorkspaceRole.OWNER) {
+        throw new ForbiddenException('An admin cannot remove an owner.');
+      }
+
       const ownerCount = await this.prisma.workspaceMembership.count({
-        where: { workspaceId, role: 'OWNER', status: 'ACTIVE' },
+        where: {
+          workspaceId,
+          role: WorkspaceRole.OWNER,
+          status: MembershipStatus.ACTIVE,
+        },
       });
+
       if (ownerCount <= 1) {
         throw new ConflictException({
           code: 'LAST_OWNER_PROTECTION',
-          message: 'Workspace\'in son OWNER\'ı silinemez.',
+          message: 'The last owner of a workspace cannot be removed.',
         });
       }
-    }
-
-    if (actorMembership.role === 'ADMIN' && targetMembership.role === 'OWNER') {
-      throw new ForbiddenException('ADMIN rolündeki biri bir OWNER\'ı çıkaramaz.');
     }
 
     return this.prisma.workspaceMembership.delete({
@@ -201,11 +347,28 @@ export class WorkspacesService {
     });
   }
 
-  async getAuditLogs(workspaceId: string) {
-    return this.prisma.auditLogEntry.findMany({
-      where: { workspaceId },
-      orderBy: { createdAt: 'desc' },
-      take: 50,
+  /** Newest first; keyset page ordered by (createdAt, id) descending. */
+  async getAuditLogs(workspaceId: string, query: PaginationQueryDto) {
+    const limit = query.limit ?? DEFAULT_PAGE_SIZE;
+    const before = query.cursor ? decodeAuditCursor(query.cursor) : undefined;
+    const rows = await this.prisma.auditLogEntry.findMany({
+      where: {
+        workspaceId,
+        ...(before && {
+          // The redundant upper bound lets PostgreSQL seek in the index.
+          createdAt: { lte: before.createdAt },
+          OR: [
+            { createdAt: { lt: before.createdAt } },
+            { createdAt: before.createdAt, id: { lt: before.id } },
+          ],
+        }),
+      },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      take: limit + 1,
     });
+    return toPage(rows, limit, (entry) => [
+      entry.createdAt.toISOString(),
+      entry.id,
+    ]);
   }
 }

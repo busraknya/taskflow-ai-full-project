@@ -1,20 +1,25 @@
 import { Module } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
 import { JwtModule } from '@nestjs/jwt';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { PassportModule } from '@nestjs/passport';
+import { buildJwtModuleOptions } from './jwt-config';
 
 @Module({
   imports: [
     PassportModule,
-    JwtModule.register({
-      secret: process.env.JWT_SECRET || 'super-secret-key-change-it',
-      signOptions: { expiresIn: '15m' },
+    // The secret comes from ConfigService and must pass the strength check;
+    // there is deliberately no hard-coded fallback.
+    JwtModule.registerAsync({
+      inject: [ConfigService],
+      useFactory: (configService: ConfigService) =>
+        buildJwtModuleOptions(configService),
     }),
   ],
   controllers: [AuthController],
   providers: [AuthService, JwtStrategy],
-  exports: [JwtStrategy, PassportModule],
+  exports: [AuthService, JwtStrategy, PassportModule],
 })
 export class AuthModule {}
