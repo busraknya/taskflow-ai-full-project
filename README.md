@@ -31,7 +31,7 @@ TaskFlow is still under active development. The list above describes the intende
 | Part | Responsibility |
 |---|---|
 | Web app | Manage projects and tasks in a browser |
-| Android app | Follow and update tasks on a phone, including supported offline actions |
+| Android app | Sign up, follow and create tasks, change status, comment and see delay risk on a phone, including supported offline actions |
 | Backend | Apply the main application rules and handle requests |
 | Database | Store accounts, workspaces, projects, tasks, and related data |
 | Background jobs | Handle work such as notifications and email |
@@ -85,7 +85,7 @@ TaskFlow hâlâ geliştirme aşamasındadır. Bu maddeler hedeflediğimiz ürün
 | Bölüm | Görevi |
 |---|---|
 | Web uygulaması | Proje ve görevleri tarayıcıdan yönetmek |
-| Android uygulaması | Görevleri telefondan takip etmek ve desteklenen durumlarda çevrimdışı çalışmak |
+| Android uygulaması | Telefondan kayıt olmak, görevleri takip etmek ve oluşturmak, durum değiştirmek, yorum yazmak ve gecikme riskini görmek; desteklenen durumlarda çevrimdışı çalışmak |
 | Backend (sunucu) | Uygulamanın temel kurallarını yürütmek ve istekleri işlemek |
 | Veritabanı | Hesap, çalışma alanı, proje, görev ve ilgili bilgileri saklamak |
 | Arka plan işlemleri | Bildirim ve e-posta gibi işleri yürütmek |
@@ -406,6 +406,10 @@ No model is shipped. Each workspace can learn delay risk from its own task histo
 - **Training** runs automatically when a workspace with training enabled is ready, for the first time and then at most monthly once outcome-known tasks have grown by 20%. A model is activated only if it passes the evaluation gate, otherwise the current state is kept. Every run, including rejected ones, is recorded.
 - **Predictions** are recomputed after task and comment changes and daily at 02:00 UTC. The web app and Android app show the same states: collecting data (with progress), no validated model yet, the level from the workspace's model (marked low confidence when it is not calibrated), or why there is no prediction for a task.
 - **Storage:** models are stored in the `ml-models` Docker volume. Include it in backups if you want to keep trained models; without it, models are retrained from task history on the next scheduled run. Models of deleted workspaces are removed nightly.
+
+## Design system
+
+The web and Android apps share one design system: the same colour tokens (light and dark, following the device setting), type scale, radii and wording. The tokens live in `frontend/src/app/globals.css` and `android/app/src/main/java/com/taskflowai/taskflowai/presentation/ui/theme/Color.kt`; change both together. Every text/background pair meets WCAG AA contrast. Dates are shown in English (`Nov 28, 2026`) in the viewer's time zone; date-only due dates never shift between time zones. Admin screens (members, invitations, activity log, risk-model training) are web-only.
 
 ## Android client
 

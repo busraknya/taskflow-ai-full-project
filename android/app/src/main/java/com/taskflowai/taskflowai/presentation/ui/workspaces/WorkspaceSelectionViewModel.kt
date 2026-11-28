@@ -8,16 +8,16 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.taskflowai.taskflowai.data.remote.ApiClient
 import com.taskflowai.taskflowai.data.remote.WorkspaceDto
+import com.taskflowai.taskflowai.data.remote.errorMessage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
 class WorkspaceSelectionViewModel(application: Application) : AndroidViewModel(application) {
-    var workspaces by mutableStateOf<List<WorkspaceDto>>(emptyList())
+    /** Null until the first load finishes. */
+    var workspaces by mutableStateOf<List<WorkspaceDto>?>(null)
         private set
-
-    var isLoading by mutableStateOf(false)
+    var isRefreshing by mutableStateOf(false)
         private set
-
     var errorMessage by mutableStateOf<String?>(null)
         private set
 
@@ -27,18 +27,21 @@ class WorkspaceSelectionViewModel(application: Application) : AndroidViewModel(a
 
     fun fetchWorkspaces() {
         viewModelScope.launch(Dispatchers.IO) {
-            isLoading = true
+            isRefreshing = true
             try {
                 val response = ApiClient.workspaceService.getWorkspaces()
-                if (response.isSuccessful && response.body() != null) {
-                    workspaces = response.body()!!
+                val body = response.body()
+                if (response.isSuccessful && body != null) {
+                    workspaces = body
+                    errorMessage = null
                 } else {
-                    errorMessage = "Failed to load workspaces."
+                    errorMessage = response.errorMessage("Your workspaces could not be loaded.")
                 }
             } catch (e: Exception) {
-                errorMessage = e.localizedMessage ?: "Network error."
+                errorMessage = "Cannot reach the server. Pull down to try again."
             } finally {
-                isLoading = false
+                if (workspaces == null && errorMessage != null) workspaces = emptyList()
+                isRefreshing = false
             }
         }
     }

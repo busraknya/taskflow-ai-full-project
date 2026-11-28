@@ -1,231 +1,267 @@
 package com.taskflowai.taskflowai.presentation.ui.tasks
 
-import androidx.compose.foundation.layout.*
+import android.app.Application
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExtendedFloatingActionButton
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ScrollableTabRow
+import androidx.compose.material3.Tab
+import androidx.compose.material3.TabRowDefaults
+import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
+import androidx.compose.material3.Text
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.LocalContext
-import android.app.Application
-import androidx.compose.ui.unit.sp
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.taskflowai.taskflowai.data.remote.TaskDto
+import com.taskflowai.taskflowai.presentation.ui.Labels
+import com.taskflowai.taskflowai.presentation.ui.components.Avatar
+import com.taskflowai.taskflowai.presentation.ui.components.Badge
+import com.taskflowai.taskflowai.presentation.ui.components.Banner
+import com.taskflowai.taskflowai.presentation.ui.components.EmptyState
+import com.taskflowai.taskflowai.presentation.ui.components.GhostButton
+import com.taskflowai.taskflowai.presentation.ui.components.LoadingState
+import com.taskflowai.taskflowai.presentation.ui.components.StatusDot
+import com.taskflowai.taskflowai.presentation.ui.components.Tone
+import com.taskflowai.taskflowai.presentation.ui.components.cardSurface
+import com.taskflowai.taskflowai.presentation.ui.theme.Taskflow
+
+/** Tone per risk level; LOW stays neutral so only real risk draws attention. */
+fun riskTone(level: String): Tone = when (level) {
+    "HIGH" -> Tone.Danger
+    "MEDIUM" -> Tone.Warning
+    else -> Tone.Neutral
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TaskScreen(
     workspaceId: String,
+    workspaceName: String,
+    canEdit: Boolean,
+    /** True after a task was created or changed elsewhere; the board reloads once. */
+    changed: Boolean,
+    onChangeHandled: () -> Unit,
+    onOpenTask: (taskId: String) -> Unit,
+    onCreateTask: (projectId: String) -> Unit,
     onBackToWorkspaces: () -> Unit,
-    onLogout: () -> Unit
 ) {
     val application = LocalContext.current.applicationContext as Application
-    val viewModel: TaskViewModel = androidx.lifecycle.viewmodel.compose.viewModel(
-        factory = TaskViewModelFactory(application, workspaceId)
-    )
-    val projects = viewModel.projects
-    val selectedProject = viewModel.selectedProject
+    val viewModel: TaskViewModel = viewModel(factory = TaskViewModelFactory(application, workspaceId))
+    val c = Taskflow.colors
+    var selectedTab by rememberSaveable { mutableIntStateOf(0) }
+    val status = Labels.statuses[selectedTab]
     val tasks = viewModel.tasks
-    val isLoading = viewModel.isLoading
+    val project = viewModel.selectedProject
 
-    // Sekmeler (Tabs) için state: 0: To Do, 1: In Progress, 2: In Review, 3: Done
-    var selectedTab by remember { mutableStateOf(0) }
-    val tabs = listOf("To Do", "In Progress", "In Review", "Done")
-    val statusMapping = listOf("TODO", "IN_PROGRESS", "IN_REVIEW", "DONE")
+    LaunchedEffect(changed) {
+        if (changed) {
+            viewModel.refresh()
+            onChangeHandled()
+        }
+    }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("TaskFlow AI", color = Color.White, fontSize = 16.sp) },
-                navigationIcon = {
-                    TextButton(onClick = onBackToWorkspaces) {
-                        Text("← Workspaces", color = Color(0xFFA1A1AA), fontSize = 12.sp)
-                    }
-                },
-                actions = {
-                    TextButton(onClick = onLogout) {
-                        Text("Logout", color = Color(0xFFEF4444), fontSize = 12.sp)
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color(0xFF18181B))
-            )
-        },
-        containerColor = Color(0xFF09090B)
-    ) { innerPadding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
-                .padding(16.dp)
-        ) {
-            // 1. Proje Seçici (Project Selector Row)
-            if (projects.isNotEmpty()) {
-                Text(text = "PROJECT", color = Color(0xFFA1A1AA), fontSize = 10.sp)
-                Spacer(modifier = Modifier.height(4.dp))
-
+    Column(Modifier.fillMaxSize().background(c.canvas)) {
+        // Header: workspace, project switcher and status tabs.
+        Column(Modifier.fillMaxWidth().background(c.surface).statusBarsPadding()) {
+            Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = onBackToWorkspaces) {
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "All workspaces", tint = c.fgMuted)
+                }
+                Column(Modifier.weight(1f)) {
+                    Text(project?.name ?: "Board", style = MaterialTheme.typography.titleMedium, color = c.fg, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(workspaceName, style = MaterialTheme.typography.bodySmall, color = c.fgMuted, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+            }
+            if (viewModel.projects.size > 1) {
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp).padding(bottom = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    projects.forEach { proj ->
-                        val isSelected = proj.id == selectedProject?.id
-                        Button(
-                            onClick = { viewModel.selectProject(proj) },
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = if (isSelected) Color.White else Color(0xFF18181B)
+                    viewModel.projects.forEach { p ->
+                        FilterChip(
+                            selected = p.id == project?.id,
+                            onClick = { viewModel.selectProject(p) },
+                            label = { Text(p.name, style = MaterialTheme.typography.labelLarge) },
+                            shape = MaterialTheme.shapes.small,
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = c.accentSoft,
+                                selectedLabelColor = c.accent,
+                                labelColor = c.fgMuted,
                             ),
-                            shape = MaterialTheme.shapes.small
-                        ) {
-                            Text(
-                                text = proj.name,
-                                color = if (isSelected) Color.Black else Color.White,
-                                fontSize = 12.sp
-                            )
-                        }
+                            border = FilterChipDefaults.filterChipBorder(enabled = true, selected = p.id == project?.id, borderColor = c.line, selectedBorderColor = c.accentSoft),
+                        )
                     }
                 }
-                Spacer(modifier = Modifier.height(16.dp))
             }
-
-            // 2. Sekmeler (Linear Mobile Tarzı Tabs)
             ScrollableTabRow(
                 selectedTabIndex = selectedTab,
-                containerColor = Color(0xFF18181B),
-                contentColor = Color.White,
-                edgePadding = 0.dp
+                containerColor = c.surface,
+                contentColor = c.fg,
+                edgePadding = 8.dp,
+                divider = { HorizontalDivider(color = c.line) },
+                indicator = { positions ->
+                    TabRowDefaults.SecondaryIndicator(Modifier.tabIndicatorOffset(positions[selectedTab]), height = 2.dp, color = c.accent)
+                },
             ) {
-                tabs.forEachIndexed { index, title ->
+                Labels.statuses.forEachIndexed { index, s ->
+                    val count = tasks.count { it.status == s }
+                    val more = viewModel.nextCursors[s] != null
                     Tab(
                         selected = selectedTab == index,
                         onClick = { selectedTab = index },
-                        text = { Text(text = title, fontSize = 12.sp) }
+                        selectedContentColor = c.fg,
+                        unselectedContentColor = c.fgMuted,
+                        text = {
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                StatusDot(s)
+                                Text(Labels.status(s), style = MaterialTheme.typography.labelLarge)
+                                Text("$count${if (more) "+" else ""}", style = MaterialTheme.typography.labelMedium, color = c.fgSubtle)
+                            }
+                        },
                     )
                 }
             }
+        }
 
-            Spacer(modifier = Modifier.height(16.dp))
+        PullToRefreshBox(
+            isRefreshing = viewModel.isLoading && tasks.isNotEmpty(),
+            onRefresh = viewModel::refresh,
+            modifier = Modifier.weight(1f),
+        ) {
+            val filtered = tasks.filter { it.status == status }
+            val hasMore = viewModel.nextCursors[status] != null
+            val riskMessage = workspaceRiskMessage(viewModel.riskModelStatus, tasks.any { currentRiskLevel(it.riskAssessments) != null })
 
-            // 3. Seçilen Sekmedeki Görevler (Tasks List)
-            val currentStatus = statusMapping[selectedTab]
-            val filteredTasks = tasks.filter { it.status == currentStatus }
-            val hasMore = viewModel.nextCursors[currentStatus] != null
-
-            if (viewModel.errorMessage != null) {
-                Text(viewModel.errorMessage!!, color = Color(0xFFF59E0B), fontSize = 11.sp)
-                Spacer(modifier = Modifier.height(8.dp))
-            }
-
-            // Honest risk state: no level is shown unless this workspace's model produced one.
-            val riskMessage = workspaceRiskMessage(
-                viewModel.riskModelStatus,
-                tasks.any { currentRiskLevel(it.riskAssessments) != null }
-            )
-            if (!isLoading && tasks.isNotEmpty() && riskMessage != null) {
-                Text(riskMessage, color = Color(0xFF71717A), fontSize = 10.sp)
-                Spacer(modifier = Modifier.height(8.dp))
-            }
-
-            if (isLoading) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(color = Color.White)
-                }
-            } else if (filteredTasks.isEmpty() && !hasMore) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text(text = "No tasks in this section.", color = Color(0xFFA1A1AA), fontSize = 12.sp)
-                }
-            } else {
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+            when {
+                viewModel.isLoading && tasks.isEmpty() -> LoadingState("Loading tasks…")
+                else -> LazyColumn(
+                    Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 96.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    items(filteredTasks) { task ->
-                        Card(
-                            colors = CardDefaults.cardColors(containerColor = Color(0xFF18181B)),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Column(modifier = Modifier.padding(16.dp)) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Text(text = task.title, color = Color.White, fontSize = 14.sp, modifier = Modifier.weight(1f))
-
-                                    // Risk badge only for a level produced by a model.
-                                    val riskLevel = currentRiskLevel(task.riskAssessments)
-                                    if (riskLevel != null) {
-                                        val badgeColor = when (riskLevel) {
-                                            "HIGH" -> Color(0xFFEF4444)   // Kırmızı
-                                            "MEDIUM" -> Color(0xFFF59E0B) // Amber/Turuncu
-                                            else -> Color(0xFFA1A1AA)     // Gri
-                                        }
-                                        Surface(
-                                            color = badgeColor.copy(alpha = 0.2f),
-                                            shape = MaterialTheme.shapes.extraSmall
-                                        ) {
-                                            Text(
-                                                text = riskLevel,
-                                                color = badgeColor,
-                                                fontSize = 9.sp,
-                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                            )
-                                        }
-                                    }
-                                }
-
-                                if (!task.description.isNullOrEmpty()) {
-                                    Spacer(modifier = Modifier.height(4.dp))
-                                    Text(text = task.description!!, color = Color(0xFFA1A1AA), fontSize = 11.sp)
-                                }
-
-                                Spacer(modifier = Modifier.height(8.dp))
-
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Text(text = "Priority: P${task.priority}", color = Color(0xFFA1A1AA), fontSize = 10.sp)
-
-                                    if (currentStatus != "DONE") {
-                                        Button(
-                                            onClick = {
-                                                val nextStatus = when (currentStatus) {
-                                                    "TODO" -> "IN_PROGRESS"
-                                                    "IN_PROGRESS" -> "IN_REVIEW"
-                                                    else -> "DONE"
-                                                }
-                                                viewModel.updateTaskStatus(task.id, nextStatus, task.version)
-                                            },
-                                            colors = ButtonDefaults.buttonColors(containerColor = Color.White),
-                                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
-                                        ) {
-                                            Text(text = "Move →", color = Color.Black, fontSize = 10.sp)
-                                        }
-                                    }
-                                }
-                            }
-                        }
+                    viewModel.errorMessage?.let { message ->
+                        item { Banner(message, if (message.startsWith("Offline")) Tone.Warning else Tone.Danger) }
                     }
-                    if (hasMore) {
+                    if (project == null && !viewModel.isLoading) {
                         item {
-                            val loadingMore = viewModel.loadingMoreStatus == currentStatus
-                            OutlinedButton(
-                                onClick = { viewModel.loadMore(currentStatus) },
-                                enabled = !loadingMore,
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Text(
-                                    text = if (loadingMore) "Loading…" else "Load more",
-                                    color = Color(0xFFA1A1AA),
-                                    fontSize = 11.sp
+                            EmptyState(
+                                "No projects yet",
+                                if (canEdit) "Create a project in the TaskFlow web app to start adding tasks." else "An owner or admin needs to create a project first.",
+                            )
+                        }
+                    } else {
+                        if (riskMessage != null && tasks.isNotEmpty()) {
+                            item { Text(riskMessage, style = MaterialTheme.typography.bodySmall, color = c.fgSubtle) }
+                        }
+                        if (filtered.isEmpty() && !hasMore) {
+                            item { EmptyState("No tasks in ${Labels.status(status).lowercase()}") }
+                        }
+                        items(filtered, key = { it.id }) { task ->
+                            TaskCard(
+                                task = task,
+                                canMove = canEdit,
+                                onOpen = { onOpenTask(task.id) },
+                                onMove = { next -> viewModel.updateTaskStatus(task.id, next, task.version) },
+                            )
+                        }
+                        if (hasMore) {
+                            item {
+                                val loading = viewModel.loadingMoreStatus == status
+                                GhostButton(
+                                    if (loading) "Loading…" else "Load more",
+                                    onClick = { viewModel.loadMore(status) },
+                                    enabled = !loading,
+                                    modifier = Modifier.fillMaxWidth(),
+                                    color = c.fgMuted,
                                 )
                             }
                         }
                     }
                 }
             }
+
+            if (canEdit && project != null) {
+                ExtendedFloatingActionButton(
+                    onClick = { onCreateTask(project.id) },
+                    icon = { Icon(Icons.Filled.Add, contentDescription = null) },
+                    text = { Text("New task", style = MaterialTheme.typography.labelLarge) },
+                    containerColor = c.accent,
+                    contentColor = c.accentFg,
+                    shape = MaterialTheme.shapes.medium,
+                    modifier = Modifier.align(Alignment.BottomEnd).navigationBarsPadding().padding(16.dp),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun TaskCard(task: TaskDto, canMove: Boolean, onOpen: () -> Unit, onMove: (String) -> Unit) {
+    val c = Taskflow.colors
+    val next = if (canMove) Labels.nextStatus(task.status) else null
+    val risk = currentRiskLevel(task.riskAssessments)
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .cardSurface(c, MaterialTheme.shapes.medium)
+            .clickable(onClickLabel = "Open task", onClick = onOpen)
+            .padding(start = 14.dp, top = 12.dp, bottom = 12.dp, end = 4.dp),
+    ) {
+        Row(verticalAlignment = Alignment.Top) {
+            Column(Modifier.weight(1f).padding(end = 4.dp)) {
+                Text(task.title, style = MaterialTheme.typography.titleSmall, color = c.fg)
+                if (!task.description.isNullOrBlank()) {
+                    Text(task.description, style = MaterialTheme.typography.bodySmall, color = c.fgMuted, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 2.dp))
+                }
+            }
+            if (next != null) {
+                IconButton(onClick = { onMove(next) }, modifier = Modifier.size(36.dp)) {
+                    Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = "Move to ${Labels.status(next)}", tint = c.fgSubtle)
+                }
+            }
+        }
+        Spacer(Modifier.size(10.dp))
+        Row(Modifier.padding(end = 10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Badge(Labels.priority(task.priority), if (task.priority == 3) Tone.Danger else Tone.Neutral)
+            if (risk != null) Badge(Labels.risk(risk), riskTone(risk))
+            Spacer(Modifier.weight(1f))
+            task.assignee?.let { Avatar(it.fullName, size = 24) }
         }
     }
 }

@@ -61,6 +61,41 @@ data class TaskPageDto(
     val nextCursor: String?
 )
 
+data class TaskDetailDto(
+    val id: String,
+    val title: String,
+    val description: String?,
+    val status: String,
+    val priority: Int,
+    val version: Int,
+    val dueDate: String?,
+    val dueDateIsDateOnly: Boolean?,
+    val assignee: AssigneeDto?,
+    val riskAssessments: List<RiskAssessmentDto>?
+)
+
+data class CommentAuthorDto(val id: String, val fullName: String)
+
+data class CommentDto(
+    val id: String,
+    val body: String,
+    val createdAt: String,
+    val author: CommentAuthorDto
+)
+
+data class CreateCommentRequest(val body: String)
+
+/** Null fields are omitted by Gson, so optional values are simply left out. */
+data class CreateTaskRequest(
+    val title: String,
+    val projectId: String,
+    val priority: Int,
+    val description: String? = null,
+    val assigneeId: String? = null,
+    // Calendar date (YYYY-MM-DD): stored as a date-only due date.
+    val dueDate: String? = null
+)
+
 data class UpdateTaskRequest(
     val status: String,
     val version: Int,

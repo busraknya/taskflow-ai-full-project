@@ -99,6 +99,11 @@ class TaskViewModel(
         }
     }
 
+    /** Reloads the first page of every status for the selected project. */
+    fun refresh() {
+        selectedProject?.let { fetchTasksForProject(it.id) } ?: fetchProjects()
+    }
+
     fun selectProject(project: ProjectDto) {
         selectedProject = project
         fetchTasksForProject(project.id)
