@@ -109,6 +109,21 @@ describe('TaskFlow AI Core Invariants (E2E)', () => {
     const ownerToken = ownerLoginAgain.body.accessToken as string;
     const ownerRefreshToken = ownerLoginAgain.body.refreshToken as string;
 
+    // Clients restore the signed-in profile after a reload; no secrets leak.
+    const profile = await request(app.getHttpServer())
+      .get('/api/v1/users/me')
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .expect(200);
+    const profileBody = profile.body as Record<string, unknown>;
+    expect(Object.keys(profileBody).sort()).toEqual([
+      'avatarUrl',
+      'email',
+      'fullName',
+      'id',
+    ]);
+    expect(profileBody.email).toBe(ownerEmail);
+    await request(app.getHttpServer()).get('/api/v1/users/me').expect(401);
+
     const workspace = await request(app.getHttpServer())
       .post('/api/v1/workspaces')
       .set('Authorization', `Bearer ${ownerToken}`)

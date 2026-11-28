@@ -11,6 +11,15 @@ export class UsersService {
     private authService: AuthService,
   ) {}
 
+  async getProfile(userId: string) {
+    const user = await this.prisma.user.findFirst({
+      where: { id: userId, deletedAt: null, disabledAt: null },
+      select: { id: true, email: true, fullName: true, avatarUrl: true },
+    });
+    if (!user) throw new UnauthorizedException('User not found.');
+    return user;
+  }
+
   async getPreferences(userId: string) {
     return this.prisma.notificationPreference.findMany({
       where: { userId },

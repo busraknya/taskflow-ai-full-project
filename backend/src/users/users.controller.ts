@@ -21,6 +21,12 @@ import { SensitiveRateLimit } from '../common/rate-limit/rate-limit.policies';
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
+  /** The signed-in user's own profile; lets clients restore it after a reload. */
+  @Get()
+  async getProfile(@Req() req: AuthenticatedRequest) {
+    return this.usersService.getProfile(req.user.id);
+  }
+
   @Get('notification-preferences')
   async getPreferences(@Req() req: AuthenticatedRequest) {
     return this.usersService.getPreferences(req.user.id);
