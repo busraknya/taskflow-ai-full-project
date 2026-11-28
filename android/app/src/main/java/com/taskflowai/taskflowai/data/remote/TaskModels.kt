@@ -55,6 +55,12 @@ data class TaskDto(
     val riskAssessments: List<RiskAssessmentDto>?
 )
 
+/** One keyset page of tasks; nextCursor is null on the last page. */
+data class TaskPageDto(
+    val items: List<TaskDto>,
+    val nextCursor: String?
+)
+
 data class UpdateTaskRequest(
     val status: String,
     val version: Int,

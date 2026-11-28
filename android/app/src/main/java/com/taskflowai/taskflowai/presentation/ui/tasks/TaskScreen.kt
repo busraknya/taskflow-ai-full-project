@@ -109,6 +109,7 @@ fun TaskScreen(
             // 3. Seçilen Sekmedeki Görevler (Tasks List)
             val currentStatus = statusMapping[selectedTab]
             val filteredTasks = tasks.filter { it.status == currentStatus }
+            val hasMore = viewModel.nextCursors[currentStatus] != null
 
             if (viewModel.errorMessage != null) {
                 Text(viewModel.errorMessage!!, color = Color(0xFFF59E0B), fontSize = 11.sp)
@@ -129,7 +130,7 @@ fun TaskScreen(
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     CircularProgressIndicator(color = Color.White)
                 }
-            } else if (filteredTasks.isEmpty()) {
+            } else if (filteredTasks.isEmpty() && !hasMore) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Text(text = "No tasks in this section.", color = Color(0xFFA1A1AA), fontSize = 12.sp)
                 }
@@ -204,6 +205,22 @@ fun TaskScreen(
                                         }
                                     }
                                 }
+                            }
+                        }
+                    }
+                    if (hasMore) {
+                        item {
+                            val loadingMore = viewModel.loadingMoreStatus == currentStatus
+                            OutlinedButton(
+                                onClick = { viewModel.loadMore(currentStatus) },
+                                enabled = !loadingMore,
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text(
+                                    text = if (loadingMore) "Loading…" else "Load more",
+                                    color = Color(0xFFA1A1AA),
+                                    fontSize = 11.sp
+                                )
                             }
                         }
                     }

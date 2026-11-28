@@ -21,7 +21,11 @@ import com.taskflowai.taskflowai.sync.SyncScheduler
 import java.io.IOException
 import java.util.UUID
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.launch
+
+private val BOARD_STATUSES = listOf("TODO", "IN_PROGRESS", "IN_REVIEW", "DONE")
 
 class TaskViewModelFactory(
     private val application: Application,
@@ -44,7 +48,12 @@ class TaskViewModel(
         private set
     var selectedProject by mutableStateOf<ProjectDto?>(null)
         private set
+    /** Loaded tasks of every status; each status column is paged separately. */
     var tasks by mutableStateOf<List<TaskDto>>(emptyList())
+        private set
+    var nextCursors by mutableStateOf<Map<String, String?>>(emptyMap())
+        private set
+    var loadingMoreStatus by mutableStateOf<String?>(null)
         private set
     var isLoading by mutableStateOf(false)
         private set
@@ -95,21 +104,51 @@ class TaskViewModel(
         fetchTasksForProject(project.id)
     }
 
+    /** Loads the first page of every status; later pages load on demand. */
     fun fetchTasksForProject(projectId: String) {
         viewModelScope.launch(Dispatchers.IO) {
             isLoading = true
             try {
-                val response = ApiClient.taskService.getTasks(workspaceId, projectId)
-                if (response.isSuccessful && response.body() != null) {
-                    tasks = response.body()!!
+                val pages = BOARD_STATUSES.map { status ->
+                    async { ApiClient.taskService.getTasks(workspaceId, projectId, status) }
+                }.awaitAll()
+                val failed = pages.firstOrNull { !it.isSuccessful || it.body() == null }
+                if (failed == null) {
+                    tasks = pages.flatMap { it.body()!!.items }
+                    nextCursors = BOARD_STATUSES.zip(pages.map { it.body()!!.nextCursor }).toMap()
                     errorMessage = null
                 } else {
-                    errorMessage = "Failed to load tasks (HTTP ${response.code()})."
+                    errorMessage = "Failed to load tasks (HTTP ${failed.code()})."
                 }
             } catch (error: Exception) {
                 errorMessage = error.localizedMessage ?: "Unable to load tasks."
             } finally {
                 isLoading = false
+            }
+        }
+    }
+
+    fun loadMore(status: String) {
+        val projectId = selectedProject?.id ?: return
+        val cursor = nextCursors[status] ?: return
+        if (loadingMoreStatus != null) return
+        loadingMoreStatus = status
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val response = ApiClient.taskService.getTasks(workspaceId, projectId, status, cursor)
+                val page = response.body()
+                if (response.isSuccessful && page != null) {
+                    // A task whose position changed meanwhile can reappear; keep one copy.
+                    val loaded = tasks.mapTo(HashSet()) { it.id }
+                    tasks = tasks + page.items.filter { it.id !in loaded }
+                    nextCursors = nextCursors + (status to page.nextCursor)
+                } else {
+                    errorMessage = "Failed to load more tasks (HTTP ${response.code()})."
+                }
+            } catch (error: Exception) {
+                errorMessage = error.localizedMessage ?: "Unable to load more tasks."
+            } finally {
+                loadingMoreStatus = null
             }
         }
     }

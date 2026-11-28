@@ -4,6 +4,7 @@ import {
   Post,
   Body,
   Param,
+  Query,
   UseGuards,
   Req,
   Patch,
@@ -21,6 +22,7 @@ import { UpdateMemberRoleDto } from './dto/update-member-role.dto';
 import { UpdateWorkspaceSettingsDto } from './dto/update-workspace-settings.dto';
 import { AuthGuard } from '@nestjs/passport';
 import { WorkspaceMemberGuard } from './guards/workspace-member.guard';
+import { PaginationQueryDto } from '../common/pagination/pagination';
 import { AuthRateLimitGuard } from '../common/rate-limit/rate-limit.guard';
 import { SensitiveRateLimit } from '../common/rate-limit/rate-limit.policies';
 
@@ -166,8 +168,11 @@ export class WorkspacesController {
 
   @Get(':workspaceId/audit')
   @UseGuards(WorkspaceMemberGuard)
-  async getAuditLogs(@Param('workspaceId') workspaceId: string) {
-    return this.workspacesService.getAuditLogs(workspaceId);
+  async getAuditLogs(
+    @Param('workspaceId') workspaceId: string,
+    @Query() query: PaginationQueryDto,
+  ) {
+    return this.workspacesService.getAuditLogs(workspaceId, query);
   }
 
   @Delete(':workspaceId/members/:membershipId')

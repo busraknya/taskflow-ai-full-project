@@ -19,14 +19,17 @@ interface KanbanColumnProps {
   onMoveForward: (taskId: string, version: number, nextStatus: string) => void;
   onTaskClick: (taskId: string) => void;
   canEditTasks: boolean;
+  hasMore: boolean;
+  loadingMore: boolean;
+  onLoadMore: () => void;
 }
 
-export function KanbanColumn({ columnId, title, tasks, onMoveForward, onTaskClick, canEditTasks }: KanbanColumnProps) {
+export function KanbanColumn({ columnId, title, tasks, onMoveForward, onTaskClick, canEditTasks, hasMore, loadingMore, onLoadMore }: KanbanColumnProps) {
   return (
     <div className={`${theme.colors.bg.secondary} border ${theme.colors.border.primary} rounded-lg p-3 space-y-3 flex flex-col max-h-[75vh]`}>
       <div className="flex justify-between items-center px-1">
         <span className="text-xs font-medium text-zinc-300">{title}</span>
-        <span className="text-[10px] bg-zinc-800 text-zinc-400 px-2 py-0.5 rounded-full">{tasks.length}</span>
+        <span className="text-[10px] bg-zinc-800 text-zinc-400 px-2 py-0.5 rounded-full">{tasks.length}{hasMore ? '+' : ''}</span>
       </div>
 
       <div className="space-y-2 overflow-y-auto flex-1 pr-1">
@@ -72,6 +75,15 @@ export function KanbanColumn({ columnId, title, tasks, onMoveForward, onTaskClic
             </div>
           );
         })}
+        {hasMore && (
+          <button
+            onClick={onLoadMore}
+            disabled={loadingMore}
+            className="w-full text-[11px] text-zinc-400 hover:text-white border border-dashed border-zinc-800 rounded-md py-1.5 disabled:opacity-50"
+          >
+            {loadingMore ? 'Loading…' : 'Load more'}
+          </button>
+        )}
       </div>
     </div>
   );

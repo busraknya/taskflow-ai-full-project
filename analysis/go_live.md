@@ -823,3 +823,24 @@ Gerçek backend ile Web UI ve Android E2E, gerçek SMTP teslimatı, TLS'li produ
 - Web arayüzü ve Android zaten İngilizceydi. Frontend `errors.ts` içindeki, artık backend'de bulunmayan üç Türkçe mesaj eşlemesi kaldırıldı.
 - Kapsam dışında kalanlar: Türkçe kod yorumları (kullanıcıya görünmüyor) ve çok dilli destek (i18n) yok; arayüz ve API tek dilli, İngilizce.
 - **Doğrulama:** backend 35 suite / 379 birim testi; `tsc`; değişen dosyalarda ESLint 0 sorun (HEAD'de de 0); Prettier'da yeni sorun yok (7 dosyadaki eski biçim farkları değişiklikten önce de vardı); gerçek PostgreSQL 16 + Redis 7 ile E2E 8 suite / 52 test; frontend `tsc`, ESLint ve build.
+
+---
+
+# 28 Kasım 2026 — Görev ve audit listelerinde sayfalama (TASK-06, AUD-06'nın sayfalama kısmı)
+
+- **API (uyumsuz değişiklik):** `GET /workspaces/:id/tasks` ve `GET /workspaces/:id/audit` artık dizi yerine `{ items, nextCursor }` döndürüyor. Keyset (cursor) sayfalama kullanılıyor; offset yok. Görevler `(position, id)` sırasıyla, audit kayıtları `(createdAt, id)` azalan sırayla geliyor. Bu sayede eşit `position` veya eşit zaman damgalı kayıtlar sayfalar arasında atlanmıyor ya da tekrarlanmıyor. Parametreler: `limit` (varsayılan 50, en fazla 200), `cursor`; görevlerde ayrıca `projectId` (UUID) ve `status`. Bozuk veya başka bir listeye ait cursor `400 INVALID_CURSOR` döndürüyor. Ürün henüz yayında olmadığından eski istemci yok; web ve Android aynı değişiklikte güncellendi.
+- **Web ve Android:** Kanban sütunları ve Android durum sekmeleri ilk 50 görevi yüklüyor; devamı sütun/sekme altındaki "Load more" ile geliyor. Daha fazla görev varsa sayaç "50+" gibi gösteriliyor. Activity sayfasında da "Load more" var. Görev ekleme veya taşıma sonrasında dört sütunun ilk sayfası yeniden yükleniyor. Bu arada `position` değeri değiştiği için tekrar gelen görev listeye ikinci kez eklenmiyor.
+- **İndeksler (migration `20261128060000_list_pagination_indexes`):** `Task(projectId, status, position, id)` ve `AuditLogEntry(workspaceId, createdAt, id)` eklendi. Bunların öneki olan `Task(projectId)` ve `AuditLogEntry(workspaceId)` kaldırıldı. Sorgulara aynı anlamı taşıyan ama indeks sınırı olarak kullanılabilen bir koşul (`position >=` / `createdAt <=`) eklendi.
+- **Ölçüm** (PostgreSQL 16, 99.200 görev, 100.000 audit kaydı; sütunda 5.000, workspace'te 5.000 eşleşen satır; `EXPLAIN ANALYZE`):
+
+  | Sorgu | Önce | Sonra |
+  |---|---|---|
+  | Görev sütunu, ilk sayfa | 4,1 ms (5.000 satır okunup sıralanıyor) | 0,18 ms (indeks taraması, 51 satır) |
+  | Görev sütunu, derin sayfa | 1,2 ms | 0,09 ms |
+  | Audit, ilk sayfa | 2,6 ms | 0,06 ms |
+  | Audit, derin sayfa | 1,4 ms | 0,07 ms |
+
+  Önceki maliyet eşleşen satır sayısıyla doğrusal artıyordu; şimdi sayfa boyutuna bağlı. Migration bu veri üzerinde 1 saniyenin altında uygulandı. Çok büyük kurulumlarda `CREATE INDEX` yazmaları kısa süre bekletebilir; yükseltmeyi düşük trafikli bir zamanda yapmak gerekir.
+- **Kapsam dışı:** Üye listesi sayfalanmadı. Bir workspace'te genelde onlarca üye olur; üst sınır koymak da kayıtları kullanıcıya haber vermeden kesmek anlamına gelirdi. Audit için tarih aralığı filtresi (AUD-06'nın diğer kısmı) ve yorum sayfalaması yapılmadı.
+- **Doğrulama:** backend 36 suite / 385 birim testi; E2E 9 suite / 61 test (yeni `pagination.e2e-spec.ts`: eşit `position`/zaman damgasında sıranın doğruluğu, silinmiş ve başka projedeki görevlerin hariç tutulması, başka workspace'in audit kayıtlarının hariç tutulması, geçersiz `cursor`/`limit`/`status` için 400). Mutasyon kontrolü: id karşılaştırması `gt` yerine `gte` yapılınca E2E başarısız oluyor. Ayrıca `tsc`, değişen dosyalarda ESLint'te yeni sorun yok, Prettier, web `tsc`/build, Android `testDebugUnitTest assembleDebug`. Not: Android'deki sayfalama mantığı için birim testi yok. `auth-session.spec.ts` içindeki bilinen kararsız test paralel çalıştırmada 10'da 3 kez "socket hang up" ile düştü; CI'ın kullandığı `--runInBand` modunda 5/5 temiz geçti.
+

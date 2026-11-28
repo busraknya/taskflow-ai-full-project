@@ -17,26 +17,39 @@ interface AuditLog {
 }
 
 interface WorkspaceSummary { id: string; slug: string; }
+interface AuditPage { items: AuditLog[]; nextCursor: string | null; }
 
 export default function ActivityPage() {
   const params = useParams();
   const workspaceSlug = params.workspaceSlug as string;
   const router = useRouter();
 
+  const [workspaceId, setWorkspaceId] = useState<string | null>(null);
   const [logs, setLogs] = useState<AuditLog[]>([]);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState('');
 
-  const fetchAuditLogs = useCallback(async (wsId: string) => {
+  /** Newest first; each call appends the page that follows `cursor`. */
+  const fetchAuditLogs = useCallback(async (wsId: string, cursor?: string) => {
     try {
-      const res = await api.get<AuditLog[]>(`/workspaces/${wsId}/audit`);
-      setLogs(res.data);
+      const res = await api.get<AuditPage>(`/workspaces/${wsId}/audit`, { params: { cursor } });
+      setLogs((prev) => (cursor ? [...prev, ...res.data.items] : res.data.items));
+      setNextCursor(res.data.nextCursor);
     } catch {
       setError('Failed to load activity logs.');
     } finally {
       setLoading(false);
     }
   }, []);
+
+  const loadMore = async () => {
+    if (!workspaceId || !nextCursor) return;
+    setLoadingMore(true);
+    await fetchAuditLogs(workspaceId, nextCursor);
+    setLoadingMore(false);
+  };
 
   useEffect(() => {
     const init = async () => {
@@ -48,6 +61,7 @@ export default function ActivityPage() {
           setLoading(false);
           return;
         }
+        setWorkspaceId(currentWs.id);
         await fetchAuditLogs(currentWs.id);
       } catch {
         setError('Failed to load workspace.');
@@ -113,6 +127,15 @@ export default function ActivityPage() {
                 </span>
               </div>
             ))}
+            {nextCursor && (
+              <button
+                onClick={loadMore}
+                disabled={loadingMore}
+                className="w-full text-xs text-zinc-400 hover:text-white border border-dashed border-zinc-800 rounded-md py-2 disabled:opacity-50"
+              >
+                {loadingMore ? 'Loading…' : 'Load more'}
+              </button>
+            )}
           </div>
         )}
 

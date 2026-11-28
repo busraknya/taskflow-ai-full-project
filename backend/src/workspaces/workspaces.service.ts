@@ -9,6 +9,22 @@ import { CreateWorkspaceDto } from './dto/create-workspace.dto';
 import { UpdateWorkspaceSettingsDto } from './dto/update-workspace-settings.dto';
 import { WorkspaceRole, MembershipStatus, Prisma } from '@prisma/client';
 import { EventEmitter2 } from '@nestjs/event-emitter';
+import {
+  decodeCursor,
+  DEFAULT_PAGE_SIZE,
+  invalidCursor,
+  PaginationQueryDto,
+  toPage,
+} from '../common/pagination/pagination';
+
+function decodeAuditCursor(cursor: string): { createdAt: Date; id: string } {
+  const [createdAt, id] = decodeCursor(cursor);
+  const date = typeof createdAt === 'string' ? new Date(createdAt) : undefined;
+  if (!date || Number.isNaN(date.getTime()) || typeof id !== 'string') {
+    throw invalidCursor();
+  }
+  return { createdAt: date, id };
+}
 
 function isUniqueConstraintViolation(error: unknown): boolean {
   return (
@@ -331,11 +347,28 @@ export class WorkspacesService {
     });
   }
 
-  async getAuditLogs(workspaceId: string) {
-    return this.prisma.auditLogEntry.findMany({
-      where: { workspaceId },
-      orderBy: { createdAt: 'desc' },
-      take: 50,
+  /** Newest first; keyset page ordered by (createdAt, id) descending. */
+  async getAuditLogs(workspaceId: string, query: PaginationQueryDto) {
+    const limit = query.limit ?? DEFAULT_PAGE_SIZE;
+    const before = query.cursor ? decodeAuditCursor(query.cursor) : undefined;
+    const rows = await this.prisma.auditLogEntry.findMany({
+      where: {
+        workspaceId,
+        ...(before && {
+          // The redundant upper bound lets PostgreSQL seek in the index.
+          createdAt: { lte: before.createdAt },
+          OR: [
+            { createdAt: { lt: before.createdAt } },
+            { createdAt: before.createdAt, id: { lt: before.id } },
+          ],
+        }),
+      },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      take: limit + 1,
     });
+    return toPage(rows, limit, (entry) => [
+      entry.createdAt.toISOString(),
+      entry.id,
+    ]);
   }
 }

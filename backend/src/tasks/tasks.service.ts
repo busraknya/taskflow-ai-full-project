@@ -2,6 +2,13 @@ import { Injectable, NotFoundException, ConflictException, ForbiddenException, L
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateTaskDto } from './dto/create-task.dto';
 import { UpdateTaskDto } from './dto/update-task.dto';
+import { ListTasksQueryDto } from './dto/list-tasks-query.dto';
+import {
+  decodeCursor,
+  DEFAULT_PAGE_SIZE,
+  invalidCursor,
+  toPage,
+} from '../common/pagination/pagination';
 import { AuditService } from '../common/audit/audit.service'; 
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { InjectQueue } from '@nestjs/bullmq';
@@ -20,6 +27,14 @@ import {
   riskAssessmentJobId,
   RiskQueueJobData,
 } from '../ai/risk-assessment.queue';
+
+function decodeTaskCursor(cursor: string): { position: number; id: string } {
+  const [position, id] = decodeCursor(cursor);
+  if (!Number.isInteger(position) || typeof id !== 'string') {
+    throw invalidCursor();
+  }
+  return { position: position as number, id };
+}
 
 @Injectable()
 export class TasksService {
@@ -155,12 +170,24 @@ export class TasksService {
     return task;
   }
 
-  async findAllInWorkspace(workspaceId: string, projectId?: string) {
-    return this.prisma.task.findMany({
+  /** Keyset page ordered by (position, id), so a page never skips or repeats rows. */
+  async findAllInWorkspace(workspaceId: string, query: ListTasksQueryDto) {
+    const limit = query.limit ?? DEFAULT_PAGE_SIZE;
+    const after = query.cursor ? decodeTaskCursor(query.cursor) : undefined;
+    const rows = await this.prisma.task.findMany({
       where: {
         workspaceId,
-        projectId: projectId || undefined,
+        projectId: query.projectId,
+        status: query.status,
         deletedAt: null,
+        ...(after && {
+          // The redundant lower bound lets PostgreSQL seek in the index.
+          position: { gte: after.position },
+          OR: [
+            { position: { gt: after.position } },
+            { position: after.position, id: { gt: after.id } },
+          ],
+        }),
       },
       include: {
         assignee: {
@@ -168,8 +195,10 @@ export class TasksService {
         },
         riskAssessments: CURRENT_RISK_ASSESSMENT_INCLUDE,
       },
-      orderBy: { position: 'asc' },
+      orderBy: [{ position: 'asc' }, { id: 'asc' }],
+      take: limit + 1,
     });
+    return toPage(rows, limit, (task) => [task.position, task.id]);
   }
 
   async update(workspaceId: string, taskId: string, userId: string, dto: UpdateTaskDto) {

@@ -15,6 +15,7 @@ import type { WorkspaceMemberRequest } from '../common/types/authenticated-reque
 import { TasksService } from './tasks.service';
 import { CreateTaskDto } from './dto/create-task.dto';
 import { UpdateTaskDto } from './dto/update-task.dto';
+import { ListTasksQueryDto } from './dto/list-tasks-query.dto';
 import { AuthGuard } from '@nestjs/passport';
 import { WorkspaceMemberGuard } from '../workspaces/guards/workspace-member.guard';
 
@@ -42,9 +43,9 @@ export class TasksController {
   @Get()
   async findAll(
     @Param('workspaceId') workspaceId: string,
-    @Query('projectId') projectId?: string,
+    @Query() query: ListTasksQueryDto,
   ) {
-    return this.tasksService.findAllInWorkspace(workspaceId, projectId);
+    return this.tasksService.findAllInWorkspace(workspaceId, query);
   }
 
   @Get(':taskId')

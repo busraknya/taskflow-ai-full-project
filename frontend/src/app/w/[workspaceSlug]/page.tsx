@@ -24,7 +24,13 @@ const COLUMNS = [
   { id: 'IN_PROGRESS', title: 'In Progress' },
   { id: 'IN_REVIEW', title: 'In Review' },
   { id: 'DONE', title: 'Done' },
-];
+] as const;
+type ColumnId = (typeof COLUMNS)[number]['id'];
+
+/** One keyset page of a board column; nextCursor is null on the last page. */
+interface ColumnPage { items: Task[]; nextCursor: string | null; }
+const EMPTY_PAGE: ColumnPage = { items: [], nextCursor: null };
+const EMPTY_BOARD: Record<ColumnId, ColumnPage> = { TODO: EMPTY_PAGE, IN_PROGRESS: EMPTY_PAGE, IN_REVIEW: EMPTY_PAGE, DONE: EMPTY_PAGE };
 
 export default function WorkspaceDashboard() {
   const router = useRouter();
@@ -36,7 +42,8 @@ export default function WorkspaceDashboard() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [members, setMembers] = useState<Member[]>([]);
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
-  const [tasks, setTasks] = useState<Task[]>([]);
+  const [board, setBoard] = useState<Record<ColumnId, ColumnPage>>(EMPTY_BOARD);
+  const [loadingMore, setLoadingMore] = useState<ColumnId | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   
@@ -74,12 +81,34 @@ export default function WorkspaceDashboard() {
     } catch (err) { console.error(err); }
   };
 
+  const fetchColumn = (wsId: string, projectId: string, status: ColumnId, cursor?: string) =>
+    api
+      .get<ColumnPage>(`/workspaces/${wsId}/tasks`, { params: { projectId, status, cursor } })
+      .then((res) => res.data);
+
+  /** Loads the first page of every column; later pages load on demand. */
   const fetchTasks = async (wsId: string, projId: string) => {
     try {
-      const res = await api.get(`/workspaces/${wsId}/tasks?projectId=${projId}`);
-      setTasks(res.data);
+      const pages = await Promise.all(COLUMNS.map((col) => fetchColumn(wsId, projId, col.id)));
+      setBoard(Object.fromEntries(COLUMNS.map((col, i) => [col.id, pages[i]])) as Record<ColumnId, ColumnPage>);
     } catch (err) { setError('Failed to load tasks.'); }
     finally { setLoading(false); }
+  };
+
+  const loadMore = async (status: ColumnId) => {
+    const cursor = board[status].nextCursor;
+    if (!workspaceId || !selectedProject || !cursor) return;
+    setLoadingMore(status);
+    try {
+      const page = await fetchColumn(workspaceId, selectedProject.id, status, cursor);
+      setBoard((prev) => {
+        // A task whose position changed meanwhile can reappear; keep one copy.
+        const loaded = new Set(prev[status].items.map((t) => t.id));
+        const items = [...prev[status].items, ...page.items.filter((t) => !loaded.has(t.id))];
+        return { ...prev, [status]: { items, nextCursor: page.nextCursor } };
+      });
+    } catch { setError('Failed to load more tasks.'); }
+    finally { setLoadingMore(null); }
   };
 
   const handleStatusChange = async (taskId: string, currentVersion: number, nextStatus: string) => {
@@ -210,7 +239,10 @@ export default function WorkspaceDashboard() {
                 key={col.id}
                 columnId={col.id}
                 title={col.title}
-                tasks={tasks.filter((t) => t.status === col.id)}
+                tasks={board[col.id].items}
+                hasMore={board[col.id].nextCursor !== null}
+                loadingMore={loadingMore === col.id}
+                onLoadMore={() => loadMore(col.id)}
                 onMoveForward={handleStatusChange}
                 canEditTasks={currentUserRole !== 'VIEWER'}
                 onTaskClick={(taskId) => setActiveTaskId(taskId)}

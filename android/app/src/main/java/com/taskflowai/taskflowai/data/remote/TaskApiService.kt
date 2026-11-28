@@ -12,8 +12,10 @@ interface TaskApiService {
     @GET("workspaces/{workspaceId}/tasks")
     suspend fun getTasks(
         @Path("workspaceId") workspaceId: String,
-        @Query("projectId") projectId: String? = null
-    ): Response<List<TaskDto>>
+        @Query("projectId") projectId: String? = null,
+        @Query("status") status: String? = null,
+        @Query("cursor") cursor: String? = null
+    ): Response<TaskPageDto>
 
     @GET("workspaces/{workspaceId}/risk-model")
     suspend fun getRiskModelStatus(

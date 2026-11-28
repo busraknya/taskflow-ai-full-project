@@ -237,10 +237,11 @@ model Task {
   events          TaskEvent[]
 
   @@index([workspaceId])
-  @@index([projectId])
   @@index([assigneeId])
   @@index([dueDate])
   @@index([workspaceId, status])
+  /// Board columns: keyset pages ordered by (position, id).
+  @@index([projectId, status, position, id])
 }
 
 model Comment {
@@ -292,7 +293,8 @@ model AuditLogEntry {
   metadata    Json?
   createdAt   DateTime @default(now())
 
-  @@index([workspaceId])
+  /// Activity feed: keyset pages ordered by (createdAt, id) descending.
+  @@index([workspaceId, createdAt, id])
   @@index([entityType, entityId])
 }
 
