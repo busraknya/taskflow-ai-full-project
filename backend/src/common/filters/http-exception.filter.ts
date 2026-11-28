@@ -17,6 +17,18 @@ import {
 const GENERIC_ERROR_MESSAGE = 'An unexpected server error occurred.';
 
 /**
+ * Machine-readable fallback when an exception carries no explicit `code`:
+ * the HTTP status name in UPPER_SNAKE_CASE (404 -> NOT_FOUND), so every error
+ * body uses the same code style as the explicit codes (e.g. STALE_VERSION).
+ */
+export function statusErrorCode(status: number): string {
+  const name = STATUS_CODES[status];
+  return name
+    ? name.toUpperCase().replace(/[^A-Z0-9]+/g, '_')
+    : `HTTP_${status}`;
+}
+
+/**
  * Errors created with the `http-errors` package (e.g. by body-parser for an
  * oversized or malformed body) mark client-safe messages with `expose: true`.
  */
@@ -61,11 +73,13 @@ export class HttpExceptionFilter implements ExceptionFilter {
 
     if (exception instanceof HttpException) {
       status = exception.getStatus();
+      errorCode = statusErrorCode(status);
       const exceptionResponse = exception.getResponse();
 
       if (typeof exceptionResponse === 'object' && exceptionResponse !== null) {
         const errorResponse = exceptionResponse as Record<string, unknown>;
-        const code = errorResponse.code ?? errorResponse.error;
+        // Nest's `error` field is the human status text, never a code.
+        const code = errorResponse.code;
         const responseMessage = errorResponse.message;
 
         if (typeof code === 'string') {
@@ -73,6 +87,7 @@ export class HttpExceptionFilter implements ExceptionFilter {
         }
 
         if (Array.isArray(responseMessage)) {
+          if (typeof code !== 'string') errorCode = 'VALIDATION_FAILED';
           message = 'Validation failed.';
           details = { fields: responseMessage };
         } else if (typeof responseMessage === 'string') {
@@ -89,7 +104,7 @@ export class HttpExceptionFilter implements ExceptionFilter {
       const clientError = asExposedClientHttpError(exception);
       if (clientError) {
         status = clientError.status;
-        errorCode = STATUS_CODES[clientError.status] ?? errorCode;
+        errorCode = statusErrorCode(clientError.status);
         message = clientError.message;
       } else {
         // Unexpected failure: the client only sees the generic message; the

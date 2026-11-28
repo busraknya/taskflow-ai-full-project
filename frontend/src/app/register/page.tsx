@@ -30,8 +30,7 @@ export default function RegisterPage() {
       const next = safeNextPath(searchParams.get('next'));
       router.push(next ? `/login?next=${encodeURIComponent(next)}` : '/login');
     } catch (err: any) {
-      const errorCode = err.response?.data?.code || err.response?.data?.message;
-      setError(getErrorMessage(errorCode));
+      setError(getErrorMessage(err.response?.data));
     } finally {
       setLoading(false);
     }

@@ -2,6 +2,7 @@ import {
   Body,
   ConflictException,
   Controller,
+  ForbiddenException,
   Get,
   HttpException,
   INestApplication,
@@ -16,7 +17,7 @@ import { Prisma } from '@prisma/client';
 import { IsEmail } from 'class-validator';
 import request from 'supertest';
 import type { App } from 'supertest/types';
-import { HttpExceptionFilter } from './http-exception.filter';
+import { HttpExceptionFilter, statusErrorCode } from './http-exception.filter';
 
 const GENERIC = 'An unexpected server error occurred.';
 
@@ -77,6 +78,11 @@ class ProbeController {
   @Get('not-found')
   notFound() {
     throw new NotFoundException('Workspace not found.');
+  }
+
+  @Get('forbidden')
+  forbidden() {
+    throw new ForbiddenException('Viewers cannot add comments.');
   }
 
   @Get('conflict')
@@ -276,7 +282,7 @@ describe('HttpExceptionFilter', () => {
 
       expect(res.body).toEqual({
         statusCode: 413,
-        code: 'Payload Too Large',
+        code: 'PAYLOAD_TOO_LARGE',
         message: 'request entity too large',
         details: {},
       });
@@ -287,7 +293,7 @@ describe('HttpExceptionFilter', () => {
       const res = await http().get('/exposed-4xx').expect(415);
       expect(res.body).toEqual({
         statusCode: 415,
-        code: 'Unsupported Media Type',
+        code: 'UNSUPPORTED_MEDIA_TYPE',
         message: 'unsupported charset "X"',
         details: {},
       });
@@ -309,7 +315,7 @@ describe('HttpExceptionFilter', () => {
       const res = await http().get('/not-found').expect(404);
       expect(res.body).toEqual({
         statusCode: 404,
-        code: 'Not Found',
+        code: 'NOT_FOUND',
         message: 'Workspace not found.',
         details: {},
       });
@@ -328,7 +334,7 @@ describe('HttpExceptionFilter', () => {
     it('keeps the intentional 503 rate-limiter message', async () => {
       const res = await http().get('/unavailable').expect(503);
       expect(res.body).toMatchObject({
-        code: 'Service Unavailable',
+        code: 'SERVICE_UNAVAILABLE',
         message:
           'Authentication is temporarily unavailable. Please try again shortly.',
       });
@@ -348,7 +354,7 @@ describe('HttpExceptionFilter', () => {
         .expect(400);
       expect(res.body).toEqual({
         statusCode: 400,
-        code: 'Bad Request',
+        code: 'VALIDATION_FAILED',
         message: 'Validation failed.',
         details: {
           fields: expect.arrayContaining([
@@ -372,6 +378,29 @@ describe('HttpExceptionFilter', () => {
       await http().get('/not-found').expect(404);
       await http().get('/conflict').expect(409);
       expect(errorLog).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('consistent error codes', () => {
+    it('derives an UPPER_SNAKE code from the status when none is given', async () => {
+      const res = await http().get('/forbidden').expect(403);
+      expect(res.body).toEqual({
+        statusCode: 403,
+        code: 'FORBIDDEN',
+        message: 'Viewers cannot add comments.',
+        details: {},
+      });
+    });
+
+    it.each([
+      [401, 'UNAUTHORIZED'],
+      [409, 'CONFLICT'],
+      [410, 'GONE'],
+      [429, 'TOO_MANY_REQUESTS'],
+      [418, 'I_M_A_TEAPOT'],
+      [599, 'HTTP_599'],
+    ])('maps status %i to %s', (status, code) => {
+      expect(statusErrorCode(status)).toBe(code);
     });
   });
 });

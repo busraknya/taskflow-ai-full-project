@@ -32,8 +32,7 @@ export default function LoginPage() {
       // Returns to a pending invitation or a safe ?next= path.
       router.push(postLoginPath(window.location.search));
     } catch (err: any) {
-      const errorCode = err.response?.data?.code || err.response?.data?.message;
-      setError(getErrorMessage(errorCode));
+      setError(getErrorMessage(err.response?.data));
     } finally {
       setLoading(false);
     }
