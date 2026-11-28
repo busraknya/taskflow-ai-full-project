@@ -804,3 +804,13 @@ Gerçek backend ile Web UI ve Android E2E, gerçek SMTP teslimatı, TLS'li produ
 ## Güncel karar
 
 **Güncel karar: NO-GO.** C-1, H-1 ve M-5 `fix/go-live-blockers` dalında kapandı ve CI ile doğrulandı. Buna karşın H-2 ve H-3 (TLS/reverse proxy ve proxy topolojisi) açık go-live engelleyicileridir ve deploy topolojisi kararına (karar 13) bağlıdır. H-4 ve M-1 ürün sahibi kararını bekliyor; go-live kapısı olarak onaylanırlarsa P0 engelleyici olarak kalırlar, onaylanmazlarsa P1'e taşınmaları önerilir. Ayrıca bu düzeltmeler `main`'de değildir ve yukarıdaki doğrulanmamış kullanıcı/operasyon akışları tamamlanmadan ticari production dağıtımı yapılmamalıdır.
+
+---
+
+# 27 Kasım 2026 — E-posta davetleri ve SMTP varsayılanı (henüz commit edilmedi)
+
+- **Dış SMTP varsayılanı kaldırıldı:** `SMTP_HOST` boşken e-posta işlemcisi dışarıdaki `smtp.mailtrap.io` sunucusuna bağlanmaya çalışıyordu. Lokal kurulumda bu doğrulandı: davet e-postaları bu sunucuda `EAUTH` hatası aldı. Artık e-posta varsayılan olarak kapalı; hiçbir sunucuya bağlanılmıyor ve açılışta tek bir uyarı loglanıyor. SMTP ayarlıysa açılışta bağlantı doğrulanıyor. Geliştirme için isteğe bağlı Mailpit profili (`dev-mail`) eklendi.
+- **E-posta adresine davet:** Yeni `WorkspaceInvitation` modeli, yalnız hash'i saklanan tek kullanımlık token, URL fragment'ında (`/invite#token`) taşınan bağlantı, 7 gün süre, yeniden gönderme (eski bağlantıyı geçersiz kılar), iptal ve bekleyen davet listesi. Kayıtlı olmayan adresler de davet edilebiliyor; kişi bağlantıdan kayıt olup katılıyor.
+- **Kapanan düşük önemli açık:** "Davetlerde kısmi hesap tespiti" kapandı. Davet yanıtı ve bekleyen liste, hesabı olan ve olmayan adresler için aynı; davet sırasında hesap araması yapılmıyor.
+- **Kalan sınırlama:** E-posta doğrulaması olmadığı için davet bağlantısı tek başına katılma yetkisi veriyor. Bağlantı yalnızca hedef kişiyle paylaşılmalı.
+- **Doğrulama:** backend 35 suite / 379 birim testi; E2E 8 suite / 52 test (yeni davet akışı ve eski bekleyen davetlerin kabulü dahil); lokal Compose + Mailpit ile uçtan uca davet → e-posta → kayıt → kabul akışı; web `tsc`, ESLint ve build.

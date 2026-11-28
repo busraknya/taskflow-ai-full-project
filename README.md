@@ -171,7 +171,7 @@ For local development outside Docker, install the versions required by the relev
    - `TRUST_PROXY_HOPS` must stay `0` while the backend is reached directly (the default Compose setup). See [Reverse proxy and client IP](#reverse-proxy-and-client-ip) before putting a proxy in front of it.
    - `FRONTEND_URL` is the public web-app URL used in invitation emails.
    - `REDIS_PASSWORD` can stay empty locally; set it for any deployed environment.
-   - Configure SMTP values only if email delivery is required.
+   - Configure SMTP values only if email delivery is required (see "Email delivery" below). Without them no email is sent and invitation links are shared manually.
 
 5. Build and start the stack:
 
@@ -271,9 +271,25 @@ The backend exposes two unauthenticated health endpoints. They are excluded from
 - The ML service is not part of readiness: when it is unavailable or has no model, tasks still work and no risk assessment is stored.
 - The Compose backend health check uses the readiness endpoint, so `docker compose up --wait` and the frontend's `depends_on` wait until PostgreSQL and Redis are reachable. Docker does not restart unhealthy containers automatically; when using an orchestrator such as Kubernetes, use `/health/live` for liveness probes and `/health/ready` for readiness probes.
 
-### Invitation links
+### Email delivery
 
-`FRONTEND_URL` is the base of the link in invitation emails (`<FRONTEND_URL>/workspaces`). It defaults to `http://localhost:3000`, so set it to the public HTTPS web-app URL. Links that are not absolute `http`/`https` URLs are omitted from emails.
+Email is **off** until `SMTP_HOST` is set; TaskFlow never falls back to a third-party mail server. While it is off, the backend logs one warning at startup, no email is sent, and owners/admins copy invitation links from the Members page instead.
+
+To enable it, set `SMTP_HOST`, `SMTP_PORT` (default `587`; `465` uses implicit TLS), `SMTP_USER`/`SMTP_PASSWORD` if your server requires authentication, and `SMTP_FROM`. At startup the backend verifies the connection and logs `SMTP connection verified.` or the reason it failed.
+
+For local testing, an optional [Mailpit](https://mailpit.axllent.org/) container (MIT licence) catches all email without delivering it: run `docker compose --profile dev-mail up -d`, set `SMTP_HOST=mailpit`, `SMTP_PORT=1025` and `SMTP_FROM=noreply@taskflow.local`, and open http://localhost:8025. Do not use this profile in production.
+
+### Invitations
+
+Owners and admins invite people by email address, whether or not the address has an account (Members page or `POST /workspaces/:workspaceId/members/invite`).
+
+- **The link:** each invitation is a single-use link, `<FRONTEND_URL>/invite#<token>`, valid for 7 days. Only the token's SHA-256 hash is stored. The token sits after `#`, so browsers never send it to a server and it stays out of logs and `Referer` headers.
+- **Delivery:** the link is emailed when email delivery is enabled, and is always shown to the inviter so it can be shared directly.
+- **Accepting:** the recipient opens the link, signs in or creates an account, and joins with the invited role. The link is what authorises joining, because TaskFlow does not verify email addresses: share links only with the intended person.
+- **Managing:** owners and admins see pending invitations, can resend (which issues a new link and invalidates the old one) and can revoke. Admins cannot invite or manage admin invitations.
+- **No account enumeration:** the invite response and the pending list are the same for addresses with and without an account.
+- **Upgrading:** invitations created by earlier versions (pending memberships of registered users) can still be accepted from the Workspaces page.
+- **`FRONTEND_URL`:** this is the base of invitation links. It defaults to `http://localhost:3000`, so set it to the public HTTPS web-app URL.
 
 ### Upgrading: one-time sign-in after the session-security migration
 
@@ -330,7 +346,12 @@ All paths are relative to `/api/v1`. Web clients use the refresh cookie; mobile 
 | `POST /auth/mobile/refresh` | `{ refreshToken }` | `200` `{ accessToken, refreshToken }` | Rotates the refresh token |
 | `POST /auth/mobile/logout` | `{ refreshToken }` | `200` `{ message }` | No access token required |
 | `PATCH /users/me/password` | Bearer token, `currentPassword`, `newPassword` | `200` `{ message, accessToken }` | Other sessions revoked; sets a new refresh cookie |
-| `POST /workspaces/:workspaceId/members/invite` | Bearer token, `email`, `role` | `201` `{ message, email, role, invitationExpiresAt }` | Same response whether or not the address has an account |
+| `POST /workspaces/:workspaceId/members/invite` | Bearer token (owner/admin), `email`, `role` | `201` `{ message, invitationId, email, role, invitationExpiresAt, acceptUrl, emailDelivery }` | Same response whether or not the address has an account; `emailDelivery` is `queued` or `disabled` |
+| `GET /workspaces/:workspaceId/invitations` | Bearer token (owner/admin) | `200` open invitations | Includes expired ones (`expired: true`) until renewed or revoked |
+| `POST /workspaces/:workspaceId/invitations/:id/resend` | Bearer token (owner/admin) | `201` new `acceptUrl` | The previous link stops working |
+| `DELETE /workspaces/:workspaceId/invitations/:id` | Bearer token (owner/admin) | `200` | The link stops working |
+| `POST /invitations/preview` | `{ token }` (no sign-in) | `200` `{ status, email, role, workspaceName, inviterName, expiresAt }` | `404 INVITATION_NOT_FOUND` for unknown links |
+| `POST /invitations/accept` | Bearer token, `{ token }` | `200` `{ workspace, role }` | `410 INVITATION_USED` / `INVITATION_EXPIRED`, `409 ALREADY_MEMBER` |
 
 | Error code | Status | Meaning |
 |---|---|---|
@@ -400,7 +421,7 @@ Run the relevant checks from each subproject when changing code. A passing CI ru
 
 - No task-risk model is shipped. A workspace shows risk levels only after an owner or admin enables training and a model trained on that workspace's own history passes evaluation; small or new workspaces see "collecting data" instead. Risk assessments written by the removed demonstration model (`v1`) are hidden by the API.
 - The ML service's management endpoints (`/train`, `/models/...`) have no authentication of their own. They are reachable only inside the Compose network (the service is not published), so do not expose port 8000.
-- Workspace invitations currently target registered accounts. Acceptance and seven-day expiry are implemented; browser-flow and SMTP delivery verification are still required. The invite response is identical for registered and unregistered addresses, but a pending invitation row is created (and shown in the member list) only for registered accounts, and response-time differences may also reveal whether an account exists. Partial account enumeration by workspace admins therefore remains possible.
+- Email addresses are not verified. Invitation links therefore authorise joining by themselves, and anyone holding a valid link can join with its role until it is used, revoked or expires. Delivery through a real SMTP server and the full browser flow must be verified for each deployment.
 - The per-account login limit (20 attempts per 15 minutes) also counts failed attempts made by others: an attacker who knows an email address can keep that account's login blocked. Existing sessions are not affected.
 - Redis is required for authentication: while it is unavailable, login, refresh, logout, password change, and invitations return `503`, and the first authentication request after Redis recovers can still fail once.
 - A rotated refresh token presented again within 30 seconds is not treated as reuse, which narrows theft detection in that window. Session families have no absolute lifetime; regularly used sessions stay valid until logout or a password change.
