@@ -1,204 +1,154 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { Plus } from 'lucide-react';
 import { api } from '@/lib/api';
-import { theme } from '@/lib/theme';
-import { Alert } from '@/components/ui/Alert';
-import { WorkspaceCard } from '@/components/workspaces/WorkspaceCard';
+import { ROLE_LABEL } from '@/lib/labels';
+import type { WorkspaceSummary } from '@/lib/workspace';
+import { TopBar } from '@/components/layout/TopBar';
 import { CreateWorkspaceModal } from '@/components/workspaces/CreateWorkspaceModal';
-
-interface Workspace {
-  id: string;
-  name: string;
-  slug: string;
-  role: string;
-}
+import { WorkspaceCard } from '@/components/workspaces/WorkspaceCard';
+import { Alert } from '@/components/ui/Alert';
+import { Button } from '@/components/ui/Button';
+import { EmptyState } from '@/components/ui/EmptyState';
+import { useFeedback } from '@/components/ui/Feedback';
+import { PageLoader } from '@/components/ui/Spinner';
+import { formatDate } from '@/lib/format';
 
 interface WorkspaceInvitation {
   id: string;
   workspaceId: string;
   role: string;
   invitationExpiresAt: string | null;
-  workspace: Pick<Workspace, 'id' | 'name' | 'slug'>;
+  workspace: Pick<WorkspaceSummary, 'id' | 'name' | 'slug'>;
   invitedBy: { fullName: string; email: string } | null;
 }
 
 export default function WorkspacesPage() {
   const router = useRouter();
-  const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
+  const { toast } = useFeedback();
+  const [workspaces, setWorkspaces] = useState<WorkspaceSummary[] | null>(null);
   const [invitations, setInvitations] = useState<WorkspaceInvitation[]>([]);
-  const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [showNewModal, setShowNewModal] = useState(false);
+  const [createOpen, setCreateOpen] = useState(false);
   const [pendingAction, setPendingAction] = useState<string | null>(null);
 
-  const fetchWorkspaces = async () => {
-    try {
-      const res = await api.get<Workspace[]>('/workspaces');
-      setWorkspaces(res.data);
-    } catch {
-      setError('Failed to load workspaces.');
-    }
-  };
+  const load = useCallback(
+    () =>
+      Promise.all([api.get<WorkspaceSummary[]>('/workspaces'), api.get<WorkspaceInvitation[]>('/workspaces/invitations')]).then(
+        ([ws, inv]) => {
+          setWorkspaces(ws.data);
+          setInvitations(inv.data);
+        },
+        () => {
+          setWorkspaces((current) => current ?? []);
+          setError('Your workspaces could not be loaded. Check your connection and reload the page.');
+        },
+      ),
+    [],
+  );
 
-  const handleInvitation = async (
-    invitation: WorkspaceInvitation,
-    action: 'accept' | 'decline',
-  ) => {
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const respond = async (invitation: WorkspaceInvitation, action: 'accept' | 'decline') => {
     setPendingAction(invitation.id);
-    setError('');
     try {
       if (action === 'accept') {
-        await api.post(
-          `/workspaces/${invitation.workspaceId}/members/accept`,
-        );
-        await fetchWorkspaces();
+        await api.post(`/workspaces/${invitation.workspaceId}/members/accept`);
+        toast(`You joined ${invitation.workspace.name}.`);
       } else {
-        await api.delete(
-          `/workspaces/${invitation.workspaceId}/members/invitation`,
-        );
+        await api.delete(`/workspaces/${invitation.workspaceId}/members/invitation`);
+        toast('Invitation declined.');
       }
-      setInvitations((current) =>
-        current.filter((item) => item.id !== invitation.id),
-      );
+      await load();
     } catch {
-      setError(
-        action === 'accept'
-          ? 'Failed to accept workspace invitation. It may have expired.'
-          : 'Failed to decline workspace invitation.',
-      );
+      toast(action === 'accept' ? 'The invitation could not be accepted. It may have expired.' : 'The invitation could not be declined.', 'error');
     } finally {
       setPendingAction(null);
     }
   };
 
-  useEffect(() => {
-    let cancelled = false;
-
-    Promise.all([
-      api.get<Workspace[]>('/workspaces'),
-      api.get<WorkspaceInvitation[]>('/workspaces/invitations'),
-    ])
-      .then(([workspaceResponse, invitationResponse]) => {
-        if (cancelled) return;
-        setWorkspaces(workspaceResponse.data);
-        setInvitations(invitationResponse.data);
-      })
-      .catch(() => {
-        if (!cancelled) setError('Failed to load workspaces and invitations.');
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  if (loading) {
-    return (
-      <div className={`min-h-screen ${theme.colors.bg.primary} flex items-center justify-center text-sm text-zinc-500`}>
-        Loading workspaces...
-      </div>
-    );
-  }
-
   return (
-    <div className={`min-h-screen ${theme.colors.bg.primary} ${theme.colors.text.primary} p-8 font-sans`}>
-      <div className="max-w-3xl mx-auto space-y-6">
-        <div className="flex justify-between items-center border-b border-zinc-800 pb-4">
-          <div>
-            <h1 className="text-lg font-medium text-white tracking-tight">Workspaces</h1>
-            <p className={`text-xs ${theme.colors.text.secondary}`}>
-              Select a workspace or create a new one.
-            </p>
+    <div className="flex min-h-screen flex-col">
+      <TopBar />
+      <main className="mx-auto flex w-full max-w-2xl flex-col gap-8 px-4 py-10 sm:px-6">
+        <div className="flex flex-wrap items-end justify-between gap-4">
+          <div className="space-y-1">
+            <h1 className="text-xl font-semibold tracking-tight">Workspaces</h1>
+            <p className="text-sm text-fg-muted">Choose where you want to work.</p>
           </div>
-          <button
-            onClick={() => setShowNewModal(true)}
-            className={`${theme.colors.accent.DEFAULT} text-xs font-medium px-3 py-1.5 rounded-md transition-colors`}
-          >
-            New Workspace
-          </button>
+          <Button variant="primary" onClick={() => setCreateOpen(true)}>
+            <Plus size={16} aria-hidden="true" />
+            New workspace
+          </Button>
         </div>
 
-        <Alert message={error} type="error" />
+        <Alert message={error} />
 
-        {invitations.length > 0 && (
-          <section className="space-y-3">
-            <h2 className="text-sm font-medium text-white">Pending invitations</h2>
-            {invitations.map((invitation) => (
-              <div
-                key={invitation.id}
-                className="flex flex-wrap items-center justify-between gap-4 rounded-lg border border-amber-900/60 bg-amber-950/20 p-4"
-              >
-                <div className="space-y-1">
-                  <p className="text-sm font-medium text-white">
-                    {invitation.workspace.name}
-                  </p>
-                  <p className="text-xs text-zinc-400">
-                    Invited by {invitation.invitedBy?.fullName ?? 'a workspace admin'} · {invitation.role}
-                  </p>
-                  <p className="text-xs text-zinc-500">
-                    Expires {invitation.invitationExpiresAt ? new Date(invitation.invitationExpiresAt).toLocaleDateString() : 'Soon'}
-                  </p>
-                </div>
-                <div className="flex gap-2">
-                  <button
-                    disabled={pendingAction === invitation.id}
-                    onClick={() => handleInvitation(invitation, 'decline')}
-                    className="rounded-md border border-zinc-700 px-3 py-2 text-xs text-zinc-300 disabled:opacity-50"
-                  >
-                    Decline
-                  </button>
-                  <button
-                    disabled={pendingAction === invitation.id}
-                    onClick={() => handleInvitation(invitation, 'accept')}
-                    className={`${theme.colors.accent.DEFAULT} rounded-md px-3 py-2 text-xs font-medium disabled:opacity-50`}
-                  >
-                    {pendingAction === invitation.id ? 'Please wait...' : 'Accept'}
-                  </button>
-                </div>
-              </div>
-            ))}
-          </section>
-        )}
-
-        {workspaces.length === 0 ? (
-          <div className="text-center py-12 border border-dashed border-zinc-800 rounded-lg">
-            <p className={`text-xs ${theme.colors.text.secondary} mb-3`}>
-              No workspaces found.
-            </p>
-            <button
-              onClick={() => setShowNewModal(true)}
-              className="text-xs text-white underline hover:text-zinc-300"
-            >
-              Create your first workspace
-            </button>
-          </div>
+        {workspaces === null ? (
+          <PageLoader label="Loading workspaces…" />
         ) : (
-          <div className="grid grid-cols-1 gap-3">
-            {workspaces.map((workspace) => (
-              <WorkspaceCard
-                key={workspace.id}
-                name={workspace.name}
-                slug={workspace.slug}
-                role={workspace.role}
-                onClick={() => router.push(`/w/${workspace.slug}`)}
-              />
-            ))}
-          </div>
-        )}
+          <>
+            {invitations.length > 0 && (
+              <section aria-labelledby="invitations-heading" className="flex flex-col gap-3">
+                <h2 id="invitations-heading" className="text-[13px] font-semibold text-fg">
+                  Invitations
+                </h2>
+                {invitations.map((invitation) => (
+                  <div key={invitation.id} className="flex flex-wrap items-center gap-4 rounded-card border border-line bg-surface px-4 py-3.5">
+                    <div className="min-w-0 flex-1 space-y-0.5">
+                      <p className="text-sm font-medium text-fg">{invitation.workspace.name}</p>
+                      <p className="text-[13px] text-fg-muted">
+                        {invitation.invitedBy?.fullName ?? 'A workspace admin'} invited you as {ROLE_LABEL[invitation.role] ?? invitation.role}
+                        {invitation.invitationExpiresAt && ` · expires ${formatDate(invitation.invitationExpiresAt)}`}
+                      </p>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button size="sm" disabled={pendingAction === invitation.id} onClick={() => respond(invitation, 'decline')}>
+                        Decline
+                      </Button>
+                      <Button size="sm" variant="primary" loading={pendingAction === invitation.id} onClick={() => respond(invitation, 'accept')}>
+                        Accept
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </section>
+            )}
 
-        <CreateWorkspaceModal
-          isOpen={showNewModal}
-          onClose={() => setShowNewModal(false)}
-          onCreated={fetchWorkspaces}
-          onError={setError}
-          api={api}
-        />
-      </div>
+            {workspaces.length === 0 ? (
+              <EmptyState
+                title="No workspaces yet"
+                description="Create a workspace for your team, or ask an admin to invite you to an existing one."
+                action={
+                  <Button variant="primary" onClick={() => setCreateOpen(true)}>
+                    Create a workspace
+                  </Button>
+                }
+              />
+            ) : (
+              <section aria-label="Your workspaces" className="flex flex-col gap-2">
+                {workspaces.map((w) => (
+                  <WorkspaceCard key={w.id} name={w.name} slug={w.slug} role={w.role} />
+                ))}
+              </section>
+            )}
+          </>
+        )}
+      </main>
+
+      <CreateWorkspaceModal
+        open={createOpen}
+        onClose={() => setCreateOpen(false)}
+        onCreated={(slug) => {
+          setCreateOpen(false);
+          toast('Workspace created.');
+          router.push(`/w/${slug}`);
+        }}
+      />
     </div>
   );
 }

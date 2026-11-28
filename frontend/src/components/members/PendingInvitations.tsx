@@ -1,7 +1,10 @@
 'use client';
 
 import { useState } from 'react';
-import { theme } from '@/lib/theme';
+import { ROLE_LABEL } from '@/lib/labels';
+import { Badge } from '@/components/ui/Badge';
+import { Button } from '@/components/ui/Button';
+import { formatDate } from '@/lib/format';
 
 export interface PendingInvitation {
   id: string;
@@ -34,40 +37,36 @@ export function PendingInvitations({ invitations, onResend, onRevoke }: PendingI
   };
 
   return (
-    <div className={`${theme.colors.bg.secondary} border ${theme.colors.border.primary} rounded-lg p-5 space-y-3`}>
-      <h2 className="text-xs font-medium text-white uppercase tracking-wider">Pending invitations</h2>
-      <ul className="divide-y divide-zinc-800">
+    <section aria-labelledby="pending-heading" className="flex flex-col gap-3">
+      <h2 id="pending-heading" className="text-[13px] font-semibold text-fg">
+        Pending invitations <span className="font-normal text-fg-subtle tabular-nums">{invitations.length}</span>
+      </h2>
+      <ul className="divide-y divide-line rounded-card border border-line bg-surface">
         {invitations.map((invitation) => (
-          <li key={invitation.id} className="py-2 flex items-center justify-between gap-3 text-xs">
-            <div className="min-w-0">
-              <p className="text-zinc-200 truncate">{invitation.email}</p>
-              <p className="text-zinc-500">
-                {invitation.role} ·{' '}
-                {invitation.expired
-                  ? 'expired'
-                  : `expires ${new Date(invitation.expiresAt).toLocaleDateString()}`}
+          <li key={invitation.id} className="flex flex-wrap items-center gap-3 px-4 py-3">
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm text-fg">{invitation.email}</p>
+              <p className="text-[13px] text-fg-muted">
+                {ROLE_LABEL[invitation.role] ?? invitation.role}
                 {invitation.invitedBy && ` · invited by ${invitation.invitedBy.fullName}`}
               </p>
             </div>
-            <div className="flex gap-2 shrink-0">
-              <button
-                disabled={busy === invitation.id}
-                onClick={() => run(invitation.id, onResend)}
-                className="px-2 py-1 rounded bg-zinc-800 text-zinc-200 hover:bg-zinc-700 disabled:opacity-50"
-              >
+            {invitation.expired ? (
+              <Badge tone="warning">Expired</Badge>
+            ) : (
+              <span className="text-xs text-fg-subtle">Expires {formatDate(invitation.expiresAt)}</span>
+            )}
+            <div className="flex gap-1">
+              <Button size="sm" variant="ghost" disabled={busy === invitation.id} onClick={() => run(invitation.id, onResend)}>
                 {invitation.expired ? 'Renew link' : 'Resend'}
-              </button>
-              <button
-                disabled={busy === invitation.id}
-                onClick={() => run(invitation.id, onRevoke)}
-                className="px-2 py-1 rounded bg-zinc-800 text-red-300 hover:bg-zinc-700 disabled:opacity-50"
-              >
+              </Button>
+              <Button size="sm" variant="ghost" className="text-danger hover:bg-danger-soft hover:text-danger" disabled={busy === invitation.id} onClick={() => run(invitation.id, onRevoke)}>
                 Revoke
-              </button>
+              </Button>
             </div>
           </li>
         ))}
       </ul>
-    </div>
+    </section>
   );
 }

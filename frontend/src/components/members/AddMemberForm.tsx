@@ -1,59 +1,52 @@
 'use client';
 
 import { useState } from 'react';
-import { theme } from '@/lib/theme';
+import { ROLE_LABEL } from '@/lib/labels';
+import { Button } from '@/components/ui/Button';
+import { Field, Input, Select } from '@/components/ui/Field';
 
 interface AddMemberFormProps {
-  onAdd: (email: string, role: string) => Promise<void>;
-  adding: boolean;
+  /** Resolves when the invitation was created; the email is then cleared. */
+  onAdd: (email: string, role: string) => Promise<boolean>;
 }
 
-export function AddMemberForm({ onAdd, adding }: AddMemberFormProps) {
+export function AddMemberForm({ onAdd }: AddMemberFormProps) {
   const [email, setEmail] = useState('');
   const [role, setRole] = useState('MEMBER');
+  const [sending, setSending] = useState(false);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const confirmed = window.confirm(`Send a workspace invitation to ${email} with role ${role}?`);
-    if (!confirmed) return;
-
-    try {
-      await onAdd(email, role); // <-- onAdd kullanılıyor
-      setEmail(''); 
-    } catch (err) {
-      // Hata
-    }
+    setSending(true);
+    if (await onAdd(email, role)) setEmail('');
+    setSending(false);
   };
 
   return (
-    <div className={`${theme.colors.bg.secondary} border ${theme.colors.border.primary} rounded-lg p-5 space-y-4`}>
-      <h2 className="text-xs font-medium text-white uppercase tracking-wider">Invite Team Member</h2>
-      <form onSubmit={handleSubmit} className="flex gap-3">
-        <input
-          type="email"
-          required
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          placeholder="colleague@company.com"
-          className={`flex-1 ${theme.colors.bg.primary} border ${theme.colors.border.primary} rounded-md px-3 py-2 text-sm text-white focus:outline-none`}
-        />
-        <select
-          value={role}
-          onChange={(e) => setRole(e.target.value)}
-          className={`${theme.colors.bg.primary} border ${theme.colors.border.primary} rounded-md px-3 py-2 text-sm text-white focus:outline-none`}
-        >
-          <option value="ADMIN">Admin</option>
-          <option value="MEMBER">Member</option>
-          <option value="VIEWER">Viewer</option>
-        </select>
-        <button
-          type="submit"
-          disabled={adding}
-          className={`${theme.colors.accent.DEFAULT} text-xs font-medium px-4 py-2 rounded-md transition-colors disabled:opacity-50`}
-        >
-          {adding ? 'Sending...' : 'Send Invitation'}
-        </button>
-      </form>
-    </div>
+    <form onSubmit={submit} className="flex flex-col gap-4 rounded-card border border-line bg-surface p-5">
+      <div className="space-y-0.5">
+        <h2 className="text-sm font-semibold text-fg">Invite someone</h2>
+        <p className="text-[13px] text-fg-muted">They get a link to join. It works even if they do not have an account yet.</p>
+      </div>
+      <div className="grid grid-cols-1 items-end gap-3 sm:grid-cols-[1fr_10rem_auto]">
+        <Field label="Email">
+          {(props) => <Input {...props} type="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="name@company.com" />}
+        </Field>
+        <Field label="Role">
+          {(props) => (
+            <Select {...props} value={role} onChange={(e) => setRole(e.target.value)}>
+              {['ADMIN', 'MEMBER', 'VIEWER'].map((r) => (
+                <option key={r} value={r}>
+                  {ROLE_LABEL[r]}
+                </option>
+              ))}
+            </Select>
+          )}
+        </Field>
+        <Button type="submit" variant="primary" loading={sending}>
+          Send invitation
+        </Button>
+      </div>
+    </form>
   );
 }

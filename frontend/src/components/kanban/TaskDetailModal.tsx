@@ -1,264 +1,269 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
+import { Trash2 } from 'lucide-react';
 import { api } from '@/lib/api';
-import { theme } from '@/lib/theme';
-import { describeRisk, riskBadgeClass } from '@/lib/risk';
-import type { RiskModelStatus } from '@/lib/risk';
-import { X, Send, Trash2, Calendar, User, AlertCircle } from 'lucide-react';
+import { getErrorMessage, type ApiErrorBody } from '@/lib/errors';
+import { PRIORITY_LABEL, STATUS_LABEL, TASK_STATUSES, type TaskStatus } from '@/lib/labels';
+import { describeRisk, RISK_TONE, type RiskModelStatus } from '@/lib/risk';
+import { Avatar } from '@/components/ui/Avatar';
+import { Badge } from '@/components/ui/Badge';
+import { Button } from '@/components/ui/Button';
+import { Dialog } from '@/components/ui/Dialog';
+import { Select, Textarea } from '@/components/ui/Field';
+import { useFeedback } from '@/components/ui/Feedback';
+import { PageLoader } from '@/components/ui/Spinner';
+import { formatDateTime, formatUtcDate } from '@/lib/format';
 
 interface Comment {
   id: string;
   body: string;
   createdAt: string;
-  author: { id: string; fullName: string; avatarUrl?: string };
-}
-
-interface RiskFactor {
-  explanation: string;
-}
-
-interface TaskRiskAssessment {
-  riskLevel: string;
-  riskScore: number | null;
-  factors: RiskFactor[];
-  reason?: string | null;
+  author: { id: string; fullName: string };
 }
 
 interface TaskDetails {
   id: string;
   title: string;
   description: string | null;
-  status: string;
+  status: TaskStatus;
   priority: number;
+  version: number;
   dueDate: string | null;
   dueDateIsDateOnly?: boolean;
-  assignee: { id: string; fullName: string; avatarUrl?: string | null } | null;
-  riskAssessments: TaskRiskAssessment[];
+  assignee: { id: string; fullName: string } | null;
+  riskAssessments: Array<{ riskLevel: string; riskScore: number | null; factors: Array<{ explanation: string }>; reason?: string | null }>;
 }
 
 interface TaskDetailModalProps {
-  riskModelStatus?: RiskModelStatus | null;
   taskId: string | null;
   workspaceId: string;
-  onClose: () => void;
+  riskModelStatus: RiskModelStatus | null;
   currentUserId: string | null;
-  canAddComment: boolean;
+  canEdit: boolean;
   canManageAllComments: boolean;
+  onClose: () => void;
+  /** Called after the task itself changed, so the board can refresh. */
+  onChanged: () => void;
 }
 
-export function TaskDetailModal({ riskModelStatus = null, taskId, workspaceId, onClose, currentUserId, canAddComment, canManageAllComments }: TaskDetailModalProps) {
+const errorBody = (err: unknown) => (err as { response?: { data?: ApiErrorBody } }).response?.data;
+
+function formatDue(task: TaskDetails): string {
+  if (!task.dueDate) return 'No due date';
+  // Date-only due dates are stored as UTC midnight of the calendar date.
+  return task.dueDateIsDateOnly
+    ? formatUtcDate(task.dueDate)
+    : formatDateTime(task.dueDate);
+}
+
+export function TaskDetailModal({ taskId, workspaceId, riskModelStatus, currentUserId, canEdit, canManageAllComments, onClose, onChanged }: TaskDetailModalProps) {
+  const { toast, confirm } = useFeedback();
   const [task, setTask] = useState<TaskDetails | null>(null);
-  const [loadedTaskId, setLoadedTaskId] = useState<string | null>(null);
   const [comments, setComments] = useState<Comment[]>([]);
-  const [newComment, setNewComment] = useState('');
-  const loading = Boolean(taskId) && loadedTaskId !== taskId;
+  const [loadedId, setLoadedId] = useState<string | null>(null);
   const [loadError, setLoadError] = useState('');
-  const [submitting, setSubmitting] = useState(false);
+  const [draft, setDraft] = useState('');
+  const [posting, setPosting] = useState(false);
+  const [savingStatus, setSavingStatus] = useState(false);
+  const base = `/workspaces/${workspaceId}/tasks/${taskId}`;
 
-
+  const loadComments = useCallback(async () => {
+    const res = await api.get<Comment[]>(`${base}/comments`);
+    setComments(res.data);
+  }, [base]);
 
   useEffect(() => {
-    if (!taskId || !workspaceId) return;
-
+    if (!taskId) return;
     let cancelled = false;
-
-    const loadTaskDetails = async () => {
-      const [taskResult, commentsResult] = await Promise.allSettled([
-        api.get<TaskDetails>(`/workspaces/${workspaceId}/tasks/${taskId}`),
-        api.get<Comment[]>(`/workspaces/${workspaceId}/tasks/${taskId}/comments`),
-      ]);
-
+    Promise.allSettled([api.get<TaskDetails>(base), api.get<Comment[]>(`${base}/comments`)]).then(([t, c]) => {
       if (cancelled) return;
-
-      if (taskResult.status === 'fulfilled') {
-        setTask(taskResult.value.data);
-        setLoadError('');
-      } else {
-        setTask(null);
-        setLoadError(
-          'Task details could not be loaded. It may have been deleted or you may no longer have access.',
-        );
-      }
-
-      setComments(
-        commentsResult.status === 'fulfilled' ? commentsResult.value.data : [],
-      );
-      setLoadedTaskId(taskId);
-    };
-
-    void loadTaskDetails();
-
+      setTask(t.status === 'fulfilled' ? t.value.data : null);
+      setLoadError(t.status === 'fulfilled' ? '' : 'This task could not be loaded. It may have been deleted, or you no longer have access.');
+      setComments(c.status === 'fulfilled' ? c.value.data : []);
+      setLoadedId(taskId);
+    });
     return () => {
       cancelled = true;
     };
-  }, [taskId, workspaceId]);
+  }, [taskId, base]);
 
-  const fetchComments = async () => {
+  const changeStatus = async (status: TaskStatus) => {
+    if (!task) return;
+    setSavingStatus(true);
     try {
-      const res = await api.get<Comment[]>(`/workspaces/${workspaceId}/tasks/${taskId}/comments`);
-      setComments(res.data);
-    } catch {
-      console.error('Failed to load comments');
-    }
-  };
-
-  const handleAddComment = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newComment.trim()) return;
-    setSubmitting(true);
-
-    try {
-      await api.post(`/workspaces/${workspaceId}/tasks/${taskId}/comments`, {
-        body: newComment,
-      });
-      setNewComment('');
-      fetchComments();
+      const res = await api.patch<TaskDetails>(base, { status, version: task.version });
+      setTask((current) => (current ? { ...current, status: res.data.status, version: res.data.version } : current));
+      toast(`Moved to ${STATUS_LABEL[status]}.`);
+      onChanged();
     } catch (err) {
-      alert('Failed to add comment.');
+      toast(getErrorMessage(errorBody(err)), 'error');
     } finally {
-      setSubmitting(false);
+      setSavingStatus(false);
     }
   };
 
-  const handleDeleteComment = async (commentId: string) => {
-    const confirmed = window.confirm('Are you sure you want to delete this comment?');
-    if (!confirmed) return;
-
+  const postComment = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!draft.trim()) return;
+    setPosting(true);
     try {
-      await api.delete(`/workspaces/${workspaceId}/tasks/${taskId}/comments/${commentId}`);
-      fetchComments();
-    } catch (err: any) {
-      alert(err.response?.data?.message || 'You do not have permission to delete this comment.');
+      await api.post(`${base}/comments`, { body: draft.trim() });
+      setDraft('');
+      await loadComments();
+    } catch (err) {
+      toast(getErrorMessage(errorBody(err)), 'error');
+    } finally {
+      setPosting(false);
     }
   };
 
-  if (!taskId) return null;
+  const deleteComment = async (comment: Comment) => {
+    const ok = await confirm({ title: 'Delete this comment?', description: 'This cannot be undone.', confirmLabel: 'Delete comment', destructive: true });
+    if (!ok) return;
+    try {
+      await api.delete(`${base}/comments/${comment.id}`);
+      toast('Comment deleted.');
+      await loadComments();
+    } catch (err) {
+      toast(getErrorMessage(errorBody(err)), 'error');
+    }
+  };
+
+  const loading = Boolean(taskId) && loadedId !== taskId;
+  const risk = task ? describeRisk(riskModelStatus, task.riskAssessments) : null;
+  const factors = risk?.level ? (task?.riskAssessments[0]?.factors ?? []) : [];
 
   return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex justify-end z-50 animate-fade-in">
-      <div className={`w-full max-w-xl ${theme.colors.bg.secondary} border-l ${theme.colors.border.primary} h-full p-6 flex flex-col shadow-2xl overflow-y-auto`}>
-        
-        {/* Header */}
-        <div className="flex justify-between items-center border-b border-zinc-800 pb-4">
-          <span className="text-[10px] uppercase font-mono bg-zinc-800 text-zinc-300 px-2 py-0.5 rounded">Task Details</span>
-          <button onClick={onClose} className="text-zinc-400 hover:text-white p-1 rounded-md hover:bg-zinc-800"><X size={18} /></button>
-        </div>
-
-        {loading ? (
-          <div className="flex-1 flex items-center justify-center text-xs text-zinc-500">Loading details...</div>
-        ) : loadError || !task ? (
-          <div className="flex-1 flex items-center justify-center text-xs text-zinc-500">{loadError || 'Task not found.'}</div>
-        ) : (
-          <div className="space-y-6 pt-6 flex-1 flex flex-col">
-            
-            {/* Task Title & Status */}
-            <div className="space-y-2">
-              <div className="flex items-center space-x-2">
-                <span className="text-[10px] font-mono uppercase bg-zinc-800 text-zinc-300 px-2 py-0.5 rounded">{task.status}</span>
-                <span className="text-[10px] font-mono uppercase bg-zinc-800 text-zinc-400 px-2 py-0.5 rounded">Priority P{task.priority}</span>
-              </div>
-              <h1 className="text-base font-medium text-white">{task.title}</h1>
-              <p className="text-xs text-zinc-400 leading-relaxed">{task.description || 'No description provided.'}</p>
-            </div>
-
-            {/* Risk panel: a level only from this workspace's validated model,
-                otherwise an honest state (architecture §12). */}
-            {(() => {
-              const view = describeRisk(riskModelStatus, task.riskAssessments);
-              const factors = view.level ? task.riskAssessments?.[0]?.factors ?? [] : [];
-              return (
-                <div className="p-3 bg-zinc-900 border border-zinc-800 rounded-lg space-y-2">
-                  <div className="flex justify-between items-center gap-2">
-                    <span className="text-[10px] uppercase font-mono text-zinc-400 flex items-center gap-1">
-                      <AlertCircle size={12} /> Delay risk
-                    </span>
-                    <span
-                      className={`text-[10px] px-2 py-0.5 rounded font-mono ${
-                        view.level ? `uppercase ${riskBadgeClass(view.level)}` : 'bg-zinc-800 text-zinc-400'
-                      }`}
-                    >
-                      {view.title}
-                      {view.probability !== null && ` · ${Math.round(view.probability * 100)}%`}
-                    </span>
-                  </div>
-                  {view.detail && <p className="text-[11px] text-zinc-500">{view.detail}</p>}
-                  {factors.length > 0 && (
-                    <ul className="text-[11px] text-zinc-400 space-y-1 pl-4 list-disc">
-                      {factors.map((f, idx) => (
-                        <li key={idx}>{f.explanation}</li>
-                      ))}
-                    </ul>
-                  )}
+    <Dialog open={taskId !== null} onClose={onClose} variant="sheet" title={loading ? 'Task' : (task?.title ?? 'Task')}>
+      {loading ? (
+        <PageLoader label="Loading task…" />
+      ) : !task ? (
+        <p className="text-sm text-fg-muted">{loadError}</p>
+      ) : (
+        <div className="flex flex-col gap-6">
+          <dl className="grid grid-cols-[7rem_1fr] items-center gap-x-4 gap-y-3 text-sm">
+            <dt className="text-fg-muted">Status</dt>
+            <dd>
+              {canEdit ? (
+                <div className="w-44">
+                  <label htmlFor="task-status" className="sr-only">
+                    Status
+                  </label>
+                  <Select id="task-status" value={task.status} disabled={savingStatus} onChange={(e) => changeStatus(e.target.value as TaskStatus)}>
+                    {TASK_STATUSES.map((s) => (
+                      <option key={s} value={s}>
+                        {STATUS_LABEL[s]}
+                      </option>
+                    ))}
+                  </Select>
                 </div>
-              );
-            })()}
+              ) : (
+                STATUS_LABEL[task.status]
+              )}
+            </dd>
+            <dt className="text-fg-muted">Priority</dt>
+            <dd>
+              <Badge tone={task.priority === 3 ? 'danger' : 'neutral'}>{PRIORITY_LABEL[task.priority] ?? `P${task.priority}`}</Badge>
+            </dd>
+            <dt className="text-fg-muted">Assignee</dt>
+            <dd className="flex items-center gap-2">
+              {task.assignee ? (
+                <>
+                  <Avatar name={task.assignee.fullName} size="sm" />
+                  {task.assignee.fullName}
+                </>
+              ) : (
+                <span className="text-fg-subtle">Unassigned</span>
+              )}
+            </dd>
+            <dt className="text-fg-muted">Due</dt>
+            <dd className={task.dueDate ? 'text-fg' : 'text-fg-subtle'}>{formatDue(task)}</dd>
+          </dl>
 
-            {/* Meta Info (Assignee & Due Date) */}
-            <div className="grid grid-cols-2 gap-4 text-xs pt-2 pb-4 border-b border-zinc-800">
-              <div className="flex items-center space-x-2 text-zinc-400">
-                <User size={14} />
-                <span>Assignee: <strong className="text-white">{task.assignee?.fullName || 'Unassigned'}</strong></span>
-              </div>
-              <div className="flex items-center space-x-2 text-zinc-400">
-                <Calendar size={14} />
-                <span>Due: <strong className="text-white">{task.dueDate
-                  ? task.dueDateIsDateOnly
-                    ? // Date-only due dates are stored as UTC midnight of the calendar date.
-                      new Date(task.dueDate).toLocaleDateString(undefined, { timeZone: 'UTC' })
-                    : new Date(task.dueDate).toLocaleString()
-                  : 'No deadline'}</strong></span>
-              </div>
-            </div>
+          <section className="flex flex-col gap-2">
+            <h3 className="text-[13px] font-semibold text-fg">Description</h3>
+            <p className="text-sm leading-relaxed whitespace-pre-wrap text-fg-muted">{task.description || 'No description.'}</p>
+          </section>
 
-            {/* Comments Section (Domain Rules §7) */}
-            <div className="flex-1 flex flex-col space-y-4">
-              <h3 className="text-xs font-medium text-white uppercase tracking-wider">Comments ({comments.length})</h3>
-
-              <div className="space-y-3 overflow-y-auto flex-1 pr-1 max-h-[30vh]">
-                {comments.length === 0 ? (
-                  <p className="text-xs text-zinc-500 italic">No comments yet. Start the conversation!</p>
+          {/* A level only from this workspace's validated model; otherwise an honest state. */}
+          {risk && (
+            <section className="flex flex-col gap-2 rounded-card border border-line p-4">
+              <div className="flex items-center justify-between gap-3">
+                <h3 className="text-[13px] font-semibold text-fg">Delay risk</h3>
+                {risk.level ? (
+                  <Badge tone={RISK_TONE[risk.level]}>
+                    {risk.title}
+                    {risk.probability !== null && ` · ${Math.round(risk.probability * 100)}%`}
+                  </Badge>
                 ) : (
-                  comments.map((c) => (
-                    <div key={c.id} className="p-3 bg-zinc-900/50 border border-zinc-800/80 rounded-md space-y-1">
-                      <div className="flex justify-between items-center">
-                        <span className="text-xs font-medium text-zinc-200">{c.author.fullName}</span>
-                        <div className="flex items-center space-x-2">
-                          <span className="text-[10px] text-zinc-500">{new Date(c.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                          {(canManageAllComments || c.author.id === currentUserId) && (
-                            <button onClick={() => handleDeleteComment(c.id)} className="text-zinc-600 hover:text-red-400 transition-colors" aria-label="Delete comment"><Trash2 size={12} /></button>
-                          )}
-                        </div>
-                      </div>
-                      <p className="text-xs text-zinc-300 leading-relaxed">{c.body}</p>
-                    </div>
-                  ))
+                  <span className="text-[13px] text-fg-muted">{risk.title}</span>
                 )}
               </div>
+              {risk.detail && <p className="text-[13px] text-fg-muted">{risk.detail}</p>}
+              {factors.length > 0 && (
+                <ul className="list-disc space-y-1 pl-5 text-[13px] text-fg-muted">
+                  {factors.map((f, i) => (
+                    <li key={i}>{f.explanation}</li>
+                  ))}
+                </ul>
+              )}
+            </section>
+          )}
 
-              {/* New Comment Form */}
-              {canAddComment && <form onSubmit={handleAddComment} className="flex gap-2 pt-2 border-t border-zinc-800">
-                <input
-                  type="text"
-                  value={newComment}
-                  onChange={(e) => setNewComment(e.target.value)}
-                  placeholder="Write a comment..."
-                  className={`flex-1 ${theme.colors.bg.primary} border ${theme.colors.border.primary} rounded-md px-3 py-2 text-xs text-white focus:outline-none`}
-                />
-                <button
-                  type="submit"
-                  disabled={submitting}
-                  className={`${theme.colors.accent.DEFAULT} p-2 rounded-md transition-colors disabled:opacity-50`}
-                >
-                  <Send size={14} />
-                </button>
-              </form>}
-            </div>
+          <section className="flex flex-col gap-3">
+            <h3 className="text-[13px] font-semibold text-fg">
+              Comments <span className="font-normal text-fg-subtle tabular-nums">{comments.length}</span>
+            </h3>
+            {comments.length === 0 ? (
+              <p className="text-[13px] text-fg-subtle">No comments yet.</p>
+            ) : (
+              <ul className="flex flex-col gap-4">
+                {comments.map((c) => (
+                  <li key={c.id} className="group flex gap-3">
+                    <Avatar name={c.author.fullName} size="sm" className="mt-0.5" />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-baseline gap-2">
+                        <span className="text-[13px] font-medium text-fg">{c.author.fullName}</span>
+                        <time dateTime={c.createdAt} className="text-xs text-fg-subtle">
+                          {formatDateTime(c.createdAt)}
+                        </time>
+                        {(canManageAllComments || c.author.id === currentUserId) && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            icon
+                            aria-label="Delete comment"
+                            onClick={() => deleteComment(c)}
+                            className="ml-auto size-7 md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100"
+                          >
+                            <Trash2 size={14} />
+                          </Button>
+                        )}
+                      </div>
+                      <p className="text-sm leading-relaxed whitespace-pre-wrap text-fg">{c.body}</p>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
 
-          </div>
-        )}
-
-      </div>
-    </div>
+            {canEdit && (
+              <form onSubmit={postComment} className="flex flex-col gap-2 pt-1">
+                <label htmlFor="new-comment" className="sr-only">
+                  Add a comment
+                </label>
+                <Textarea id="new-comment" rows={2} value={draft} onChange={(e) => setDraft(e.target.value)} placeholder="Add a comment" />
+                <div className="flex justify-end">
+                  <Button type="submit" variant="primary" size="sm" loading={posting} disabled={!draft.trim()}>
+                    Comment
+                  </Button>
+                </div>
+              </form>
+            )}
+          </section>
+        </div>
+      )}
+    </Dialog>
   );
 }

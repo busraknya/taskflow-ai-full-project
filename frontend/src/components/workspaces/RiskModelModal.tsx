@@ -1,9 +1,15 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { X } from 'lucide-react';
 import { api } from '@/lib/api';
+import { cn } from '@/lib/cn';
 import type { RiskModelStatus } from '@/lib/risk';
+import { Alert } from '@/components/ui/Alert';
+import { Badge } from '@/components/ui/Badge';
+import { Button } from '@/components/ui/Button';
+import { Dialog } from '@/components/ui/Dialog';
+import { PageLoader } from '@/components/ui/Spinner';
+import { formatDateTime, formatNumber } from '@/lib/format';
 
 interface RiskModelModalProps {
   isOpen: boolean;
@@ -73,125 +79,138 @@ export function RiskModelModal({ isOpen, onClose, workspaceId, canManage, onStat
     }
   };
 
-  if (!isOpen) return null;
   const model = status?.activeModel;
 
   return (
-    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4" role="dialog" aria-modal="true">
-      <div className="bg-zinc-950 border border-zinc-800 rounded-lg w-full max-w-lg max-h-[90vh] overflow-y-auto p-5 space-y-4 text-sm">
-        <div className="flex justify-between items-center">
-          <h2 className="text-white font-medium">Delay-risk model</h2>
-          <button onClick={onClose} aria-label="Close" className="text-zinc-500 hover:text-white">
-            <X size={16} />
-          </button>
-        </div>
-        <p className="text-xs text-zinc-400">
-          TaskFlow learns delay risk only from this workspace&apos;s own task history, on this server. A model is used
-          only after it beats simple baselines on recent tasks it has not seen.
-        </p>
-        {error && <p className="text-xs text-red-400">{error}</p>}
+    <Dialog
+      open={isOpen}
+      onClose={onClose}
+      title="Delay-risk model"
+      description="Learned only from this workspace's own task history, on this server. A model is used only after it beats simple baselines on recent tasks it has not seen."
+      size="lg"
+    >
+      <div className="flex flex-col gap-6">
+        <Alert message={error} />
         {!status ? (
-          <p className="text-xs text-zinc-500">Loading…</p>
+          <PageLoader label="Loading model status…" />
         ) : (
           <>
-            <section className="space-y-1">
-              <h3 className="text-xs uppercase font-mono text-zinc-500">Training</h3>
-              <p className="text-xs text-zinc-300">
-                {status.trainingEnabled ? 'Enabled' : 'Disabled — no predictions are made for this workspace.'}
-              </p>
+            <Section title="Training">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <p className="text-sm text-fg-muted">
+                  {status.trainingEnabled ? 'On. The model is retrained every night when there is enough history.' : 'Off. No predictions are made for this workspace.'}
+                </p>
+                <Badge tone={status.trainingEnabled ? 'success' : 'neutral'}>{status.trainingEnabled ? 'On' : 'Off'}</Badge>
+              </div>
               {canManage && (
-                <div className="flex gap-2 pt-1">
-                  <button
+                <div className="flex flex-wrap gap-2 pt-1">
+                  <Button
+                    variant={status.trainingEnabled ? 'secondary' : 'primary'}
+                    size="sm"
                     disabled={busy}
-                    onClick={() =>
-                      act(() => api.patch(`/workspaces/${workspaceId}/risk-model`, { trainingEnabled: !status.trainingEnabled }))
-                    }
-                    className="text-xs px-3 py-1.5 rounded-md bg-zinc-800 text-zinc-200 hover:bg-zinc-700 disabled:opacity-50"
+                    onClick={() => act(() => api.patch(`/workspaces/${workspaceId}/risk-model`, { trainingEnabled: !status.trainingEnabled }))}
                   >
-                    {status.trainingEnabled ? 'Disable training' : 'Enable training'}
-                  </button>
+                    {status.trainingEnabled ? 'Turn off training' : 'Turn on training'}
+                  </Button>
                   {status.trainingEnabled && (
-                    <button
-                      disabled={busy || status.trainingInProgress}
-                      onClick={() => act(() => api.post(`/workspaces/${workspaceId}/risk-model/train`))}
-                      className="text-xs px-3 py-1.5 rounded-md bg-zinc-800 text-zinc-200 hover:bg-zinc-700 disabled:opacity-50"
-                    >
+                    <Button size="sm" disabled={busy} loading={status.trainingInProgress} onClick={() => act(() => api.post(`/workspaces/${workspaceId}/risk-model/train`))}>
                       {status.trainingInProgress ? 'Training…' : 'Train now'}
-                    </button>
+                    </Button>
                   )}
                   {status.trainingEnabled && model && (
-                    <button
-                      disabled={busy}
-                      onClick={() => act(() => api.post(`/workspaces/${workspaceId}/risk-model/rollback`))}
-                      className="text-xs px-3 py-1.5 rounded-md bg-zinc-800 text-zinc-200 hover:bg-zinc-700 disabled:opacity-50"
-                    >
+                    <Button size="sm" variant="ghost" disabled={busy} onClick={() => act(() => api.post(`/workspaces/${workspaceId}/risk-model/rollback`))}>
                       Restore previous model
-                    </button>
+                    </Button>
                   )}
                 </div>
               )}
-            </section>
+            </Section>
 
-            <section className="space-y-1">
-              <h3 className="text-xs uppercase font-mono text-zinc-500">Data readiness</h3>
+            <Section title="Data readiness">
               {!status.readiness ? (
-                <p className="text-xs text-zinc-500">Not checked yet. Readiness is checked every night and when training is enabled.</p>
+                <p className="text-sm text-fg-muted">Not checked yet. Readiness is checked every night and when training is turned on.</p>
               ) : (
                 <>
-                  <p className="text-xs text-zinc-300">
-                    {status.readiness.ready ? 'Enough history to train and evaluate a model.' : 'Collecting data.'}{' '}
-                    <span className="text-zinc-500">Checked {new Date(status.readiness.computedAt).toLocaleString()}.</span>
+                  <p className="text-sm text-fg-muted">
+                    {status.readiness.ready ? 'Enough history to train and evaluate a model.' : 'Still collecting history.'}{' '}
+                    <span className="text-fg-subtle">Checked {formatDateTime(status.readiness.computedAt)}.</span>
                   </p>
-                  <ul className="text-xs space-y-0.5">
+                  <ul className="flex flex-col gap-3 pt-1">
                     {status.readiness.checks.map((c) => (
-                      <li key={c.name} className="flex justify-between gap-2">
-                        <span className={c.passed ? 'text-zinc-400' : 'text-amber-400'}>{CHECK_LABELS[c.name] ?? c.name}</span>
-                        <span className="font-mono text-zinc-400">
-                          {c.value} / {c.required}
-                        </span>
+                      <li key={c.name} className="flex flex-col gap-1.5">
+                        <div className="flex justify-between gap-3 text-[13px]">
+                          <span className={c.passed ? 'text-fg' : 'text-fg-muted'}>{CHECK_LABELS[c.name] ?? c.name}</span>
+                          <span className="text-fg-muted tabular-nums">
+                            {formatValue(c.name, c.value)} / {formatValue(c.name, c.required)}
+                          </span>
+                        </div>
+                        <progress
+                          value={Math.min(c.value, c.required)}
+                          max={c.required || 1}
+                          aria-label={CHECK_LABELS[c.name] ?? c.name}
+                          className={cn(
+                            'h-1.5 w-full appearance-none overflow-hidden rounded-full',
+                            '[&::-webkit-progress-bar]:bg-subtle [&::-webkit-progress-value]:rounded-full',
+                            c.passed ? '[&::-moz-progress-bar]:bg-success [&::-webkit-progress-value]:bg-success' : '[&::-moz-progress-bar]:bg-accent [&::-webkit-progress-value]:bg-accent',
+                          )}
+                        />
                       </li>
                     ))}
                   </ul>
-                  <p className="text-[11px] text-zinc-500">These thresholds are configurable starting values.</p>
+                  <p className="text-xs text-fg-subtle">These thresholds are configurable starting values, not proven minimums.</p>
                 </>
               )}
-            </section>
+            </Section>
 
-            <section className="space-y-1">
-              <h3 className="text-xs uppercase font-mono text-zinc-500">Active model</h3>
-              {!status.modelServiceAvailable && <p className="text-xs text-amber-400">The model service cannot be reached.</p>}
+            <Section title="Active model">
+              {!status.modelServiceAvailable && <Alert message="The model service cannot be reached right now." />}
               {model ? (
-                <ul className="text-xs text-zinc-400 space-y-0.5">
-                  <li>Version: <span className="font-mono">{model.modelVersion}</span></li>
-                  <li>
-                    Evaluated on {model.testPeriod.tasks ?? '?'} recent tasks it had not seen; PR-AUC{' '}
-                    {model.prAuc?.toFixed(2) ?? '?'} vs. baseline {model.baselinePrAuc?.toFixed(2) ?? '?'}.
-                  </li>
-                  <li>{model.calibrated ? 'Calibrated: probabilities are shown.' : 'Not calibrated: only LOW / MEDIUM / HIGH is shown.'}</li>
-                </ul>
+                <dl className="grid grid-cols-[9rem_1fr] gap-x-4 gap-y-2 text-[13px]">
+                  <dt className="text-fg-muted">Version</dt>
+                  <dd className="font-mono text-fg">{model.modelVersion}</dd>
+                  <dt className="text-fg-muted">Evaluation</dt>
+                  <dd className="text-fg">
+                    {model.testPeriod.tasks ?? '?'} recent unseen tasks · PR-AUC {model.prAuc?.toFixed(2) ?? '?'} vs. baseline {model.baselinePrAuc?.toFixed(2) ?? '?'}
+                  </dd>
+                  <dt className="text-fg-muted">Probabilities</dt>
+                  <dd className="text-fg">{model.calibrated ? 'Shown (model is calibrated)' : 'Hidden; only Low / Medium / High is shown'}</dd>
+                </dl>
               ) : (
-                <p className="text-xs text-zinc-500">No validated model for this workspace yet.</p>
+                <p className="text-sm text-fg-muted">No validated model for this workspace yet.</p>
               )}
-            </section>
+            </Section>
 
             {status.lastRun && (
-              <section className="space-y-1">
-                <h3 className="text-xs uppercase font-mono text-zinc-500">Last training</h3>
-                <p className="text-xs text-zinc-300">
+              <Section title="Last training run">
+                <p className="text-sm text-fg">
                   {RUN_LABELS[status.lastRun.status] ?? status.lastRun.status}{' '}
-                  <span className="text-zinc-500">({new Date(status.lastRun.createdAt).toLocaleString()})</span>
+                  <span className="text-fg-subtle">· {formatDateTime(status.lastRun.createdAt)}</span>
                 </p>
-                {status.lastRun.gates.filter((g) => !g.passed).map((g) => (
-                  <p key={g.name} className="text-[11px] text-zinc-500">
-                    {g.name}: {g.detail}
-                  </p>
-                ))}
-                {status.lastRun.error && <p className="text-[11px] text-zinc-500">{status.lastRun.error}</p>}
-              </section>
+                {status.lastRun.gates
+                  .filter((g) => !g.passed)
+                  .map((g) => (
+                    <p key={g.name} className="text-[13px] text-fg-muted">
+                      {g.name}: {g.detail}
+                    </p>
+                  ))}
+                {status.lastRun.error && <p className="text-[13px] text-fg-muted">{status.lastRun.error}</p>}
+              </Section>
             )}
           </>
         )}
       </div>
-    </div>
+    </Dialog>
+  );
+}
+
+/** Shares are fractions (0.05 = 5%); every other check is a count. */
+const formatValue = (name: string, n: number) => (name === 'minorityShare' ? `${Math.round(n * 100)}%` : formatNumber(n));
+
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <section className="flex flex-col gap-2">
+      <h3 className="text-[13px] font-semibold text-fg">{title}</h3>
+      {children}
+    </section>
   );
 }

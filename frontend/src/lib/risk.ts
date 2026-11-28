@@ -1,3 +1,5 @@
+import { formatUtcDate } from './format';
+
 export type RiskLevel = 'LOW' | 'MEDIUM' | 'HIGH';
 
 const RISK_LEVELS: readonly string[] = ['LOW', 'MEDIUM', 'HIGH'];
@@ -22,16 +24,12 @@ export function currentRiskLevel(
   return level && RISK_LEVELS.includes(level) ? (level as RiskLevel) : null;
 }
 
-export function riskBadgeClass(level: RiskLevel): string {
-  switch (level) {
-    case 'HIGH':
-      return 'bg-red-950 text-red-400 border border-red-900';
-    case 'MEDIUM':
-      return 'bg-amber-950 text-amber-400 border border-amber-900';
-    default:
-      return 'bg-zinc-800 text-zinc-400';
-  }
-}
+/** Badge tone per level; LOW stays neutral so only real risk draws attention. */
+export const RISK_TONE: Record<RiskLevel, 'neutral' | 'warning' | 'danger'> = {
+  LOW: 'neutral',
+  MEDIUM: 'warning',
+  HIGH: 'danger',
+};
 
 // ---------- Workspace risk model (ML stage 4) ----------
 
@@ -100,8 +98,7 @@ const REASON_TEXT: Record<string, string> = {
   'model-unavailable': 'No validated model is available right now.',
 };
 
-const formatDate = (iso: string | null) =>
-  iso ? new Date(iso).toLocaleDateString(undefined, { timeZone: 'UTC' }) : '?';
+const formatDate = (iso: string | null) => (iso ? formatUtcDate(iso) : '?');
 
 /**
  * The delay-risk state to show for a task (architecture §12). A level is shown

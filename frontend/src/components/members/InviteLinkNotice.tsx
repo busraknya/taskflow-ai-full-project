@@ -1,6 +1,8 @@
 'use client';
 
 import { useState } from 'react';
+import { Check, Copy } from 'lucide-react';
+import { Button } from '@/components/ui/Button';
 
 interface InviteLinkNoticeProps {
   email: string;
@@ -25,31 +27,36 @@ export function InviteLinkNotice({ email, acceptUrl, emailDelivery, onClose }: I
   };
 
   return (
-    <div className="border border-zinc-700 bg-zinc-900 rounded-lg p-4 space-y-2 text-xs" role="status">
-      <p className="text-zinc-200">
+    <div role="status" className="flex flex-col gap-3 rounded-card border border-line bg-accent-soft/60 p-5">
+      <p className="text-sm text-fg">
         {emailDelivery === 'queued'
-          ? `An invitation email is on its way to ${email}. You can also share this link with them directly:`
-          : `Email delivery is not configured on this server, so no email was sent. Share this link with ${email}:`}
+          ? `An invitation email is on its way to ${email}. You can also send them this link yourself.`
+          : `Email is not set up on this server, so no email was sent. Send this link to ${email}.`}
       </p>
       <div className="flex gap-2">
+        <label htmlFor="invite-link" className="sr-only">
+          Invitation link
+        </label>
         <input
+          id="invite-link"
           readOnly
           value={acceptUrl}
           onFocus={(e) => e.currentTarget.select()}
-          className="flex-1 bg-zinc-950 border border-zinc-800 rounded px-2 py-1.5 font-mono text-[11px] text-zinc-300"
-          aria-label="Invitation link"
+          className="h-9 min-w-0 flex-1 rounded-control border border-line bg-surface px-3 font-mono text-[13px] text-fg-muted"
         />
-        <button onClick={copy} className="px-3 py-1.5 rounded bg-zinc-800 text-zinc-200 hover:bg-zinc-700">
-          {copied ? 'Copied' : 'Copy'}
-        </button>
+        <Button onClick={copy}>
+          {copied ? <Check size={16} aria-hidden="true" /> : <Copy size={16} aria-hidden="true" />}
+          {copied ? 'Copied' : 'Copy link'}
+        </Button>
       </div>
-      <p className="text-zinc-500">
-        Anyone with this link can join with the shown role until it is used, revoked or expires (7 days). It works for
-        people who do not have an account yet.
+      <p className="text-[13px] text-fg-muted">
+        Anyone with this link can join with the chosen role until it is used, revoked or expires in 7 days.
       </p>
-      <button onClick={onClose} className="text-zinc-400 hover:text-white">
-        Dismiss
-      </button>
+      <div>
+        <Button variant="ghost" size="sm" onClick={onClose} className="-ml-3">
+          Done
+        </Button>
+      </div>
     </div>
   );
 }

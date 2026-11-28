@@ -4,8 +4,12 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
-import { theme } from '@/lib/theme';
+import { ROLE_LABEL } from '@/lib/labels';
+import { AuthLayout } from '@/components/layout/AuthLayout';
 import { Alert } from '@/components/ui/Alert';
+import { Button } from '@/components/ui/Button';
+import { PageLoader } from '@/components/ui/Spinner';
+import { formatDateTime } from '@/lib/format';
 import {
   clearPendingInvitation,
   INVITATION_ERRORS,
@@ -96,46 +100,46 @@ export default function InvitePage() {
     : '/register';
 
   return (
-    <div className={`min-h-screen ${theme.colors.bg.primary} ${theme.colors.text.primary} flex flex-col justify-center items-center px-4 font-sans`}>
-      <div className="w-full max-w-sm space-y-5">
-        <h1 className="text-lg font-medium tracking-tight text-white">TaskFlow AI</h1>
-        <Alert message={error} type="error" />
-        {loading && <p className={`text-xs ${theme.colors.text.secondary}`}>Loading invitation…</p>}
+    <AuthLayout
+      title={invitation ? `Join ${invitation.workspaceName}` : 'Workspace invitation'}
+      footer={
+        <Link href="/workspaces" className="font-medium text-accent hover:underline">
+          Go to your workspaces
+        </Link>
+      }
+    >
+      <div className="flex flex-col gap-4">
+        <Alert message={error} />
+        {loading && <PageLoader label="Loading invitation…" />}
         {invitation && (
-          <div className="space-y-4">
-            <p className="text-sm text-zinc-300">
-              {invitation.inviterName ? <b className="text-white">{invitation.inviterName}</b> : 'Someone'} invited you to join{' '}
-              <b className="text-white">{invitation.workspaceName}</b> as <span className="font-mono text-xs">{invitation.role}</span>.
-            </p>
-            <p className={`text-xs ${theme.colors.text.secondary}`}>
-              Invitation sent to {invitation.email}. Expires {new Date(invitation.expiresAt).toLocaleString()}.
+          <>
+            <p className="text-sm text-fg-muted">
+              <span className="font-medium text-fg">{invitation.inviterName ?? 'A workspace admin'}</span> invited{' '}
+              <span className="font-medium text-fg">{invitation.email}</span> to join as{' '}
+              <span className="font-medium text-fg">{ROLE_LABEL[invitation.role] ?? invitation.role}</span>.
             </p>
             {invitation.status === 'pending' ? (
               <>
-                <button
-                  onClick={accept}
-                  disabled={accepting}
-                  className={`w-full ${theme.colors.accent.DEFAULT} text-xs font-medium px-4 py-2 rounded-md disabled:opacity-50`}
-                >
-                  {accepting ? 'Joining…' : 'Accept invitation'}
-                </button>
-                <p className={`text-xs ${theme.colors.text.secondary}`}>
+                <Button variant="primary" className="w-full" loading={accepting} onClick={accept}>
+                  Accept invitation
+                </Button>
+                <p className="text-[13px] text-fg-muted">
                   You will be asked to sign in first if needed. No account yet?{' '}
-                  <Link href={registerHref} className="text-white underline">
+                  <Link href={registerHref} className="font-medium text-accent hover:underline">
                     Create one
-                  </Link>
-                  , then come back to this page.
+                  </Link>{' '}
+                  and you will come back here.
+                </p>
+                <p className="text-xs text-fg-subtle">
+                  Expires {formatDateTime(invitation.expiresAt)}.
                 </p>
               </>
             ) : (
-              <p className="text-xs text-amber-400">{STATUS_TEXT[invitation.status]}</p>
+              <Alert message={STATUS_TEXT[invitation.status]} />
             )}
-          </div>
+          </>
         )}
-        <Link href="/workspaces" className={`block text-xs ${theme.colors.text.secondary} hover:text-white`}>
-          Go to your workspaces
-        </Link>
       </div>
-    </div>
+    </AuthLayout>
   );
 }

@@ -1,90 +1,100 @@
-import { theme } from '@/lib/theme';
-import { currentRiskLevel, riskBadgeClass } from '@/lib/risk';
+'use client';
 
-interface Task {
-  id: string;
-  title: string;
-  description: string;
-  status: string;
-  priority: number;
-  version: number;
-  assignee?: { id: string; fullName: string };
-  riskAssessments?: Array<{ riskLevel: string }>;
-}
+import { ArrowRight } from 'lucide-react';
+import { cn } from '@/lib/cn';
+import { NEXT_STATUS, PRIORITY_LABEL, STATUS_DOT, STATUS_LABEL, type TaskStatus } from '@/lib/labels';
+import { currentRiskLevel, RISK_TONE } from '@/lib/risk';
+import type { BoardTask } from '@/lib/tasks';
+import { Avatar } from '@/components/ui/Avatar';
+import { Badge, StatusDot } from '@/components/ui/Badge';
+import { Button } from '@/components/ui/Button';
 
 interface KanbanColumnProps {
-  columnId: string;
-  title: string;
-  tasks: Task[];
-  onMoveForward: (taskId: string, version: number, nextStatus: string) => void;
-  onTaskClick: (taskId: string) => void;
-  canEditTasks: boolean;
+  status: TaskStatus;
+  tasks: BoardTask[];
   hasMore: boolean;
   loadingMore: boolean;
+  canEdit: boolean;
   onLoadMore: () => void;
+  onOpen: (taskId: string) => void;
+  onMove: (task: BoardTask, next: TaskStatus) => void;
 }
 
-export function KanbanColumn({ columnId, title, tasks, onMoveForward, onTaskClick, canEditTasks, hasMore, loadingMore, onLoadMore }: KanbanColumnProps) {
+export function KanbanColumn({ status, tasks, hasMore, loadingMore, canEdit, onLoadMore, onOpen, onMove }: KanbanColumnProps) {
+  const next = NEXT_STATUS[status];
   return (
-    <div className={`${theme.colors.bg.secondary} border ${theme.colors.border.primary} rounded-lg p-3 space-y-3 flex flex-col max-h-[75vh]`}>
-      <div className="flex justify-between items-center px-1">
-        <span className="text-xs font-medium text-zinc-300">{title}</span>
-        <span className="text-[10px] bg-zinc-800 text-zinc-400 px-2 py-0.5 rounded-full">{tasks.length}{hasMore ? '+' : ''}</span>
+    <section aria-label={STATUS_LABEL[status]} className="flex w-72 shrink-0 flex-col rounded-card bg-subtle/70 lg:w-auto lg:min-w-0 lg:flex-1">
+      <header className="flex items-center justify-between px-3 pt-3 pb-2">
+        <StatusDot dotClass={STATUS_DOT[status]}>
+          <span className="font-medium text-fg">{STATUS_LABEL[status]}</span>
+        </StatusDot>
+        <span className="text-xs text-fg-subtle tabular-nums">
+          {tasks.length}
+          {hasMore ? '+' : ''}
+        </span>
+      </header>
+
+      <ul className="flex flex-col gap-2 px-2 pb-2">
+        {tasks.map((task) => (
+          <li key={task.id}>
+            <TaskCard task={task} next={canEdit ? next : undefined} onOpen={onOpen} onMove={onMove} />
+          </li>
+        ))}
+        {tasks.length === 0 && !hasMore && <li className="px-2 py-6 text-center text-[13px] text-fg-subtle">No tasks</li>}
+      </ul>
+
+      {hasMore && (
+        <div className="px-2 pb-2">
+          <Button variant="ghost" size="sm" className="w-full" loading={loadingMore} onClick={onLoadMore}>
+            Load more
+          </Button>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function TaskCard({
+  task,
+  next,
+  onOpen,
+  onMove,
+}: {
+  task: BoardTask;
+  next?: TaskStatus;
+  onOpen: (taskId: string) => void;
+  onMove: (task: BoardTask, next: TaskStatus) => void;
+}) {
+  const risk = currentRiskLevel(task.riskAssessments);
+  return (
+    <article className="group relative rounded-card border border-line bg-surface p-3 transition-colors hover:border-line-strong">
+      <h3 className="pr-7 text-sm leading-snug font-medium text-fg">
+        {/* The whole card opens the task; the title is the accessible control. */}
+        <button onClick={() => onOpen(task.id)} className="text-left after:absolute after:inset-0 after:rounded-card focus-visible:outline-none focus-visible:after:outline-2 focus-visible:after:outline-accent">
+          {task.title}
+        </button>
+      </h3>
+      {task.description && <p className="mt-1 line-clamp-2 text-[13px] text-fg-muted">{task.description}</p>}
+
+      <div className="mt-3 flex items-center gap-1.5">
+        <Badge tone={task.priority === 3 ? 'danger' : 'neutral'}>{PRIORITY_LABEL[task.priority] ?? `P${task.priority}`}</Badge>
+        {risk && <Badge tone={RISK_TONE[risk]}>{risk === 'LOW' ? 'Low' : risk === 'MEDIUM' ? 'Medium' : 'High'} risk</Badge>}
+        <span className="ml-auto">{task.assignee && <Avatar name={task.assignee.fullName} size="sm" />}</span>
       </div>
 
-      <div className="space-y-2 overflow-y-auto flex-1 pr-1">
-        {tasks.map((task) => {
-          // Only a level from a model is shown; otherwise no badge at all.
-          const riskLevel = currentRiskLevel(task.riskAssessments);
-          return (
-            <div
-              key={task.id}
-              onClick={() => onTaskClick(task.id)} // <-- Kartın kendisine tıklandığında detay açılır
-              className={`p-3 ${theme.colors.bg.primary} border ${theme.colors.border.primary} rounded-md space-y-2 hover:border-zinc-500 cursor-pointer transition-all`}
-            >
-              <div className="flex justify-between items-start">
-                <h3 className="text-xs font-medium text-white">{task.title}</h3>
-                {riskLevel && (
-                  <span className={`text-[9px] uppercase px-1.5 py-0.5 rounded font-mono ${riskBadgeClass(riskLevel)}`}>
-                    {riskLevel}
-                  </span>
-                )}
-              </div>
-
-              {task.description && <p className="text-[11px] text-zinc-400 line-clamp-2">{task.description}</p>}
-              
-              <div className="flex justify-between items-center pt-2 border-t border-zinc-900 text-[10px] text-zinc-500">
-                <span>P{task.priority} {task.assignee ? `• ${task.assignee.fullName}` : ''}</span>
-                
-                <div className="flex space-x-1" onClick={(e) => e.stopPropagation()}> 
-                  {/* Not: onStopPropagation sayesinde sağa kaydırma butonuna basıldığında kartın detayı AÇILMAZ! */}
-                  {canEditTasks && columnId !== 'DONE' && (
-                    <button
-                      onClick={() => {
-                        const nextStatus = columnId === 'TODO' ? 'IN_PROGRESS' : columnId === 'IN_PROGRESS' ? 'IN_REVIEW' : 'DONE';
-                        onMoveForward(task.id, task.version, nextStatus);
-                      }}
-                      title="Move forward"
-                      className="text-[10px] bg-zinc-800 hover:bg-zinc-700 text-zinc-300 px-1.5 py-0.5 rounded transition-colors"
-                    >
-                      →
-                    </button>
-                  )}
-                </div>
-              </div>
-            </div>
-          );
-        })}
-        {hasMore && (
-          <button
-            onClick={onLoadMore}
-            disabled={loadingMore}
-            className="w-full text-[11px] text-zinc-400 hover:text-white border border-dashed border-zinc-800 rounded-md py-1.5 disabled:opacity-50"
-          >
-            {loadingMore ? 'Loading…' : 'Load more'}
-          </button>
-        )}
-      </div>
-    </div>
+      {next && (
+        <Button
+          variant="ghost"
+          size="sm"
+          icon
+          aria-label={`Move to ${STATUS_LABEL[next]}`}
+          title={`Move to ${STATUS_LABEL[next]}`}
+          onClick={() => onMove(task, next)}
+          className={cn('absolute top-2 right-2 z-10 size-7 md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100')}
+        >
+          <ArrowRight size={14} />
+        </Button>
+      )}
+    </article>
   );
 }
