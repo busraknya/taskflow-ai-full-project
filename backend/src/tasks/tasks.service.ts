@@ -62,7 +62,7 @@ export class TasksService {
     });
 
     if (!project) {
-      throw new NotFoundException('Proje bulunamadı.');
+      throw new NotFoundException('Project not found.');
     }
 
     if (dto.assigneeId) {
@@ -75,7 +75,7 @@ export class TasksService {
         },
       });
       if (!membership || membership.status !== 'ACTIVE') {
-        throw new ForbiddenException('Atanan kullanıcı bu workspace\'in üyesi değil.');
+        throw new ForbiddenException('The assignee is not a member of this workspace.');
       }
     }
 

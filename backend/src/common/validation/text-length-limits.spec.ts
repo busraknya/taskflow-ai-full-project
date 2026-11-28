@@ -120,10 +120,10 @@ describe('server-side text length limits', () => {
   it('keeps existing minimum-length rules', async () => {
     await expect(
       validationErrors(CreateProjectDto, { name: 'a' }),
-    ).resolves.toEqual(['Proje adı en az 2 karakter olmalıdır.']);
+    ).resolves.toEqual(['Project name must be at least 2 characters long.']);
     await expect(
       validationErrors(CreateCommentDto, { body: '' }),
-    ).resolves.toEqual(['Yorum içeriği boş olamaz.']);
+    ).resolves.toEqual(['Comment content cannot be empty.']);
   });
 
   it('keeps optional fields optional', async () => {

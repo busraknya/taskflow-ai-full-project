@@ -814,3 +814,12 @@ Gerçek backend ile Web UI ve Android E2E, gerçek SMTP teslimatı, TLS'li produ
 - **Kapanan düşük önemli açık:** "Davetlerde kısmi hesap tespiti" kapandı. Davet yanıtı ve bekleyen liste, hesabı olan ve olmayan adresler için aynı; davet sırasında hesap araması yapılmıyor.
 - **Kalan sınırlama:** E-posta doğrulaması olmadığı için davet bağlantısı tek başına katılma yetkisi veriyor. Bağlantı yalnızca hedef kişiyle paylaşılmalı.
 - **Doğrulama:** backend 35 suite / 379 birim testi; E2E 8 suite / 52 test (yeni davet akışı ve eski bekleyen davetlerin kabulü dahil); lokal Compose + Mailpit ile uçtan uca davet → e-posta → kayıt → kabul akışı; web `tsc`, ESLint ve build.
+
+---
+
+# 28 Kasım 2026 — API mesajları İngilizceye çevrildi (Y-2, backend kısmı; henüz commit edilmedi)
+
+- Backend'in kullanıcıya döndürdüğü tüm Türkçe hata/yanıt mesajları (yaklaşık 40 metin, 15 kaynak dosya) İngilizceye çevrildi. Bunlar exception mesajları, DTO validasyon mesajları, genel 500 mesajı ve çıkış/şifre değişikliği yanıtları. Hata kodları (`INVALID_CREDENTIALS`, `STALE_VERSION` vb.) ve HTTP durumları değişmedi; istemciler kodlara bakmaya devam ediyor.
+- Web arayüzü ve Android zaten İngilizceydi. Frontend `errors.ts` içindeki, artık backend'de bulunmayan üç Türkçe mesaj eşlemesi kaldırıldı.
+- Kapsam dışında kalanlar: Türkçe kod yorumları (kullanıcıya görünmüyor) ve çok dilli destek (i18n) yok; arayüz ve API tek dilli, İngilizce.
+- **Doğrulama:** backend 35 suite / 379 birim testi; `tsc`; değişen dosyalarda ESLint 0 sorun (HEAD'de de 0); Prettier'da yeni sorun yok (7 dosyadaki eski biçim farkları değişiklikten önce de vardı); gerçek PostgreSQL 16 + Redis 7 ile E2E 8 suite / 52 test; frontend `tsc`, ESLint ve build.

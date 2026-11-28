@@ -29,7 +29,7 @@ export class CommentsController {
     @Body() dto: CreateCommentDto,
   ) {
     if (req.membership.role === WorkspaceRole.VIEWER) {
-      throw new ForbiddenException('VIEWER rolü yorum ekleyemez.');
+      throw new ForbiddenException('Viewers cannot add comments.');
     }
 
     return this.commentsService.create(workspaceId, taskId, req.user.id, dto);

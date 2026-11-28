@@ -76,7 +76,7 @@ export class AuthController {
     if (!refreshToken) {
       throw new UnauthorizedException({
         code: 'NO_REFRESH_TOKEN',
-        message: 'Refresh token bulunamadı.',
+        message: 'Refresh token not found.',
       });
     }
 
@@ -128,6 +128,6 @@ export class AuthController {
 
     clearRefreshCookie(res);
 
-    return { message: 'Başarıyla çıkış yapıldı.' };
+    return { message: 'Logged out successfully.' };
   }
 }

@@ -32,7 +32,7 @@ export class WorkspacesService {
     if (existing) {
       throw new ConflictException({
         code: 'SLUG_ALREADY_EXISTS',
-        message: 'Bu slug (adres adı) zaten kullanımda.',
+        message: 'This workspace URL (slug) is already in use.',
       });
     }
 
@@ -198,13 +198,13 @@ export class WorkspacesService {
           where: { id: membership.id },
           data: { status: MembershipStatus.EXPIRED },
         });
-        throw new ForbiddenException('Workspace davetinin süresi dolmuş.');
+        throw new ForbiddenException('This workspace invitation has expired.');
       }
 
-      throw new NotFoundException('Bekleyen workspace daveti bulunamadı.');
+      throw new NotFoundException('No pending workspace invitation found.');
     }
 
-    return { message: 'Workspace daveti kabul edildi.' };
+    return { message: 'Workspace invitation accepted.' };
   }
 
   async declineInvitation(workspaceId: string, userId: string) {
@@ -217,10 +217,10 @@ export class WorkspacesService {
     });
 
     if (result.count !== 1) {
-      throw new NotFoundException('Bekleyen workspace daveti bulunamadı.');
+      throw new NotFoundException('No pending workspace invitation found.');
     }
 
-    return { message: 'Workspace daveti reddedildi.' };
+    return { message: 'Workspace invitation declined.' };
   }
 
   async updateMemberRole(
@@ -235,7 +235,7 @@ export class WorkspacesService {
 
     if (!actorMembership || actorMembership.role !== WorkspaceRole.OWNER) {
       throw new ForbiddenException(
-        'Sadece Workspace sahibi (OWNER) rolleri değiştirebilir.',
+        'Only the workspace owner can change roles.',
       );
     }
 
@@ -243,7 +243,7 @@ export class WorkspacesService {
     // OWNER cannot accidentally create ambiguous ownership.
     if (newRole === WorkspaceRole.OWNER) {
       throw new ForbiddenException(
-        'OWNER rolü bu işlemle atanamaz. Sahiplik devri ayrı bir işlem olmalıdır.',
+        'The OWNER role cannot be assigned here; ownership transfer is a separate operation.',
       );
     }
 
@@ -252,7 +252,7 @@ export class WorkspacesService {
     });
 
     if (!targetMembership || targetMembership.workspaceId !== workspaceId) {
-      throw new NotFoundException('Üyelik bulunamadı.');
+      throw new NotFoundException('Membership not found.');
     }
 
     if (targetMembership.role === WorkspaceRole.OWNER) {
@@ -267,7 +267,7 @@ export class WorkspacesService {
       if (ownerCount <= 1) {
         throw new ConflictException({
           code: 'LAST_OWNER_PROTECTION',
-          message: "Workspace'in son OWNER'ının rolü düşürülemez.",
+          message: 'The last owner of a workspace cannot be demoted.',
         });
       }
     }
@@ -292,7 +292,9 @@ export class WorkspacesService {
       (actorMembership.role !== WorkspaceRole.OWNER &&
         actorMembership.role !== WorkspaceRole.ADMIN)
     ) {
-      throw new ForbiddenException('Bu işlem için yetkiniz yok.');
+      throw new ForbiddenException(
+        'You do not have permission to perform this action.',
+      );
     }
 
     const targetMembership = await this.prisma.workspaceMembership.findUnique({
@@ -300,14 +302,12 @@ export class WorkspacesService {
     });
 
     if (!targetMembership || targetMembership.workspaceId !== workspaceId) {
-      throw new NotFoundException('Üyelik bulunamadı.');
+      throw new NotFoundException('Membership not found.');
     }
 
     if (targetMembership.role === WorkspaceRole.OWNER) {
       if (actorMembership.role !== WorkspaceRole.OWNER) {
-        throw new ForbiddenException(
-          "ADMIN rolündeki biri bir OWNER'ı çıkaramaz.",
-        );
+        throw new ForbiddenException('An admin cannot remove an owner.');
       }
 
       const ownerCount = await this.prisma.workspaceMembership.count({
@@ -321,7 +321,7 @@ export class WorkspacesService {
       if (ownerCount <= 1) {
         throw new ConflictException({
           code: 'LAST_OWNER_PROTECTION',
-          message: "Workspace'in son OWNER'ı silinemez.",
+          message: 'The last owner of a workspace cannot be removed.',
         });
       }
     }

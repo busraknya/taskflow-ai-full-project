@@ -42,14 +42,14 @@ export class UsersService {
   async changePassword(userId: string, dto: ChangePasswordDto) {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user || user.deletedAt || user.disabledAt) {
-      throw new UnauthorizedException('Kullanıcı bulunamadı.');
+      throw new UnauthorizedException('User not found.');
     }
 
     const isMatch = await bcrypt.compare(dto.currentPassword, user.passwordHash);
     if (!isMatch) {
       throw new UnauthorizedException({
         code: 'INVALID_CURRENT_PASSWORD',
-        message: 'Mevcut şifreniz hatalı.',
+        message: 'Your current password is incorrect.',
       });
     }
 
@@ -82,12 +82,12 @@ export class UsersService {
     if (!tokens) {
       throw new UnauthorizedException({
         code: 'INVALID_CURRENT_PASSWORD',
-        message: 'Mevcut şifreniz hatalı.',
+        message: 'Your current password is incorrect.',
       });
     }
 
     return {
-      message: 'Şifreniz başarıyla değiştirildi.',
+      message: 'Your password has been changed.',
       accessToken: tokens.accessToken,
       refreshToken: tokens.refreshToken,
     };

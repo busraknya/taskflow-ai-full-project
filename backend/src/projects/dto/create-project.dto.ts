@@ -4,7 +4,7 @@ export const PROJECT_NAME_MAX_LENGTH = 100;
 
 export class CreateProjectDto {
   @IsString()
-  @MinLength(2, { message: 'Proje adı en az 2 karakter olmalıdır.' })
+  @MinLength(2, { message: 'Project name must be at least 2 characters long.' })
   @MaxLength(PROJECT_NAME_MAX_LENGTH)
   name!: string;
 

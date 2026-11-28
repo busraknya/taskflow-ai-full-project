@@ -18,7 +18,7 @@ import request from 'supertest';
 import type { App } from 'supertest/types';
 import { HttpExceptionFilter } from './http-exception.filter';
 
-const GENERIC = 'Beklenmeyen bir sunucu hatası oluştu.';
+const GENERIC = 'An unexpected server error occurred.';
 
 // Internal details that must never reach a client (and, for Prisma, a log).
 const DB_ADDRESS = '10.0.0.5:5432';
@@ -76,14 +76,14 @@ class ProbeController {
 
   @Get('not-found')
   notFound() {
-    throw new NotFoundException('Workspace bulunamadı.');
+    throw new NotFoundException('Workspace not found.');
   }
 
   @Get('conflict')
   conflict() {
     throw new ConflictException({
       code: 'STALE_VERSION',
-      message: 'Görev başka biri tarafından değiştirildi.',
+      message: 'The task was modified by someone else.',
       details: { version: 3 },
     });
   }
@@ -310,7 +310,7 @@ describe('HttpExceptionFilter', () => {
       expect(res.body).toEqual({
         statusCode: 404,
         code: 'Not Found',
-        message: 'Workspace bulunamadı.',
+        message: 'Workspace not found.',
         details: {},
       });
     });
@@ -320,7 +320,7 @@ describe('HttpExceptionFilter', () => {
       expect(res.body).toEqual({
         statusCode: 409,
         code: 'STALE_VERSION',
-        message: 'Görev başka biri tarafından değiştirildi.',
+        message: 'The task was modified by someone else.',
         details: { version: 3 },
       });
     });
@@ -349,7 +349,7 @@ describe('HttpExceptionFilter', () => {
       expect(res.body).toEqual({
         statusCode: 400,
         code: 'Bad Request',
-        message: 'Validasyon hatası.',
+        message: 'Validation failed.',
         details: {
           fields: expect.arrayContaining([
             'property extra should not exist',

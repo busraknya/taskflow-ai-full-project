@@ -25,9 +25,7 @@ export class TasksController {
 
   private assertCanWrite(req: WorkspaceMemberRequest) {
     if (req.membership.role === WorkspaceRole.VIEWER) {
-      throw new ForbiddenException(
-        'VIEWER rolü görev oluşturamaz veya değiştiremez.',
-      );
+      throw new ForbiddenException('Viewers cannot create or modify tasks.');
     }
   }
 

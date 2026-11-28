@@ -14,7 +14,7 @@ import {
   stackFramesOnly,
 } from '../logging/log-sanitizer';
 
-const GENERIC_ERROR_MESSAGE = 'Beklenmeyen bir sunucu hatası oluştu.';
+const GENERIC_ERROR_MESSAGE = 'An unexpected server error occurred.';
 
 /**
  * Errors created with the `http-errors` package (e.g. by body-parser for an
@@ -73,7 +73,7 @@ export class HttpExceptionFilter implements ExceptionFilter {
         }
 
         if (Array.isArray(responseMessage)) {
-          message = 'Validasyon hatası.';
+          message = 'Validation failed.';
           details = { fields: responseMessage };
         } else if (typeof responseMessage === 'string') {
           message = responseMessage;

@@ -76,7 +76,7 @@ export class AuthService {
     if (existingUser) {
       throw new ConflictException({
         code: 'EMAIL_ALREADY_EXISTS',
-        message: 'Bu e-posta adresi zaten kullanımda.',
+        message: 'This email address is already in use.',
       });
     }
 
@@ -97,7 +97,7 @@ export class AuthService {
     });
 
     return {
-      message: 'Kullanıcı başarıyla oluşturuldu.',
+      message: 'User created successfully.',
       user,
     };
   }
@@ -252,13 +252,13 @@ export class AuthService {
       case 'expired':
         throw new UnauthorizedException({
           code: 'REFRESH_TOKEN_EXPIRED',
-          message: 'Oturum süresi doldu. Lütfen tekrar giriş yapın.',
+          message: 'Your session has expired. Please sign in again.',
         });
       case 'rotatedRecently':
         // Benign race (e.g. two tabs). The winner's new session stays intact.
         throw new UnauthorizedException({
           code: 'REFRESH_TOKEN_ROTATED',
-          message: 'Oturum başka bir istekte yenilendi.',
+          message: 'The session was refreshed by another request.',
         });
       case 'reused':
         this.logger.warn(
@@ -266,7 +266,7 @@ export class AuthService {
         );
         throw new UnauthorizedException({
           code: 'REFRESH_TOKEN_REUSED',
-          message: 'Güvenlik ihlali tespit edildi. Lütfen tekrar giriş yapın.',
+          message: 'A security issue was detected. Please sign in again.',
         });
       default:
         throw this.invalidRefreshToken();
@@ -298,7 +298,7 @@ export class AuthService {
       }
     });
 
-    return { message: 'Başarıyla çıkış yapıldı.' };
+    return { message: 'Logged out successfully.' };
   }
 
   /**
@@ -334,7 +334,7 @@ export class AuthService {
     if (!found) {
       throw this.invalidRefreshToken();
     }
-    return { message: 'Başarıyla çıkış yapıldı.' };
+    return { message: 'Logged out successfully.' };
   }
 
   /**
@@ -424,14 +424,14 @@ export class AuthService {
   private invalidCredentials() {
     return new UnauthorizedException({
       code: 'INVALID_CREDENTIALS',
-      message: 'E-posta veya şifre hatalı.',
+      message: 'Invalid email or password.',
     });
   }
 
   private invalidRefreshToken() {
     return new UnauthorizedException({
       code: 'INVALID_REFRESH_TOKEN',
-      message: 'Oturum süresi doldu. Lütfen tekrar giriş yapın.',
+      message: 'Your session has expired. Please sign in again.',
     });
   }
 }

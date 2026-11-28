@@ -63,7 +63,7 @@ describe('UsersService password changes', () => {
         newPassword: 'new-password1',
       }),
     ).resolves.toEqual({
-      message: 'Şifreniz başarıyla değiştirildi.',
+      message: 'Your password has been changed.',
       accessToken: 'new-access',
       refreshToken: 'new-refresh',
     });

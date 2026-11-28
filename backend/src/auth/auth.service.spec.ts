@@ -220,7 +220,7 @@ describe('AuthService refresh token rotation', () => {
   it('logs out through the indexed fingerprint lookup and revokes the family', async () => {
     await expect(
       service.logoutWithRefreshToken('current-refresh-token'),
-    ).resolves.toEqual({ message: 'Başarıyla çıkış yapıldı.' });
+    ).resolves.toEqual({ message: 'Logged out successfully.' });
 
     expect(prisma.refreshToken.findUnique).toHaveBeenCalledWith({
       where: { tokenHash: sha256('current-refresh-token') },

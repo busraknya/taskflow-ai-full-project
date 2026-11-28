@@ -44,7 +44,7 @@ describe('WorkspacesService invitations', () => {
 
     await expect(
       service.acceptInvitation('workspace-1', 'invitee-1'),
-    ).resolves.toEqual({ message: 'Workspace daveti kabul edildi.' });
+    ).resolves.toEqual({ message: 'Workspace invitation accepted.' });
 
     expect(prisma.workspaceMembership.updateMany).toHaveBeenCalledWith({
       where: {
@@ -96,7 +96,7 @@ describe('WorkspacesService invitations', () => {
 
     await expect(
       service.declineInvitation('workspace-1', 'invitee-1'),
-    ).resolves.toEqual({ message: 'Workspace daveti reddedildi.' });
+    ).resolves.toEqual({ message: 'Workspace invitation declined.' });
 
     expect(prisma.workspaceMembership.deleteMany).toHaveBeenCalledWith({
       where: {

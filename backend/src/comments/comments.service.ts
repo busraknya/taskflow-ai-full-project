@@ -54,7 +54,7 @@ export class CommentsService {
     });
 
     if (!task) {
-      throw new NotFoundException('Görev bulunamadı.');
+      throw new NotFoundException('Task not found.');
     }
 
     // 2. Create the comment and its TaskEvent atomically.
@@ -112,7 +112,7 @@ export class CommentsService {
     });
 
     if (!task) {
-      throw new NotFoundException('Görev bulunamadı.');
+      throw new NotFoundException('Task not found.');
     }
 
     return this.prisma.comment.findMany({
@@ -134,7 +134,7 @@ export class CommentsService {
     });
 
     if (!comment || comment.task.workspaceId !== workspaceId) {
-      throw new NotFoundException('Yorum bulunamadı.');
+      throw new NotFoundException('Comment not found.');
     }
 
     // 2. Kullanıcının rolünü al (OWNER/ADMIN mi?)
@@ -147,7 +147,7 @@ export class CommentsService {
 
     // Domain Rules §7 & D-6: Sadece yazar veya ADMIN/OWNER silebilir!
     if (!isAuthor && !isAdminOrOwner) {
-      throw new ForbiddenException('Bu yorumu silme yetkiniz yok.');
+      throw new ForbiddenException('You do not have permission to delete this comment.');
     }
 
     // 3. Soft delete (Domain Rules §1). The conditional update ensures a
@@ -159,7 +159,7 @@ export class CommentsService {
         data: { deletedAt },
       });
       if (result.count !== 1) {
-        throw new NotFoundException('Yorum bulunamadı.');
+        throw new NotFoundException('Comment not found.');
       }
       await tx.taskEvent.createMany({
         data: toEventRows(

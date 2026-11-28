@@ -19,7 +19,7 @@ export class WorkspaceMemberGuard implements CanActivate {
       request.params.workspaceId ?? request.body?.workspaceId;
 
     if (!user || !workspaceId) {
-      throw new NotFoundException('Workspace bulunamadı.');
+      throw new NotFoundException('Workspace not found.');
     }
 
     const workspace = await this.prisma.workspace.findUnique({
@@ -27,7 +27,7 @@ export class WorkspaceMemberGuard implements CanActivate {
     });
 
     if (!workspace || workspace.deletedAt) {
-      throw new NotFoundException('Workspace bulunamadı.');
+      throw new NotFoundException('Workspace not found.');
     }
 
     const membership = await this.prisma.workspaceMembership.findUnique({
@@ -40,7 +40,7 @@ export class WorkspaceMemberGuard implements CanActivate {
     });
 
     if (!membership || membership.status !== 'ACTIVE') {
-      throw new NotFoundException('Workspace bulunamadı.');
+      throw new NotFoundException('Workspace not found.');
     }
 
     request.membership = membership;

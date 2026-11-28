@@ -32,7 +32,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       payload.tokenType !== ACCESS_TOKEN_TYPE ||
       typeof payload.sub !== 'string'
     ) {
-      throw new UnauthorizedException('Geçersiz erişim anahtarı.');
+      throw new UnauthorizedException('Invalid access token.');
     }
 
     const user = await this.prisma.user.findUnique({
@@ -40,7 +40,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     });
 
     if (!user || user.deletedAt || user.disabledAt) {
-      throw new UnauthorizedException('Oturum geçersiz.');
+      throw new UnauthorizedException('Invalid session.');
     }
 
     // Tokens issued before the last password change are no longer valid.
@@ -50,7 +50,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
         user.passwordChangedAt.getTime() / 1000,
       );
       if (typeof payload.iat !== 'number' || payload.iat < changedAtSeconds) {
-        throw new UnauthorizedException('Oturum geçersiz.');
+        throw new UnauthorizedException('Invalid session.');
       }
     }
 
