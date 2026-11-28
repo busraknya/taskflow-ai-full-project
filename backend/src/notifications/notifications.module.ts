@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { BullModule } from '@nestjs/bullmq';
 import { EmailProcessor } from './email.processor';
 import { WorkspaceInvitationListener } from './workspace-invitation.listener';
+import { MailConfigCheck } from './mail-config.check';
 
 @Module({
   imports: [
@@ -26,7 +27,7 @@ import { WorkspaceInvitationListener } from './workspace-invitation.listener';
       },
     }),
   ],
-  providers: [EmailProcessor, WorkspaceInvitationListener],
+  providers: [EmailProcessor, WorkspaceInvitationListener, MailConfigCheck],
   exports: [BullModule],
 })
 export class NotificationsModule {}

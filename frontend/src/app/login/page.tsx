@@ -8,6 +8,7 @@ import { getErrorMessage } from '@/lib/errors';
 import { Alert } from '@/components/ui/Alert';
 import { useAuthStore } from '@/store/useAuthStore'; // <-- 1. Import eklendi
 import Link from 'next/link';
+import { postLoginPath } from '@/lib/invitations';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -28,7 +29,8 @@ export default function LoginPage() {
       // 3. Belleğe (Memory) güvenli bir şekilde kaydet
       setAuth(res.data.user, res.data.accessToken);
 
-      router.push('/workspaces');
+      // Returns to a pending invitation or a safe ?next= path.
+      router.push(postLoginPath(window.location.search));
     } catch (err: any) {
       const errorCode = err.response?.data?.code || err.response?.data?.message;
       setError(getErrorMessage(errorCode));

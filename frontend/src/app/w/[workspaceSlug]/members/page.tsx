@@ -7,12 +7,20 @@ import { theme } from '@/lib/theme';
 import { AddMemberForm } from '@/components/members/AddMemberForm';
 import { MemberListTable } from '@/components/members/MemberListTable';
 import { Toast } from '@/components/ui/Toast';
+import { PendingInvitations, type PendingInvitation } from '@/components/members/PendingInvitations';
+import { InviteLinkNotice } from '@/components/members/InviteLinkNotice';
 
 interface Member {
   id: string;
   role: string;
   status: string;
   user: { id: string; fullName: string; email: string; };
+}
+
+/** The API error message, if any. */
+function apiMessage(err: unknown): string | null {
+  const message = (err as { response?: { data?: { message?: unknown } } }).response?.data?.message;
+  return typeof message === 'string' ? message : null;
 }
 
 export default function MembersPage() {
@@ -28,6 +36,21 @@ export default function MembersPage() {
   const [toastMsg, setToastMsg] = useState('');
   const [toastType, setToastType] = useState<'success' | 'error'>('success');
   const [adding, setAdding] = useState(false);
+  const [invitations, setInvitations] = useState<PendingInvitation[]>([]);
+  const [issuedLink, setIssuedLink] = useState<{
+    email: string;
+    acceptUrl: string;
+    emailDelivery: 'queued' | 'disabled';
+  } | null>(null);
+
+  const fetchInvitations = useCallback(async (wsId: string) => {
+    try {
+      const res = await api.get<PendingInvitation[]>(`/workspaces/${wsId}/invitations`);
+      setInvitations(res.data);
+    } catch {
+      setInvitations([]); // members (non-admins) cannot see invitations
+    }
+  }, []);
 
   const fetchMembers = useCallback(async (wsId: string) => {
     try {
@@ -60,6 +83,9 @@ export default function MembersPage() {
         setCurrentUserRole(currentWs.role); // Workspace listesinden kullanıcının rolünü alıyoruz
 
         fetchMembers(currentWs.id);
+        if (currentWs.role === 'OWNER' || currentWs.role === 'ADMIN') {
+          fetchInvitations(currentWs.id);
+        }
       } catch (err) {
         setToastMsg('Failed to initialize workspace.');
         setToastType('error');
@@ -67,7 +93,7 @@ export default function MembersPage() {
       }
     };
     init();
-  }, [workspaceSlug, fetchMembers]);
+  }, [workspaceSlug, fetchMembers, fetchInvitations]);
 
 
 
@@ -77,10 +103,13 @@ export default function MembersPage() {
     setToastMsg('');
 
     try {
-      await api.post(`/workspaces/${workspaceId}/members/invite`, { email, role });
-      setToastMsg('Invitation created. The member can accept it from their Workspaces page.');
-      setToastType('success');
-      fetchMembers(workspaceId);
+      const res = await api.post(`/workspaces/${workspaceId}/members/invite`, { email, role });
+      setIssuedLink({
+        email: res.data.email,
+        acceptUrl: res.data.acceptUrl,
+        emailDelivery: res.data.emailDelivery,
+      });
+      fetchInvitations(workspaceId);
     } catch (err: any) {
       const errorData = err.response?.data;
       const errorMsg = errorData?.message || 'Failed to add member.';
@@ -88,6 +117,37 @@ export default function MembersPage() {
       setToastType('error');
     } finally {
       setAdding(false);
+    }
+  };
+
+  const handleResendInvitation = async (invitationId: string) => {
+    if (!workspaceId) return;
+    try {
+      const res = await api.post(`/workspaces/${workspaceId}/invitations/${invitationId}/resend`);
+      const invitation = invitations.find((i) => i.id === invitationId);
+      setIssuedLink({
+        email: invitation?.email ?? '',
+        acceptUrl: res.data.acceptUrl,
+        emailDelivery: res.data.emailDelivery,
+      });
+      fetchInvitations(workspaceId);
+    } catch (err: unknown) {
+      setToastMsg(apiMessage(err) || 'Failed to resend the invitation.');
+      setToastType('error');
+    }
+  };
+
+  const handleRevokeInvitation = async (invitationId: string) => {
+    if (!workspaceId) return;
+    if (!window.confirm('Revoke this invitation? Its link will stop working.')) return;
+    try {
+      await api.delete(`/workspaces/${workspaceId}/invitations/${invitationId}`);
+      setToastMsg('Invitation revoked.');
+      setToastType('success');
+      fetchInvitations(workspaceId);
+    } catch (err: unknown) {
+      setToastMsg(apiMessage(err) || 'Failed to revoke the invitation.');
+      setToastType('error');
     }
   };
 
@@ -164,6 +224,18 @@ export default function MembersPage() {
         {/* Sadece Owner veya Admin ise Üye Ekleme Formunu Göster */}
         {isOwnerOrAdmin && (
           <AddMemberForm onAdd={handleAddMember} adding={adding} />
+        )}
+
+        {issuedLink && (
+          <InviteLinkNotice {...issuedLink} onClose={() => setIssuedLink(null)} />
+        )}
+
+        {isOwnerOrAdmin && (
+          <PendingInvitations
+            invitations={invitations}
+            onResend={handleResendInvitation}
+            onRevoke={handleRevokeInvitation}
+          />
         )}
 
         {/* Üye Listesi Tablosu (Rol ve Silme yetkileri ile) */}

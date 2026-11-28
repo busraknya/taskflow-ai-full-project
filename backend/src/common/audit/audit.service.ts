@@ -5,7 +5,8 @@ import { describeError } from '../logging/log-sanitizer';
 interface LogAuditParams {
   workspaceId: string;
   actorId: string;
-  entityType: 'WORKSPACE' | 'PROJECT' | 'TASK' | 'COMMENT' | 'MEMBERSHIP';
+  entityType:
+    'WORKSPACE' | 'PROJECT' | 'TASK' | 'COMMENT' | 'MEMBERSHIP' | 'INVITATION';
   entityId: string;
   action: string;
   metadata?: Record<string, any>;

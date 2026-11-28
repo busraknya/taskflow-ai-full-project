@@ -1,11 +1,14 @@
-import { Injectable, ConflictException, ForbiddenException, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  ConflictException,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateWorkspaceDto } from './dto/create-workspace.dto';
 import { UpdateWorkspaceSettingsDto } from './dto/update-workspace-settings.dto';
 import { WorkspaceRole, MembershipStatus, Prisma } from '@prisma/client';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-
-const INVITATION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
 function isUniqueConstraintViolation(error: unknown): boolean {
   return (
@@ -125,151 +128,6 @@ export class WorkspacesService {
           }
         : membership,
     );
-  }
-
-  async inviteMember(
-    workspaceId: string,
-    inviterUserId: string,
-    email: string,
-    role: WorkspaceRole,
-  ) {
-    const inviterMembership = await this.prisma.workspaceMembership.findUnique({
-      where: { workspaceId_userId: { workspaceId, userId: inviterUserId } },
-    });
-
-    if (
-      !inviterMembership ||
-      inviterMembership.status !== MembershipStatus.ACTIVE ||
-      (inviterMembership.role !== WorkspaceRole.OWNER &&
-        inviterMembership.role !== WorkspaceRole.ADMIN)
-    ) {
-      throw new ForbiddenException('Bu işlem için yetkiniz yok.');
-    }
-
-    if (role === WorkspaceRole.OWNER) {
-      throw new ForbiddenException(
-        'OWNER rolü davet sırasında atanamaz. Sahiplik devri ayrı bir işlem olmalıdır.',
-      );
-    }
-
-    if (
-      inviterMembership.role === WorkspaceRole.ADMIN &&
-      role === WorkspaceRole.ADMIN
-    ) {
-      throw new ForbiddenException('ADMIN rolünü yalnızca OWNER atayabilir.');
-    }
-
-    const normalizedEmail = email.trim().toLowerCase();
-    const now = new Date();
-    const invitationExpiresAt = new Date(now.getTime() + INVITATION_TTL_MS);
-
-    // Identical response whether or not the address belongs to an account, so
-    // the endpoint cannot be used to enumerate users or harvest profile data.
-    const response = {
-      message: 'Davet oluşturuldu.',
-      email: normalizedEmail,
-      role,
-      invitationExpiresAt,
-    };
-
-    const targetUser = await this.prisma.user.findUnique({
-      where: { email: normalizedEmail },
-    });
-    if (!targetUser || targetUser.deletedAt || targetUser.disabledAt) {
-      // No membership is created and no email is sent.
-      return response;
-    }
-
-    if (targetUser.id === inviterUserId) {
-      throw new ConflictException('Kendinizi workspace davet edemezsiniz.');
-    }
-
-    const existingMembership = await this.prisma.workspaceMembership.findUnique(
-      {
-        where: {
-          workspaceId_userId: { workspaceId, userId: targetUser.id },
-        },
-      },
-    );
-
-    if (existingMembership?.status === MembershipStatus.ACTIVE) {
-      throw new ConflictException("Bu kullanıcı zaten bu workspace'in üyesi.");
-    }
-    if (
-      existingMembership?.status === MembershipStatus.PENDING &&
-      existingMembership.invitationExpiresAt &&
-      existingMembership.invitationExpiresAt > now
-    ) {
-      throw new ConflictException(
-        'Bu kullanıcı için bekleyen bir davet zaten var.',
-      );
-    }
-
-    const membershipData = {
-      role,
-      status: MembershipStatus.PENDING,
-      invitedById: inviterUserId,
-      invitedAt: now,
-      invitationExpiresAt,
-      joinedAt: null,
-    };
-
-    if (existingMembership) {
-      // Re-invite only from an expired/stale invitation. The conditional
-      // write re-checks the state atomically, so a concurrent accept or a
-      // parallel re-invite can never be overwritten (an ACTIVE membership is
-      // never turned back into an invitation).
-      const reinvited = await this.prisma.workspaceMembership.updateMany({
-        where: {
-          id: existingMembership.id,
-          OR: [
-            { status: MembershipStatus.EXPIRED },
-            {
-              status: MembershipStatus.PENDING,
-              OR: [
-                { invitationExpiresAt: null },
-                { invitationExpiresAt: { lte: now } },
-              ],
-            },
-          ],
-        },
-        data: membershipData,
-      });
-      if (reinvited.count !== 1) {
-        throw new ConflictException(
-          'Davet durumu değişti. Lütfen üye listesini yenileyin.',
-        );
-      }
-    } else {
-      try {
-        await this.prisma.workspaceMembership.create({
-          data: { workspaceId, userId: targetUser.id, ...membershipData },
-        });
-      } catch (error) {
-        // A parallel request created the invitation first.
-        if (isUniqueConstraintViolation(error)) {
-          throw new ConflictException(
-            'Bu kullanıcı için bekleyen bir davet zaten var.',
-          );
-        }
-        throw error;
-      }
-    }
-
-    const workspace = await this.prisma.workspace.findUnique({
-      where: { id: workspaceId },
-    });
-
-    this.eventEmitter.emit('workspace.member_invited', {
-      workspaceId,
-      userId: targetUser.id,
-      email: targetUser.email,
-      fullName: targetUser.fullName,
-      workspaceName: workspace?.name || 'Workspace',
-      expiresAt: invitationExpiresAt,
-    });
-
-    return response;
   }
 
   async getPendingInvitations(userId: string) {
@@ -447,7 +305,9 @@ export class WorkspacesService {
 
     if (targetMembership.role === WorkspaceRole.OWNER) {
       if (actorMembership.role !== WorkspaceRole.OWNER) {
-        throw new ForbiddenException("ADMIN rolündeki biri bir OWNER'ı çıkaramaz.");
+        throw new ForbiddenException(
+          "ADMIN rolündeki biri bir OWNER'ı çıkaramaz.",
+        );
       }
 
       const ownerCount = await this.prisma.workspaceMembership.count({

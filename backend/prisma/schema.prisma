@@ -93,6 +93,8 @@ model User {
   refreshTokens     RefreshToken[]
   notificationPrefs NotificationPreference[]
   sentWorkspaceInvitations WorkspaceMembership[] @relation("WorkspaceInviter")
+  invitationsSent     WorkspaceInvitation[] @relation("InvitationInviter")
+  invitationsAccepted WorkspaceInvitation[] @relation("InvitationAcceptor")
 
   @@index([email])
 }
@@ -136,6 +138,7 @@ model Workspace {
   auditLogs   AuditLogEntry[]
   taskEvents  TaskEvent[]
   riskTrainingRuns RiskModelTraining[]
+  invitations      WorkspaceInvitation[]
 
   @@index([slug])
 }
@@ -160,6 +163,32 @@ model WorkspaceMembership {
   @@index([invitedById])
   @@index([userId, status, invitationExpiresAt])
   @@index([workspaceId, status, invitationExpiresAt])
+}
+
+/// Invitation to an email address, accepted with a single-use link. Works for
+/// addresses with or without an account; only the token's SHA-256 is stored.
+/// At most one open invitation per (workspace, email) is enforced by a partial
+/// unique index in the migration.
+model WorkspaceInvitation {
+  id           String        @id @default(uuid())
+  workspaceId  String
+  workspace    Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  /// Normalised (trimmed, lower-case).
+  email        String
+  role         WorkspaceRole
+  tokenHash    String        @unique
+  invitedById  String?
+  invitedBy    User?         @relation("InvitationInviter", fields: [invitedById], references: [id], onDelete: SetNull)
+  createdAt    DateTime      @default(now())
+  expiresAt    DateTime
+  acceptedAt   DateTime?
+  acceptedById String?
+  acceptedBy   User?         @relation("InvitationAcceptor", fields: [acceptedById], references: [id], onDelete: SetNull)
+  revokedAt    DateTime?
+
+  @@index([workspaceId, email])
+  @@index([invitedById])
+  @@index([acceptedById])
 }
 
 model Project {

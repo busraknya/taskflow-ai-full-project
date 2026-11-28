@@ -14,6 +14,7 @@ import type {
   WorkspaceMemberRequest,
 } from '../common/types/authenticated-request';
 import { WorkspacesService } from './workspaces.service';
+import { InvitationsService } from './invitations.service';
 import { CreateWorkspaceDto } from './dto/create-workspace.dto';
 import { InviteMemberDto } from './dto/invite-member.dto';
 import { UpdateMemberRoleDto } from './dto/update-member-role.dto';
@@ -26,7 +27,10 @@ import { SensitiveRateLimit } from '../common/rate-limit/rate-limit.policies';
 @Controller('workspaces')
 @UseGuards(AuthGuard('jwt'))
 export class WorkspacesController {
-  constructor(private readonly workspacesService: WorkspacesService) {}
+  constructor(
+    private readonly workspacesService: WorkspacesService,
+    private readonly invitationsService: InvitationsService,
+  ) {}
 
   @Post()
   async create(
@@ -71,11 +75,50 @@ export class WorkspacesController {
     @Req() req: AuthenticatedRequest,
     @Body() dto: InviteMemberDto,
   ) {
-    return this.workspacesService.inviteMember(
+    return this.invitationsService.create(
       workspaceId,
       req.user.id,
       dto.email,
       dto.role,
+    );
+  }
+
+  /** Open invitations (owners/admins). */
+  @Get(':workspaceId/invitations')
+  @UseGuards(WorkspaceMemberGuard)
+  async listInvitations(
+    @Param('workspaceId') workspaceId: string,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    return this.invitationsService.list(workspaceId, req.user.id);
+  }
+
+  @Delete(':workspaceId/invitations/:invitationId')
+  @UseGuards(WorkspaceMemberGuard)
+  async revokeInvitation(
+    @Param('workspaceId') workspaceId: string,
+    @Param('invitationId') invitationId: string,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    return this.invitationsService.revoke(
+      workspaceId,
+      req.user.id,
+      invitationId,
+    );
+  }
+
+  @Post(':workspaceId/invitations/:invitationId/resend')
+  @UseGuards(WorkspaceMemberGuard, AuthRateLimitGuard)
+  @SensitiveRateLimit('workspace-invite')
+  async resendInvitation(
+    @Param('workspaceId') workspaceId: string,
+    @Param('invitationId') invitationId: string,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    return this.invitationsService.resend(
+      workspaceId,
+      req.user.id,
+      invitationId,
     );
   }
 

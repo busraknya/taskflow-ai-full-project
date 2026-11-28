@@ -22,6 +22,14 @@ const MALICIOUS = {
   quotes: `"><a href='https://evil.example.com'>Reset password</a>`,
 };
 
+const originalHost = process.env.SMTP_HOST;
+beforeAll(() => {
+  process.env.SMTP_HOST = 'smtp.example.com';
+});
+afterAll(() => {
+  process.env.SMTP_HOST = originalHost;
+});
+
 describe('EmailProcessor HTML escaping', () => {
   const processor = new EmailProcessor();
 
@@ -92,7 +100,7 @@ describe('EmailProcessor HTML escaping', () => {
     expect(mail.html).toContain('<b>R&amp;D Team</b>');
     expect(mail.text).toContain('You were invited to join R&D Team');
     expect(mail.text).toContain(
-      'Sign in to accept the invitation: https://app.example.com/workspaces',
+      'Open this link to accept (you can create an account there if you do not have one): https://app.example.com/workspaces',
     );
     expect(mail.subject).toBe('You were invited to R&D Team');
   });
@@ -118,7 +126,7 @@ describe('EmailProcessor HTML escaping', () => {
     expect(mail.html).not.toContain(acceptUrl);
     expect(mail.text).not.toContain(acceptUrl);
     expect(mail.text).toContain(
-      'Sign in to TaskFlow AI to accept the invitation.',
+      'Ask the person who invited you for a new invitation link.',
     );
   });
 
@@ -213,5 +221,59 @@ describe('EmailProcessor logging', () => {
     expect(text).toContain('<a***@e***.com>: Recipient address rejected');
     expect(text).toMatch(/\n\s+at\s/); // stack frames kept
     expect(text).not.toContain('alice.private@example.com');
+  });
+});
+
+describe('EmailProcessor without SMTP configuration', () => {
+  const processor = new EmailProcessor();
+
+  afterEach(() => {
+    process.env.SMTP_HOST = 'smtp.example.com';
+    jest.restoreAllMocks();
+  });
+
+  it('never contacts any mail server when SMTP_HOST is not set', async () => {
+    const nodemailer = jest.requireMock<{ createTransport: jest.Mock }>(
+      'nodemailer',
+    );
+    jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+    process.env.SMTP_HOST = '';
+    nodemailer.createTransport.mockClear();
+    sendMail.mockClear();
+
+    await expect(
+      processor.process({
+        data: {
+          recipient: 'someone@example.com',
+          subject: 'Hello',
+          templateData: { fullName: 'A', taskTitle: 'T', taskId: 't1' },
+        },
+      } as Job<never>),
+    ).resolves.toEqual({ sent: false });
+    expect(nodemailer.createTransport).not.toHaveBeenCalled();
+    expect(sendMail).not.toHaveBeenCalled();
+  });
+
+  it('greets recipients without an account generically and names the inviter', async () => {
+    sendMail.mockReset();
+    sendMail.mockResolvedValue({});
+    jest.spyOn(Logger.prototype, 'log').mockImplementation(() => undefined);
+    await processor.process({
+      data: {
+        recipient: 'new@example.com',
+        subject: 'Invited',
+        templateData: {
+          type: 'workspace-invitation',
+          inviterName: 'Ada',
+          workspaceName: 'Design',
+          expiresAt: '2026-12-02T12:00:00.000Z',
+          acceptUrl: 'https://app.example.com/invite#token',
+        },
+      },
+    } as Job<never>);
+    const [mail] = sendMail.mock.calls[0] as [{ text: string; html: string }];
+    expect(mail.text.startsWith('Hello,')).toBe(true);
+    expect(mail.text).toContain('Ada invited you to join Design');
+    expect(mail.html).toContain('href="https://app.example.com/invite#token"');
   });
 });

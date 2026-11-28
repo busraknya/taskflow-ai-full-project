@@ -1,17 +1,20 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { api } from '@/lib/api';
 import { theme } from '@/lib/theme';
 import { getErrorMessage } from '@/lib/errors';
 import { Alert } from '@/components/ui/Alert';
 import Link from 'next/link';
+import { safeNextPath } from '@/lib/invitations';
 
 export default function RegisterPage() {
   const router = useRouter();
   const [fullName, setFullName] = useState('');
-  const [email, setEmail] = useState('');
+  const searchParams = useSearchParams();
+  // Prefilled from an invitation link (?email=).
+  const [email, setEmail] = useState(searchParams.get('email') ?? '');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -24,7 +27,8 @@ export default function RegisterPage() {
     try {
       await api.post('/auth/register', { fullName, email, password });
       // Kayıt başarılı -> Kullanıcıyı login sayfasına yönlendir
-      router.push('/login');
+      const next = safeNextPath(searchParams.get('next'));
+      router.push(next ? `/login?next=${encodeURIComponent(next)}` : '/login');
     } catch (err: any) {
       const errorCode = err.response?.data?.code || err.response?.data?.message;
       setError(getErrorMessage(errorCode));

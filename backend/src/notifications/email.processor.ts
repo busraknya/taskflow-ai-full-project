@@ -1,13 +1,13 @@
 import { Logger } from '@nestjs/common';
 import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { Job } from 'bullmq';
-import * as nodemailer from 'nodemailer';
 import {
   escapeHtml,
   safeHttpUrl,
   sanitizeHeaderText,
 } from './email-template.util';
 import { describeError, maskEmail } from '../common/logging/log-sanitizer';
+import { createMailTransport, warnEmailDisabledOnce } from './mail-transport';
 
 type TaskAssignedTemplateData = {
   type?: 'task-assigned';
@@ -18,7 +18,9 @@ type TaskAssignedTemplateData = {
 
 type WorkspaceInvitationTemplateData = {
   type: 'workspace-invitation';
-  fullName: string;
+  /** Unknown for addresses without an account. */
+  fullName?: string | null;
+  inviterName?: string | null;
   workspaceName: string;
   expiresAt: string;
   acceptUrl: string;
@@ -34,16 +36,14 @@ type EmailJobData = {
 export class EmailProcessor extends WorkerHost {
   private readonly logger = new Logger(EmailProcessor.name);
 
-  async process(job: Job<EmailJobData>): Promise<{ sent: true }> {
+  async process(job: Job<EmailJobData>): Promise<{ sent: boolean }> {
     const { recipient, subject, templateData } = job.data;
-    const transporter = nodemailer.createTransport({
-      host: process.env.SMTP_HOST || 'smtp.mailtrap.io',
-      port: Number.parseInt(process.env.SMTP_PORT || '2525', 10),
-      auth: {
-        user: process.env.SMTP_USER || '',
-        pass: process.env.SMTP_PASSWORD || '',
-      },
-    });
+    const transporter = createMailTransport();
+    if (!transporter) {
+      // Email is disabled (no SMTP_HOST): never contact any mail server.
+      warnEmailDisabledOnce();
+      return { sent: false };
+    }
 
     let text: string;
     let html: string;
@@ -53,21 +53,27 @@ export class EmailProcessor extends WorkerHost {
       // URLs are validated (http/https only) before HTML-escaping; escaping
       // alone would still allow e.g. javascript: links.
       const acceptUrl = safeHttpUrl(templateData.acceptUrl);
+      const inviter = templateData.inviterName?.trim();
+      const invitedBy = inviter ? `${inviter} invited you` : 'You were invited';
       text = [
-        `Hello ${templateData.fullName},`,
-        `You were invited to join ${templateData.workspaceName} on TaskFlow AI.`,
+        templateData.fullName ? `Hello ${templateData.fullName},` : 'Hello,',
+        `${invitedBy} to join ${templateData.workspaceName} on TaskFlow AI.`,
         acceptUrl
-          ? `Sign in to accept the invitation: ${acceptUrl}`
-          : 'Sign in to TaskFlow AI to accept the invitation.',
-        `This invitation expires on ${expiresAt}.`,
+          ? `Open this link to accept (you can create an account there if you do not have one): ${acceptUrl}`
+          : 'Ask the person who invited you for a new invitation link.',
+        `This invitation expires on ${expiresAt}. If you did not expect it, you can ignore this email.`,
       ].join('\n\n');
       html = [
-        `<p>Hello <b>${escapeHtml(templateData.fullName)}</b>,</p>`,
-        `<p>You were invited to join <b>${escapeHtml(templateData.workspaceName)}</b> on TaskFlow AI.</p>`,
+        templateData.fullName
+          ? `<p>Hello <b>${escapeHtml(templateData.fullName)}</b>,</p>`
+          : '<p>Hello,</p>',
+        inviter
+          ? `<p><b>${escapeHtml(inviter)}</b> invited you to join <b>${escapeHtml(templateData.workspaceName)}</b> on TaskFlow AI.</p>`
+          : `<p>You were invited to join <b>${escapeHtml(templateData.workspaceName)}</b> on TaskFlow AI.</p>`,
         acceptUrl
-          ? `<p><a href="${escapeHtml(acceptUrl)}">Sign in to accept the invitation</a></p>`
-          : '<p>Sign in to TaskFlow AI to accept the invitation.</p>',
-        `<p>This invitation expires on ${escapeHtml(expiresAt)}.</p>`,
+          ? `<p><a href="${escapeHtml(acceptUrl)}">Accept the invitation</a> (you can create an account there if you do not have one).</p>`
+          : '<p>Ask the person who invited you for a new invitation link.</p>',
+        `<p>This invitation expires on ${escapeHtml(expiresAt)}. If you did not expect it, you can ignore this email.</p>`,
       ].join('');
     } else {
       text = `Hello ${templateData.fullName},\n\nYou have been assigned to task: ${templateData.taskTitle}`;
